@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use floem::peniko::Color;
 use floem::views::editor::phantom_text::{PhantomText, PhantomTextKind};
 use floem_editor_core::buffer::Buffer;
@@ -119,7 +120,16 @@ impl FoldingRanges {
         for (key, val) in folded {
             unfold_start.insert(key, val);
         }
-        unfold_start.into_iter().map(|x| x.1).collect()
+        let mut items: Vec<FoldingDisplayItem> = unfold_start.into_iter().map(|x| x.1).collect();
+        items.sort_by(|x, y| {
+            let line_rs = x.position.line.cmp(&y.position.line);
+            if let Ordering::Equal = line_rs {
+                x.position.character.cmp(&y.position.character)
+            } else {
+                line_rs
+            }
+        });
+        items
     }
 
     pub fn update_ranges(&mut self, mut new: Vec<FoldingRange>) {

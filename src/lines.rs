@@ -1504,6 +1504,8 @@ impl DocLines {
         for range in &self.folding_ranges.0 {
             warn!("{:?}", range);
         }
+
+
     }
 
     fn apply_diagnostic_styles(
@@ -2353,20 +2355,104 @@ mod test {
     use floem::views::editor::EditorStyle;
     use floem_editor_core::buffer::Buffer;
     use floem_editor_core::buffer::rope_text::RopeText;
-    use lapce_xi_rope::spans::Spans;
+    use itertools::Itertools;
+    use lapce_xi_rope::Interval;
+    use lapce_xi_rope::spans::{Spans, SpansBuilder};
+    use lsp_types::{InlayHint, Position};
 
     use crate::{DiagnosticData, EditorViewKind};
     use crate::config::EditorConfig;
-    use crate::lines::DocLines;
+    use crate::lines::{DocLines, RopeTextPosition};
+    use crate::lines::fold::{FoldingDisplayItem, FoldingDisplayType, FoldingRange};
     use crate::syntax::{BracketParser, Syntax};
 
     #[test]
     fn test() {
-        _init();
+        let (_lines, _) = _init_lines(None);
     }
 
-    fn _init() -> (DocLines, RwSignal<EditorConfig>) {
-        let config_str = r##"{"font-family":"JetBrains Mono","font-size":13,"code-glance-font-size":2,"line-height":1.8,"smart-tab":true,"tab-width":4,"show-tab":true,"show-bread-crumbs":true,"scroll-beyond-last-line":true,"cursor-surrounding-lines":5,"wrap-style":"editor-width","wrap-width":600,"sticky-header":true,"completion-width":600,"completion-show-documentation":true,"completion-item-show-detail":false,"show-signature":true,"signature-label-code-block":true,"auto-closing-matching-pairs":true,"auto-surround":true,"hover-delay":800,"modal-mode-relative-line-numbers":true,"format-on-save":true,"normalize-line-endings":true,"highlight-matching-brackets":true,"highlight-scope-lines":false,"enable-inlay-hints":true,"inlay-hint-font-family":"","inlay-hint-font-size":0,"enable-error-lens":false,"only-render-error-styling":false,"error-lens-end-of-line":true,"error-lens-multiline":false,"error-lens-font-family":"","error-lens-font-size":0,"enable-completion-lens":false,"enable-inline-completion":true,"completion-lens-font-family":"","completion-lens-font-size":0,"blink-interval":500,"multicursor-case-sensitive":true,"multicursor-whole-words":true,"render-whitespace":"none","show-indent-guide":true,"autosave-interval":6000,"format-on-autosave":true,"atomic-soft-tabs":false,"double-click":"single","move-focus-while-search":true,"diff-context-lines":3,"bracket-pair-colorization":false,"bracket-colorization-limit":30000,"files-exclude":"**/{.git,.svn,.hg,CVS,.DS_Store,Thumbs.db}"}"##;
+    #[test]
+    fn test_folded_line_1() {
+        let (_lines, _) = _init_lines(Some(vec![FoldingDisplayItem {
+            position: Position {
+                line: 1,
+                character: 12,
+            },
+            y: 0,
+            ty: FoldingDisplayType::UnfoldStart,
+        }]));
+    }
+
+    #[test]
+    fn test_folded_line_1_5() {
+        let (_lines, _) = _init_lines(Some(vec![FoldingDisplayItem {
+            position: Position {
+                line: 1,
+                character: 12,
+            },
+            y: 0,
+            ty: FoldingDisplayType::UnfoldStart,
+        }, FoldingDisplayItem {
+            position: Position {
+                line: 5,
+                character: 5,
+            },
+            y: 0,
+            ty: FoldingDisplayType::UnfoldEnd,
+        }]));
+    }
+
+    fn _init_lsp_folding_range() -> Vec<FoldingRange> {
+        let folding_range = r#"[{"startLine":0,"startCharacter":10,"endLine":7,"endCharacter":1},{"startLine":1,"startCharacter":12,"endLine":3,"endCharacter":5},{"startLine":3,"startCharacter":11,"endLine":5,"endCharacter":5}]"#;
+        let folding_range: Vec<lsp_types::FoldingRange> = serde_json::from_str(folding_range).unwrap();
+
+        folding_range
+            .into_iter()
+            .map(FoldingRange::from_lsp)
+            .sorted_by(|x, y| x.start.line.cmp(&y.start.line))
+            .collect()
+    }
+
+    fn _init_inlay_hint(buffer: &Buffer) -> Spans<InlayHint> {
+        let hints = r#"[{"position":{"line":6,"character":6},"label":[{"value":": "},{"value":"A","location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":8,"character":7},"end":{"line":8,"character":8}}}}],"kind":1,"textEdits":[{"range":{"start":{"line":6,"character":6},"end":{"line":6,"character":6}},"newText":": A"}],"paddingLeft":false,"paddingRight":false}]"#;
+        let mut hints: Vec<InlayHint> = serde_json::from_str(hints).unwrap();
+        let len = buffer.len();
+        hints.sort_by(|left, right| left.position.cmp(&right.position));
+        let mut hints_span = SpansBuilder::new(len);
+        for hint in hints {
+            let offset = buffer.offset_of_position(&hint.position).min(len);
+            hints_span.add_span(
+                Interval::new(offset, (offset + 1).min(len)),
+                hint,
+            );
+        }
+        hints_span.build()
+    }
+
+    fn _init_code() -> (String, Buffer) {
+        let code = r#"fn main() {
+    if true {
+        println!("startss");
+    } else {
+        println!("startss");
+    }
+	let a = A;
+}
+struct A;
+
+"#;
+        let buffer = Buffer::new(
+            code
+        );
+        (code.to_string(), buffer)
+    }
+
+    fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>) -> (DocLines, RwSignal<EditorConfig>) {
+        let (code, buffer) = _init_code();
+        let folding = _init_lsp_folding_range();
+        let hints = _init_inlay_hint(&buffer);
+
+        let config_str = r##"{"font_family":"JetBrains Mono","font_size":13,"line_height":23,"enable_inlay_hints":true,"inlay_hint_font_size":0,"enable_error_lens":false,"error_lens_end_of_line":true,"error_lens_multiline":false,"error_lens_font_size":0,"enable_completion_lens":false,"enable_inline_completion":true,"completion_lens_font_size":0,"only_render_error_styling":false,"diagnostic_error":{"r":229,"g":20,"b":0,"a":255},"diagnostic_warn":{"r":233,"g":167,"b":0,"a":255},"inlay_hint_fg":{"r":108,"g":118,"b":128,"a":255},"inlay_hint_bg":{"r":245,"g":245,"b":245,"a":255},"error_lens_error_foreground":{"r":228,"g":86,"b":73,"a":255},"error_lens_warning_foreground":{"r":193,"g":132,"b":1,"a":255},"error_lens_other_foreground":{"r":160,"g":161,"b":167,"a":255},"completion_lens_foreground":{"r":160,"g":161,"b":167,"a":255},"editor_foreground":{"r":56,"g":58,"b":66,"a":255},"syntax":{"punctuation.delimiter":{"r":193,"g":132,"b":1,"a":255},"attribute":{"r":193,"g":132,"b":1,"a":255},"method":{"r":64,"g":120,"b":242,"a":255},"bracket.color.3":{"r":166,"g":38,"b":164,"a":255},"builtinType":{"r":18,"g":63,"b":184,"a":255},"enumMember":{"r":146,"g":17,"b":167,"a":255},"bracket.color.2":{"r":193,"g":132,"b":1,"a":255},"markup.heading":{"r":228,"g":86,"b":73,"a":255},"markup.link.url":{"r":64,"g":120,"b":242,"a":255},"string.escape":{"r":1,"g":132,"b":188,"a":255},"structure":{"r":193,"g":132,"b":1,"a":255},"text.reference":{"r":193,"g":132,"b":1,"a":255},"comment":{"r":160,"g":161,"b":167,"a":255},"markup.list":{"r":209,"g":154,"b":102,"a":255},"variable.other.member":{"r":228,"g":86,"b":73,"a":255},"type":{"r":56,"g":58,"b":66,"a":255},"keyword":{"r":7,"g":60,"b":183,"a":255},"text.uri":{"r":1,"g":132,"b":188,"a":255},"enum":{"r":56,"g":58,"b":66,"a":255},"constructor":{"r":193,"g":132,"b":1,"a":255},"interface":{"r":56,"g":58,"b":66,"a":255},"selfKeyword":{"r":166,"g":38,"b":164,"a":255},"type.builtin":{"r":1,"g":132,"b":188,"a":255},"escape":{"r":1,"g":132,"b":188,"a":255},"field":{"r":228,"g":86,"b":73,"a":255},"function.method":{"r":64,"g":120,"b":242,"a":255},"markup.link.text":{"r":166,"g":38,"b":164,"a":255},"property":{"r":136,"g":22,"b":150,"a":255},"struct":{"r":56,"g":58,"b":66,"a":255},"bracket.color.1":{"r":64,"g":120,"b":242,"a":255},"enum-member":{"r":228,"g":86,"b":73,"a":255},"string":{"r":80,"g":161,"b":79,"a":255},"text.title":{"r":209,"g":154,"b":102,"a":255},"bracket.unpaired":{"r":228,"g":86,"b":73,"a":255},"constant":{"r":193,"g":132,"b":1,"a":255},"typeAlias":{"r":56,"g":58,"b":66,"a":255},"function":{"r":61,"g":108,"b":126,"a":255},"markup.link.label":{"r":166,"g":38,"b":164,"a":255},"markup.bold":{"r":209,"g":154,"b":102,"a":255},"markup.italic":{"r":209,"g":154,"b":102,"a":255},"number":{"r":193,"g":132,"b":1,"a":255},"tag":{"r":64,"g":120,"b":242,"a":255},"variable":{"r":56,"g":58,"b":66,"a":255},"embedded":{"r":1,"g":132,"b":188,"a":255}}}"##;
         let config: EditorConfig = serde_json::from_str(config_str).unwrap();
         let cx = Scope::new();
         let config = cx.create_rw_signal(config);
@@ -2375,19 +2461,10 @@ mod test {
             diagnostics: cx.create_rw_signal(im::Vector::new()),
             diagnostics_span: cx.create_rw_signal(Spans::default()),
         };
-        let view = Rect::ZERO;
+        // { x0: 0.0, y0: 0.0, x1: 591.1680297851563, y1: 538.1586303710938 }
+        let view = Rect::new(0.0, 0.0, 591.0, 538.0);
         let editor_style = EditorStyle::default();
-        let code = r#"fn main() {
-    if true {
-        println!("startss");
-    } else {
-        println!("startss");
-    }
-}
-"#;
-        let buffer = cx.create_rw_signal(Buffer::new(
-            code
-        ));
+        let buffer = cx.create_rw_signal(buffer);
         let kind = cx.create_rw_signal(EditorViewKind::Normal);
         let language = crate::language::LapceLanguage::Rust;
         let grammars_dir: PathBuf = "C:\\Users\\36225\\AppData\\Local\\lapce\\Lapce-Debug\\data\\grammars".into();
@@ -2397,7 +2474,7 @@ mod test {
 
         let syntax = Syntax::from_language(language, &grammars_dir, &queries_directory);
         let parser = BracketParser::new(code.to_string(), true, 30000);
-        let lines = DocLines::new(
+        let mut lines = DocLines::new(
             cx,
             diagnostics, syntax, parser,
             view,
@@ -2406,6 +2483,13 @@ mod test {
             buffer,
             kind,
         );
+        lines.update_folding_ranges(folding.into());
+        lines.set_inlay_hints(hints);
+        if let Some(folded) = folded {
+            for folded in folded {
+                lines.update_folding_ranges(folded.into());
+            }
+        }
         _log(&lines);
         (lines, config)
     }
