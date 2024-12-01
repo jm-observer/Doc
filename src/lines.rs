@@ -400,8 +400,8 @@ impl DocLines {
         let mut visual_line_index = 0;
         let config = self.config.get_untracked();
 
-        let font_size = config.font_size();
-        let line_height = config.line_height();
+        let font_size = config.font_size;
+        let line_height = config.line_height;
         let family = Cow::Owned(
             FamilyOwned::parse_list(&config.font_family).collect(),
         );
@@ -1458,7 +1458,7 @@ impl DocLines {
         let view_kind = self.kind.get_untracked();
         let base = self.viewport;
 
-        let line_height = config.line_height();
+        let line_height = config.line_height;
         let (y0, y1) = (base.y0, base.y1);
         // Get the start and end (visual) lines that are visible in the viewport
         let min_val = (y0 / line_height as f64).floor() as usize;

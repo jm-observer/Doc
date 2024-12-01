@@ -96,11 +96,11 @@ pub fn get_highlight_config(
     })
 }
 
-fn get_grammar(grammar_name: &String, grammar_fn_name: &str, language_name: &str, grammars_directory: &Path) -> Option<tree_sitter::Language> {
+fn get_grammar(grammar_name: &str, grammar_fn_name: &str, language_name: &str, grammars_directory: &Path) -> Option<tree_sitter::Language> {
     if language_name == "Plain Text" {
         return None;
     }
-    match load_grammar(&grammar_name, &grammar_fn_name, &grammars_directory)
+    match load_grammar(grammar_name, grammar_fn_name, grammars_directory)
     {
         Ok(grammar) => {
             Some(grammar)
@@ -129,18 +129,18 @@ pub fn new_highlight_config(
 }
 
 fn get_grammar_query(query_name: &str, highlights_injections_file_name: &str, highlights_queries_file_name: &str, queries_directory: &Path) -> (String, String) {
-        return (
+        (
             read_grammar_query(
                 queries_directory,
-                &query_name,
+                query_name,
                 highlights_queries_file_name,
             ),
             read_grammar_query(
                 queries_directory,
-                &query_name,
+                query_name,
                 highlights_injections_file_name,
             ),
-        );
+        )
 }
 
 /// Indicates which highlight should be applied to a region of source code.

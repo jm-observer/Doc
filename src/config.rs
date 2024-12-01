@@ -51,115 +51,22 @@ impl std::fmt::Display for WrapStyle {
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct EditorConfig {
     pub font_family: String,
-
-    font_size: usize,
-
-    pub code_glance_font_size: usize,
-    line_height: f64,
-
-    pub smart_tab: bool,
-
-    pub tab_width: usize,
-
-    pub show_tab: bool,
-
-    pub show_bread_crumbs: bool,
-
-    pub scroll_beyond_last_line: bool,
-    pub cursor_surrounding_lines: usize,
-
-    pub wrap_style: WrapStyle,
-
-    // pub wrap_column: usize,
-
-    pub wrap_width: usize,
-    pub sticky_header: bool,
-
-    pub completion_width: usize,
-    pub completion_show_documentation: bool,
-
-    pub completion_item_show_detail: bool,
-
-    pub show_signature: bool,
-
-    pub signature_label_code_block: bool,
-
-    pub auto_closing_matching_pairs: bool,
-
-    pub auto_surround: bool,
-
-    pub hover_delay: u64,
-
-    pub modal_mode_relative_line_numbers: bool,
-
-    pub format_on_save: bool,
-
-    pub normalize_line_endings: bool,
-
-    pub highlight_matching_brackets: bool,
-
-    pub highlight_scope_lines: bool,
-
+    pub font_size: usize,
+    pub line_height: usize,
     pub enable_inlay_hints: bool,
-
-    pub inlay_hint_font_family: String,
-
     pub inlay_hint_font_size: usize,
-
     pub enable_error_lens: bool,
-
-    pub only_render_error_styling: bool,
-
     pub error_lens_end_of_line: bool,
-
     pub error_lens_multiline: bool,
-    // TODO: Error lens but put entirely on the next line
-    // TODO: error lens with indentation matching.
-
-
-
-    pub error_lens_font_family: String,
-
     pub error_lens_font_size: usize,
-
     pub enable_completion_lens: bool,
-
     pub enable_inline_completion: bool,
-
-    pub completion_lens_font_family: String,
-
     pub completion_lens_font_size: usize,
-
-    blink_interval: u64,
-
-    pub multicursor_case_sensitive: bool,
-
-    pub multicursor_whole_words: bool,
-
-    pub show_indent_guide: bool,
-
-    pub autosave_interval: u64,
-
-    pub format_on_autosave: bool,
-
-    pub atomic_soft_tabs: bool,
-
-
-    pub move_focus_while_search: bool,
-
-    pub diff_context_lines: i32,
-
-    pub bracket_pair_colorization: bool,
-
-    pub bracket_colorization_limit: u64,
-
-    pub files_exclude: String,
+    pub only_render_error_styling: bool,
 
     pub diagnostic_error: Color,
     pub diagnostic_warn: Color,
-    /// foreground
     pub inlay_hint_fg: Color,
-    /// background
     pub inlay_hint_bg: Color,
 
     pub error_lens_error_foreground: Color,
@@ -170,30 +77,15 @@ pub struct EditorConfig {
 
     pub editor_foreground: Color,
 
-    syntax: HashMap<String, Color>,
+    pub syntax: HashMap<String, Color>,
 }
 
 impl EditorConfig {
-    pub fn font_size(&self) -> usize {
-        self.font_size.clamp(6, 32)
-    }
-
-    pub fn line_height(&self) -> usize {
-        let line_height = if self.line_height < SCALE_OR_SIZE_LIMIT {
-            self.line_height * self.font_size as f64
-        } else {
-            self.line_height
-        };
-
-        // Prevent overlapping lines
-        (line_height.round() as usize).max(self.font_size)
-    }
-
     pub fn inlay_hint_font_size(&self) -> usize {
         if self.inlay_hint_font_size < 5
             || self.inlay_hint_font_size > self.font_size
         {
-            self.font_size()
+            self.font_size
         } else {
             self.inlay_hint_font_size
         }
@@ -215,21 +107,21 @@ impl EditorConfig {
         }
     }
 
-    /// Returns the tab width if atomic soft tabs are enabled.
-    pub fn atomic_soft_tab_width(&self) -> Option<usize> {
-        if self.atomic_soft_tabs {
-            Some(self.tab_width)
-        } else {
-            None
-        }
-    }
+    // /// Returns the tab width if atomic soft tabs are enabled.
+    // pub fn atomic_soft_tab_width(&self) -> Option<usize> {
+    //     if self.atomic_soft_tabs {
+    //         Some(self.tab_width)
+    //     } else {
+    //         None
+    //     }
+    // }
 
-    pub fn blink_interval(&self) -> u64 {
-        if self.blink_interval == 0 {
-            return 0;
-        }
-        self.blink_interval.max(200)
-    }
+    // pub fn blink_interval(&self) -> u64 {
+    //     if self.blink_interval == 0 {
+    //         return 0;
+    //     }
+    //     self.blink_interval.max(200)
+    // }
 
     pub fn color_of_diagnostic(&self, diagnostic_severity: DiagnosticSeverity) -> Option<Color> {
         use DiagnosticSeverity;

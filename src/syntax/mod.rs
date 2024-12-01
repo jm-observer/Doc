@@ -514,6 +514,7 @@ impl SyntaxLayers {
         syntax
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
         current_rev: u64,
