@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, atomic};
+use std::sync::atomic::AtomicUsize;
 
 use floem::context::StyleCx;
 use floem::kurbo::Rect;
@@ -24,7 +25,7 @@ use floem::views::editor::view::LineInfo;
 use floem::views::editor::visual_line::{
     LayoutEvent, RVLine, VLine, VLineInfo,
 };
-use floem_editor_core::buffer::{Buffer};
+use floem_editor_core::buffer::Buffer;
 use floem_editor_core::buffer::rope_text::RopeText;
 use floem_editor_core::cursor::CursorAffinity;
 use floem_editor_core::indent::IndentStyle;
@@ -39,17 +40,18 @@ use tracing::{error, warn};
 
 use crate::{DiagnosticData, EditorViewKind};
 use crate::lines::action::UpdateFolding;
-use crate::lines::config::EditorConfig;
+use crate::config::EditorConfig;
 use crate::lines::encoding::{offset_utf16_to_utf8, offset_utf8_to_utf16};
 use crate::lines::fold::{FoldingDisplayItem, FoldingRanges};
 use crate::lines::screen_lines::{ScreenLines, VisualLineInfo};
+use crate::syntax::{BracketParser, Syntax};
+use crate::syntax::edit::SyntaxEdit;
 
-pub mod action;
-pub mod fold;
+mod action;
 pub mod diff;
+pub mod fold;
 pub mod screen_lines;
-pub mod config;
-pub mod encoding;
+mod encoding;
 
 // /// Minimum width that we'll allow the view to be wrapped at.
 // const MIN_WRAPPED_WIDTH: f32 = 100.0;
@@ -62,7 +64,6 @@ pub struct OriginLine {
     pub line_index: usize,
     pub start_offset: usize,
 }
-
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct OriginFoldedLine {
@@ -192,13 +193,11 @@ impl From<&VisualLine> for RVLine {
         value.rvline()
     }
 }
-
 impl From<&VisualLine> for VLine {
     fn from(value: &VisualLine) -> Self {
         value.vline()
     }
 }
-
 #[derive(Clone)]
 pub struct LinesOfOriginOffset {
     pub origin_offset: usize,
@@ -215,12 +214,13 @@ pub struct LinesOfOriginOffset {
 pub struct DocLinesManager {
     lines: RwSignal<DocLines>,
 }
-#[allow(dead_code)]
 impl DocLinesManager {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         cx: Scope,
         diagnostics: DiagnosticData,
+        syntax: Syntax,
+        parser: BracketParser,
         viewport: Rect,
         editor_style: EditorStyle,
         config: ReadSignal<EditorConfig>,
@@ -231,6 +231,8 @@ impl DocLinesManager {
             lines: cx.create_rw_signal(DocLines::new(
                 cx,
                 diagnostics,
+                syntax,
+                parser,
                 viewport,
                 editor_style,
                 config,
@@ -268,7 +270,6 @@ impl DocLinesManager {
         self.with_untracked(|x| x.lines_of_origin_offset(origin_offset))
     }
 }
-
 #[derive(Clone)]
 pub struct DocLines {
     origin_lines: Vec<OriginLine>,
@@ -294,8 +295,10 @@ pub struct DocLines {
     pub inline_completion: Option<(String, usize, usize)>,
     pub preedit: PreeditData,
     // tree-sitter
+    pub syntax: Syntax,
     // lsp
     pub semantic_styles: Option<(Option<String>, Spans<String>)>,
+    pub parser: BracketParser,
     pub line_styles: LineStyles,
     pub editor_style: EditorStyle,
     viewport: Rect,
@@ -303,6 +306,7 @@ pub struct DocLines {
     pub buffer: RwSignal<Buffer>,
     pub kind: RwSignal<EditorViewKind>,
     pub signals: Signals,
+    style_from_lsp: bool,
     folding_items: Vec<FoldingDisplayItem>,
 }
 
@@ -311,6 +315,8 @@ impl DocLines {
     pub fn new(
         cx: Scope,
         diagnostics: DiagnosticData,
+        syntax: Syntax,
+        parser: BracketParser,
         viewport: Rect,
         editor_style: EditorStyle,
         config: ReadSignal<EditorConfig>,
@@ -339,10 +345,13 @@ impl DocLines {
             completion_lens: None,
             inline_completion: None,
             preedit: PreeditData::new(cx),
+            syntax,
             semantic_styles: None,
+            parser,
             line_styles: Default::default(),
             buffer,
             kind,
+            style_from_lsp: false,
             folding_items: Default::default(),
         };
         lines.update_lines();
@@ -369,6 +378,14 @@ impl DocLines {
         self.max_width = 0.0
     }
 
+    fn update_parser(&mut self, buffer: &Buffer) {
+        if self.syntax.styles.is_some() {
+            self.parser.update_code(buffer, Some(&self.syntax));
+        } else {
+            self.parser.update_code(buffer, None);
+        }
+    }
+
     fn update_lines(&mut self) {
         let buffer = self.buffer.get_untracked();
         self.update_lines_with_buffer(&buffer);
@@ -377,6 +394,7 @@ impl DocLines {
     fn update_lines_with_buffer(&mut self, buffer: &Buffer) {
         self.clear();
         let last_line = buffer.last_line();
+        // self.update_parser(buffer);
         let mut current_line = 0;
         let mut origin_folded_line_index = 0;
         let mut visual_line_index = 0;
@@ -606,9 +624,6 @@ impl DocLines {
         offset: usize,
         _affinity: CursorAffinity,
     ) -> (VLineInfo, usize, bool) {
-        if offset > 0 {
-            println!("aa");
-        }
         // 位于的原始行，以及在原始行的起始offset
         // let (origin_line, offset_of_line) = self.font_sizes.doc.with_untracked(|x| {
         //     let text = x.text();
@@ -1031,7 +1046,7 @@ impl DocLines {
                 fg: Some(config.completion_lens_foreground),
                 font_size: Some(config.completion_lens_font_size()),
                 affinity: Some(CursorAffinity::Backward),
-                // font_family: Some(config.completion_lens_font_family()),
+                // font_family: Some(config.editor.completion_lens_font_family()),
                 bg: None,
                 under_line: None,
                 final_col: completion_col,
@@ -1226,7 +1241,7 @@ impl DocLines {
             WrapMethod::WrapColumn { .. } => {}
         }
 
-        let indent_line = line;
+        let indent_line = self.indent_line(line, &line_content_original, buffer);
 
         let offset = buffer.first_non_blank_character_on_line(indent_line);
         let (_, col) = buffer.offset_to_line_col(offset);
@@ -1360,8 +1375,26 @@ impl DocLines {
         line: usize,
         config: &EditorConfig,
     ) -> Option<Vec<(usize, usize, Color)>> {
-        let styles: Vec<(usize, usize, Color)> =
+        let mut styles: Vec<(usize, usize, Color)> =
             self.line_style(line, config)?;
+        if let Some(bracket_styles) = self.parser.bracket_pos.get(&line) {
+            let mut bracket_styles = bracket_styles
+                .iter()
+                .filter_map(|bracket_style| {
+                    if let Some(fg_color) = bracket_style.fg_color.as_ref() {
+                        if let Some(fg_color) = config.syntax_style_color(fg_color) {
+                            return Some((
+                                bracket_style.start,
+                                bracket_style.end,
+                                fg_color,
+                            ));
+                        }
+                    }
+                    None
+                })
+                .collect();
+            styles.append(&mut bracket_styles);
+        }
         Some(styles)
     }
 
@@ -1390,6 +1423,32 @@ impl DocLines {
                 })
                 .collect(),
         )
+        // .entry(line)
+        // .or_insert_with(|| {
+        //     let line_styles = styles
+        //         .map(|styles| {
+        //             let text = buffer.text();
+        //             line_styles(text, line, &styles)
+        //         })
+        //         .unwrap_or_default();
+        //     line_styles
+        // })
+        // .clone()
+    }
+
+    fn indent_line(
+        &self,
+        line: usize,
+        line_content: &str,
+        buffer: &Buffer,
+    ) -> usize {
+        if line_content.trim().is_empty() {
+            let offset = buffer.offset_of_line(line);
+            if let Some(offset) = self.syntax.parent_offset(offset) {
+                return buffer.line_of_offset(offset);
+            }
+        }
+        line
     }
 
     fn _compute_screen_lines(&mut self) -> ScreenLines {
@@ -1571,6 +1630,11 @@ impl UpdateLines {
 
     pub fn on_update_buffer(&mut self) {
         let buffer = self.buffer.get_untracked();
+        if self.syntax.styles.is_some() {
+            self.parser.update_code(&buffer, Some(&self.syntax));
+        } else {
+            self.parser.update_code(&buffer, None);
+        }
         self.init_diagnostics_with_buffer(&buffer);
         self.update(&buffer);
     }
@@ -1622,17 +1686,30 @@ impl UpdateLines {
     }
 
     pub fn apply_delta(&mut self, delta: &RopeDelta) {
+        if self.style_from_lsp {
             if let Some(styles) = &mut self.semantic_styles {
                 styles.1.apply_shape(delta);
             }
+        } else if let Some(styles) = self.syntax.styles.as_mut() {
+            styles.apply_shape(delta);
+        }
         let buffer = self.buffer.get_untracked();
+        self.syntax.lens.apply_delta(delta);
         self.update_diagnostics(delta);
         self.update_inlay_hints(delta);
         self.update_completion_lens(delta, &buffer);
 
         self.update(&buffer);
     }
-
+    pub fn trigger_syntax_change(
+        &mut self,
+        _edits: Option<SmallVec<[SyntaxEdit; 3]>>,
+    ) {
+        self.syntax.cancel_flag.store(1, atomic::Ordering::Relaxed);
+        self.syntax.cancel_flag = Arc::new(AtomicUsize::new(0));
+        let buffer = self.buffer.get_untracked();
+        self.update(&buffer);
+    }
     pub fn set_inline_completion(
         &mut self,
         inline_completion: String,
@@ -1647,6 +1724,34 @@ impl UpdateLines {
     pub fn clear_inline_completion(&mut self) {
         self.inline_completion = None;
         let buffer = self.buffer.get_untracked();
+        self.update(&buffer);
+    }
+
+    pub fn set_syntax(&mut self, syntax: Syntax) {
+        self.syntax = syntax;
+        if self.style_from_lsp {
+            return;
+        }
+        // if self.semantic_styles.is_none() {
+        //     self.line_styles.clear();
+        // }
+        let buffer = self.buffer.get_untracked();
+        self.line_styles.clear();
+        if let Some(x) = self.syntax.styles.as_ref() {
+            x.iter().for_each(|(Interval { start, end }, style)| {
+                let origin_line = buffer.line_of_offset(start);
+                let origin_line_offset = buffer.offset_of_line(origin_line);
+                let entry = self.line_styles.entry(origin_line).or_default();
+                entry.push(NewLineStyle {
+                    origin_line,
+                    origin_line_offset_start: start - origin_line_offset,
+                    origin_line_offset_end: end - origin_line_offset,
+                    fg_color: Some(style.clone()),
+                });
+            })
+        };
+        self.update_parser(&buffer);
+
         self.update(&buffer);
     }
 
@@ -1672,6 +1777,8 @@ impl UpdateLines {
         &mut self,
         styles: (Option<String>, Spans<String>),
     ) {
+        // self.semantic_styles = Some(styles);
+        self.style_from_lsp = true;
         let buffer = self.buffer.get_untracked();
         styles
             .1
@@ -2077,7 +2184,6 @@ fn extra_styles_for_range(
 }
 
 type LinesEditorStyle = DocLines;
-
 impl LinesEditorStyle {
     pub fn modal(&self) -> bool {
         self.editor_style.modal()
@@ -2203,6 +2309,7 @@ pub struct NewLineStyle {
     pub fg_color: Option<String>,
 }
 
+
 pub trait RopeTextPosition: RopeText {
     /// Converts a UTF8 offset to a UTF16 LSP position
     /// Returns None if it is not a valid UTF16 offset
@@ -2240,6 +2347,7 @@ pub trait RopeTextPosition: RopeText {
 impl<T: RopeText> RopeTextPosition for T {}
 // #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
     use floem::kurbo::Rect;
     use floem::reactive::{RwSignal, Scope, SignalGet};
     use floem::views::editor::EditorStyle;
@@ -2248,8 +2356,9 @@ mod test {
     use lapce_xi_rope::spans::Spans;
 
     use crate::{DiagnosticData, EditorViewKind};
-    use crate::lines::config::EditorConfig;
+    use crate::config::EditorConfig;
     use crate::lines::DocLines;
+    use crate::syntax::{BracketParser, Syntax};
 
     #[test]
     fn test() {
@@ -2268,20 +2377,29 @@ mod test {
         };
         let view = Rect::ZERO;
         let editor_style = EditorStyle::default();
-        let buffer = cx.create_rw_signal(Buffer::new(
-            r#"fn main() {
+        let code = r#"fn main() {
     if true {
         println!("startss");
     } else {
         println!("startss");
     }
 }
-"#,
+"#;
+        let buffer = cx.create_rw_signal(Buffer::new(
+            code
         ));
         let kind = cx.create_rw_signal(EditorViewKind::Normal);
+        let language = crate::language::LapceLanguage::Rust;
+        let grammars_dir: PathBuf = "C:\\Users\\36225\\AppData\\Local\\lapce\\Lapce-Debug\\data\\grammars".into();
+
+
+        let queries_directory: PathBuf = "C:\\Users\\36225\\AppData\\Roaming\\lapce\\Lapce-Debug\\config\\queries".into();
+
+        let syntax = Syntax::from_language(language, &grammars_dir, &queries_directory);
+        let parser = BracketParser::new(code.to_string(), true, 30000);
         let lines = DocLines::new(
             cx,
-            diagnostics,
+            diagnostics, syntax, parser,
             view,
             editor_style,
             config.read_only(),

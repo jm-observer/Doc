@@ -41,9 +41,9 @@ pub fn offset_utf8_to_utf16(
     utf16_offset
 }
 
-pub fn offset_utf8_to_utf16_str(text: &str, offset: usize) -> usize {
-    offset_utf8_to_utf16(text.char_indices(), offset)
-}
+// pub fn offset_utf8_to_utf16_str(text: &str, offset: usize) -> usize {
+//     offset_utf8_to_utf16(text.char_indices(), offset)
+// }
 
 /// Convert a utf16 offset into a utf8 offset, if possible  
 /// `char_indices` is an iterator over utf8 offsets and the characters
@@ -91,15 +91,16 @@ pub fn offset_utf16_to_utf8(
     }
 }
 
-pub fn offset_utf16_to_utf8_str(text: &str, offset: usize) -> usize {
-    offset_utf16_to_utf8(text.char_indices(), offset)
-}
+// pub fn offset_utf16_to_utf8_str(text: &str, offset: usize) -> usize {
+//     offset_utf16_to_utf8(text.char_indices(), offset)
+// }
 
 #[cfg(test)]
 mod tests {
     // TODO: more tests with unicode characters
 
-    use crate::encoding::{offset_utf16_to_utf8_str, offset_utf8_to_utf16_str};
+    use super::{offset_utf16_to_utf8_str, offset_utf8_to_utf16_str};
+    use crate::lines::encoding::offset_utf8_to_utf16_str;
 
     #[test]
     fn utf8_to_utf16() {
