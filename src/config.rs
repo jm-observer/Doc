@@ -64,6 +64,9 @@ pub struct EditorConfig {
     pub completion_lens_font_size: usize,
     pub only_render_error_styling: bool,
 
+    pub auto_closing_matching_pairs: bool,
+    pub auto_surround: bool,
+
     pub diagnostic_error: Color,
     pub diagnostic_warn: Color,
     pub inlay_hint_fg: Color,

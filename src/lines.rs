@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
+use std::ops::Range;
 use std::rc::Rc;
 use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
@@ -20,18 +21,25 @@ use floem::views::editor::listener::Listener;
 use floem::views::editor::phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
 };
-use floem::views::editor::text::{PreeditData, WrapMethod};
+use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
 use floem::views::editor::view::LineInfo;
 use floem::views::editor::visual_line::{
     LayoutEvent, RVLine, VLine, VLineInfo,
 };
-use floem_editor_core::buffer::Buffer;
+use floem_editor_core::buffer::{Buffer, InvalLines};
 use floem_editor_core::buffer::rope_text::RopeText;
-use floem_editor_core::cursor::CursorAffinity;
+use floem_editor_core::char_buffer::CharBuffer;
+use floem_editor_core::command::EditCommand;
+use floem_editor_core::cursor::{Cursor, CursorAffinity};
+use floem_editor_core::editor::{Action, EditConf, EditType};
 use floem_editor_core::indent::IndentStyle;
-use floem_editor_core::word::{CharClassification, get_char_property};
+use floem_editor_core::line_ending::LineEnding;
+use floem_editor_core::mode::MotionMode;
+use floem_editor_core::register::Register;
+use floem_editor_core::selection::Selection;
+use floem_editor_core::word::{CharClassification, get_char_property, WordCursor};
 use itertools::Itertools;
-use lapce_xi_rope::{Interval, RopeDelta, Transformer};
+use lapce_xi_rope::{Interval, Rope, RopeDelta, Transformer};
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Position};
 use serde::{Deserialize, Serialize};
@@ -224,7 +232,7 @@ impl DocLinesManager {
         viewport: Rect,
         editor_style: EditorStyle,
         config: ReadSignal<EditorConfig>,
-        buffer: RwSignal<Buffer>,
+        buffer: Buffer,
         kind: RwSignal<EditorViewKind>,
     ) -> Self {
         Self {
@@ -303,7 +311,7 @@ pub struct DocLines {
     pub editor_style: EditorStyle,
     viewport: Rect,
     pub config: ReadSignal<EditorConfig>,
-    pub buffer: RwSignal<Buffer>,
+    pub buffer: Buffer,
     pub kind: RwSignal<EditorViewKind>,
     pub signals: Signals,
     style_from_lsp: bool,
@@ -320,11 +328,11 @@ impl DocLines {
         viewport: Rect,
         editor_style: EditorStyle,
         config: ReadSignal<EditorConfig>,
-        buffer: RwSignal<Buffer>,
+        buffer: Buffer,
         kind: RwSignal<EditorViewKind>,
     ) -> Self {
         let signals =
-            Signals::new(cx, &editor_style, viewport);
+            Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone());
         let mut lines = Self {
             signals,
             // font_size_cache_id: id,
@@ -378,22 +386,17 @@ impl DocLines {
         self.max_width = 0.0
     }
 
-    fn update_parser(&mut self, buffer: &Buffer) {
+    fn update_parser(&mut self) {
         if self.syntax.styles.is_some() {
-            self.parser.update_code(buffer, Some(&self.syntax));
+            self.parser.update_code(&self.buffer, Some(&self.syntax));
         } else {
-            self.parser.update_code(buffer, None);
+            self.parser.update_code(&self.buffer, None);
         }
     }
 
     fn update_lines(&mut self) {
-        let buffer = self.buffer.get_untracked();
-        self.update_lines_with_buffer(&buffer);
-    }
-    // return do_update
-    fn update_lines_with_buffer(&mut self, buffer: &Buffer) {
         self.clear();
-        let last_line = buffer.last_line();
+        let last_line = self.buffer.last_line();
         // self.update_parser(buffer);
         let mut current_line = 0;
         let mut origin_folded_line_index = 0;
@@ -412,11 +415,10 @@ impl DocLines {
             .line_height(LineHeightValue::Px(line_height as f32));
         let viewport = self.viewport;
         while current_line <= last_line {
-            let start_offset = buffer.offset_of_line(current_line);
-            let end_offset = buffer.offset_of_line(current_line + 1);
+            let start_offset = self.buffer.offset_of_line(current_line);
+            let end_offset = self.buffer.offset_of_line(current_line + 1);
             let text_layout = self.new_text_layout(
                 current_line,
-                buffer,
                 start_offset,
                 end_offset,
                 &config,
@@ -440,8 +442,8 @@ impl DocLines {
             }
 
             let origin_interval = Interval {
-                start: buffer.offset_of_line(origin_line_start),
-                end: buffer.offset_of_line(origin_line_end + 1),
+                start: self.buffer.offset_of_line(origin_line_start),
+                end: self.buffer.offset_of_line(origin_line_end + 1),
             };
 
             let mut visual_offset_start = 0;
@@ -474,12 +476,12 @@ impl DocLines {
                     .phantom_text
                     .cursor_position_of_final_col(visual_offset_start);
                 let origin_interval_start =
-                    buffer.offset_of_line_col(offset_info.0, offset_info.1);
+                    self.buffer.offset_of_line_col(offset_info.0, offset_info.1);
                 let offset_info = text_layout
                     .phantom_text
                     .cursor_position_of_final_col(visual_offset_end);
                 let origin_interval_end =
-                    buffer.offset_of_line_col(offset_info.0, offset_info.1);
+                    self.buffer.offset_of_line_col(offset_info.0, offset_info.1);
                 let origin_interval = Interval {
                     start: origin_interval_start,
                     end: origin_interval_end + 1,
@@ -672,7 +674,7 @@ impl DocLines {
         // 位于的原始行，以及在原始行的起始offset
         let origin_line = self
             .buffer
-            .with_untracked(|text| text.line_of_offset(origin_offset));
+            .line_of_offset(origin_offset);
         let origin_line = self.origin_lines[origin_line];
         let offset = origin_offset - origin_line.start_offset;
         let folded_line = self.folded_line_of_origin_line(origin_line.line_index);
@@ -785,12 +787,11 @@ impl DocLines {
         _affinity: CursorAffinity,
     ) -> (VisualLine, usize, bool) {
         // 位于的原始行，以及在原始行的起始offset
-        let (origin_line, offset_of_origin_line) =
-            self.buffer.with_untracked(|text| {
-                let origin_line = text.line_of_offset(offset);
-                let origin_line_start_offset = text.offset_of_line(origin_line);
+        let (origin_line, offset_of_origin_line) = {
+                let origin_line = self.buffer.line_of_offset(offset);
+                let origin_line_start_offset = self.buffer.offset_of_line(origin_line);
                 (origin_line, origin_line_start_offset)
-            });
+            };
         let offset = offset - offset_of_origin_line;
         let folded_line = self.folded_line_of_origin_line(origin_line);
         let mut final_offset = folded_line
@@ -855,14 +856,13 @@ impl DocLines {
         &self,
         line: usize,
         config: &EditorConfig,
-        buffer: &Buffer,
     ) -> PhantomTextLine {
         let (start_offset, end_offset) =
-            (buffer.offset_of_line(line), buffer.offset_of_line(line + 1));
+            (self.buffer.offset_of_line(line), self.buffer.offset_of_line(line + 1));
 
         let origin_text_len = end_offset - start_offset;
         // lsp返回的字符包括换行符，现在长度不考虑，后续会有问题
-        // let line_ending = buffer.line_ending().get_chars().len();
+        // let line_ending = self.buffer.line_ending().get_chars().len();
         // if origin_text_len >= line_ending {
         //     origin_text_len -= line_ending;
         // }
@@ -890,7 +890,7 @@ impl DocLines {
             .map(|(interval, inlay_hint)| {
                 let (col, affinity) = {
                     let mut cursor =
-                        lapce_xi_rope::Cursor::new(buffer.text(), interval.start);
+                        lapce_xi_rope::Cursor::new(self.buffer.text(), interval.start);
 
                     let next_char = cursor.peek_next_codepoint();
                     let prev_char = cursor.prev_codepoint();
@@ -925,7 +925,7 @@ impl DocLines {
                         }
                     }
 
-                    let (_, col) = buffer.offset_to_line_col(interval.start);
+                    let (_, col) = self.buffer.offset_to_line_col(interval.start);
                     (col, affinity)
                 };
                 let mut text = match &inlay_hint.label {
@@ -981,7 +981,7 @@ impl DocLines {
                     .iter_chunks(start_offset..end_offset)
                     .filter_map(|(iv, diag)| {
                         let end = iv.end();
-                        let end_line = buffer.line_of_offset(end);
+                        let end_line = self.buffer.line_of_offset(end);
                         if end_line == line
                             && diag.severity < Some(DiagnosticSeverity::HINT)
                             && !folded_ranges.contain_position(diag.range.start)
@@ -1098,7 +1098,7 @@ impl DocLines {
         // todo filter by folded?
         if let Some(preedit) = preedit_phantom(
             &self.preedit,
-            buffer,
+            &self.buffer,
             Some(config.editor_foreground),
             line,
         ) {
@@ -1109,7 +1109,7 @@ impl DocLines {
         let font_size = config.inlay_hint_font_size();
         let bg = config.inlay_hint_bg;
         text.extend(
-            folded_ranges.into_phantom_text(buffer, line, font_size, fg, bg),
+            folded_ranges.into_phantom_text(&self.buffer, line, font_size, fg, bg),
         );
 
         PhantomTextLine::new(line, origin_text_len, start_offset, text)
@@ -1119,7 +1119,6 @@ impl DocLines {
     fn new_text_layout(
         &mut self,
         line: usize,
-        buffer: &Buffer,
         start_offset: usize,
         end_offset: usize,
         config: &EditorConfig,
@@ -1134,9 +1133,12 @@ impl DocLines {
         // and the content without the newline characters
         // TODO: cache or add some way that text layout is created to auto insert the spaces instead
         // though we immediately combine with phantom text so that's a thing.
-        let line_content_original = buffer.line_content(line);
+
         let mut font_system = FONT_SYSTEM.lock();
-        push_strip_suffix(&line_content_original, &mut line_content);
+        {
+            let line_content_original = self.buffer.line_content(line);
+            push_strip_suffix(&line_content_original, &mut line_content);
+        }
         let mut diagnostic_styles = Vec::new();
         let mut max_severity: Option<DiagnosticSeverity> = None;
         diagnostic_styles.extend(self.get_line_diagnostic_styles(
@@ -1147,7 +1149,7 @@ impl DocLines {
             0,
         ));
 
-        let phantom_text = self.phantom_text(line, config, buffer);
+        let phantom_text = self.phantom_text(line, config);
         let mut collapsed_line_col = phantom_text.folded_line();
 
         let mut phantom_text = PhantomTextMultiLine::new(phantom_text);
@@ -1164,16 +1166,18 @@ impl DocLines {
         }
 
         while let Some(collapsed_line) = collapsed_line_col.take() {
-            push_strip_suffix(
-                &buffer.line_content(collapsed_line),
-                &mut line_content,
-            );
+            {
+                push_strip_suffix(
+                    self.buffer.line_content(collapsed_line).as_ref(),
+                    &mut line_content,
+                );
+            }
 
             let offset_col = phantom_text.origin_text_len;
             let next_phantom_text =
-                self.phantom_text(collapsed_line, config, buffer);
-            let start_offset = buffer.offset_of_line(collapsed_line);
-            let end_offset = buffer.offset_of_line(collapsed_line + 1);
+                self.phantom_text(collapsed_line, config);
+            let start_offset = self.buffer.offset_of_line(collapsed_line);
+            let end_offset = self.buffer.offset_of_line(collapsed_line + 1);
             collapsed_line_col = next_phantom_text.folded_line();
             diagnostic_styles.extend(self.get_line_diagnostic_styles(
                 start_offset,
@@ -1241,10 +1245,11 @@ impl DocLines {
             WrapMethod::WrapColumn { .. } => {}
         }
 
-        let indent_line = self.indent_line(line, &line_content_original, buffer);
+        // ?
+        // let indent_line = self.indent_line(line, &line_content_original);
 
-        let offset = buffer.first_non_blank_character_on_line(indent_line);
-        let (_, col) = buffer.offset_to_line_col(offset);
+        let offset = self.buffer.first_non_blank_character_on_line(line);
+        let (_, col) = self.buffer.offset_to_line_col(offset);
         let indent = text_layout.hit_position(col).point.x;
 
         let mut layout_line = TextLayoutLine {
@@ -1292,8 +1297,12 @@ impl DocLines {
     //     self.update_lines();
     // }
 
-    fn update(&mut self, buffer: &Buffer) {
-        self.update_lines_with_buffer(buffer);
+    fn update(&mut self) {
+        self.update_with_trigger_buffer(false)
+    }
+
+    fn update_with_trigger_buffer(&mut self, trigger_buffer: bool) {
+        self.update_lines();
         let screen_lines = self._compute_screen_lines();
         self.signals.screen_lines = screen_lines.clone();
 
@@ -1303,6 +1312,10 @@ impl DocLines {
         batch(|| {
             self.trigger_folding_items(folding_items);
             self.trigger_screen_lines(screen_lines);
+            self.trigger_buffer_rev(self.buffer.rev());
+            if trigger_buffer {
+                self.trigger_buffer(self.buffer.clone())
+            }
         })
     }
 
@@ -1311,12 +1324,12 @@ impl DocLines {
     //     self.update_lines();
     // }
 
-    fn update_completion_lens(&mut self, delta: &RopeDelta, buffer: &Buffer) {
+    fn update_completion_lens(&mut self, delta: &RopeDelta) {
         let Some(completion) = &mut self.completion_lens else {
             return;
         };
         let (line, col) = self.completion_pos;
-        let offset = buffer.offset_of_line_col(line, col);
+        let offset = self.buffer.offset_of_line_col(line, col);
         if delta.as_simple_insert().is_some() {
             let (iv, new_len) = delta.summary();
             if iv.start() == iv.end()
@@ -1336,18 +1349,18 @@ impl DocLines {
         let mut transformer = Transformer::new(delta);
 
         let new_offset = transformer.transform(offset, true);
-        let new_pos = buffer.offset_to_line_col(new_offset);
+        let new_pos = self.buffer.offset_to_line_col(new_offset);
         self.completion_pos = new_pos;
     }
 
     /// init by lsp
-    fn init_diagnostics_with_buffer(&self, buffer: &Buffer) {
-        let len = buffer.len();
+    fn init_diagnostics_with_buffer(&self) {
+        let len = self.buffer.len();
         let diagnostics = self.diagnostics.diagnostics.get_untracked();
         let mut span = SpansBuilder::new(len);
         for diag in diagnostics.into_iter() {
-            let start = buffer.offset_of_position(&diag.range.start);
-            let end = buffer.offset_of_position(&diag.range.end);
+            let start = self.buffer.offset_of_position(&diag.range.start);
+            let end = self.buffer.offset_of_position(&diag.range.end);
             warn!("start={start} end={end} {:?}", diag);
             span.add_span(Interval::new(start, end), diag);
         }
@@ -1427,7 +1440,7 @@ impl DocLines {
         // .or_insert_with(|| {
         //     let line_styles = styles
         //         .map(|styles| {
-        //             let text = buffer.text();
+        //             let text = self.buffer.text();
         //             line_styles(text, line, &styles)
         //         })
         //         .unwrap_or_default();
@@ -1436,20 +1449,19 @@ impl DocLines {
         // .clone()
     }
 
-    fn indent_line(
-        &self,
-        line: usize,
-        line_content: &str,
-        buffer: &Buffer,
-    ) -> usize {
-        if line_content.trim().is_empty() {
-            let offset = buffer.offset_of_line(line);
-            if let Some(offset) = self.syntax.parent_offset(offset) {
-                return buffer.line_of_offset(offset);
-            }
-        }
-        line
-    }
+    // fn indent_line(
+    //     &self,
+    //     line: usize,
+    //     line_content: &str,
+    // ) -> usize {
+    //     if line_content.trim().is_empty() {
+    //         let offset = self.buffer.offset_of_line(line);
+    //         if let Some(offset) = self.syntax.parent_offset(offset) {
+    //             return self.buffer.line_of_offset(offset);
+    //         }
+    //     }
+    //     line
+    // }
 
     fn _compute_screen_lines(&mut self) -> ScreenLines {
         // TODO: this should probably be a get since we need to depend on line-height
@@ -1485,7 +1497,7 @@ impl DocLines {
         warn!(
             "DocLines viewport={:?} {}",
             self.viewport,
-            self.buffer.get_untracked().text().to_string()
+            self.buffer.text().to_string()
         );
         for origin_folded_line in &self.origin_folded_lines {
             warn!("{:?}", origin_folded_line);
@@ -1611,34 +1623,165 @@ impl DocLines {
 type UpdateLines = DocLines;
 
 impl UpdateLines {
+
+    pub fn init_buffer(&mut self, content: Rope) -> bool {
+        self.buffer.init_content(content);
+        self.buffer.detect_indent(|| {
+            IndentStyle::from_str(self.syntax.language.indent_unit())
+        });
+        self.on_update_buffer();
+        self.update();
+        true
+    }
+
+    pub fn set_line_ending(&mut self, line_ending: LineEnding) {
+        self.buffer.set_line_ending(line_ending);
+        self.on_update_buffer();
+        self.update();
+    }
+
+    pub fn edit_buffer(
+        &mut self,
+        iter: &[(impl AsRef<Selection>, &str)],
+        edit_type: EditType,
+    ) -> (Rope, RopeDelta, InvalLines) {
+        let rs = self.buffer.edit(iter, edit_type);
+        self.apply_delta(&rs.1);
+        self.on_update_buffer();
+        self.update();
+        rs
+    }
+    pub fn reload_buffer(&mut self, content: Rope, set_pristine: bool) -> (Rope, RopeDelta, InvalLines) {
+        let rs = self.buffer.reload(content, set_pristine);
+        self.apply_delta(&rs.1);
+        self.on_update_buffer();
+        self.update();
+        rs
+    }
+
+    pub fn execute_motion_mode(
+        &mut self,
+        cursor: &mut Cursor,
+        motion_mode: MotionMode,
+        range: Range<usize>,
+        is_vertical: bool,
+        register: &mut Register,
+    ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        let rs = Action::execute_motion_mode(
+            cursor,
+            &mut self.buffer,
+            motion_mode,
+            range,
+            is_vertical,
+            register,
+        );
+        for delta in &rs {
+            self.apply_delta(&delta.1);
+        }
+        self.on_update_buffer();
+        self.update();
+        rs
+    }
+
+    pub fn do_edit_buffer(
+        &mut self,
+        cursor: &mut Cursor,
+        cmd: &EditCommand,
+        modal: bool,
+        register: &mut Register,
+        smart_tab: bool,
+    ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        let syntax = &self.syntax;
+        let mut clipboard = SystemClipboard::new();
+        let old_cursor = cursor.mode().clone();
+        let deltas =
+                Action::do_edit(
+                    cursor,
+                    &mut self.buffer,
+                    cmd,
+                    &mut clipboard,
+                    register,
+                    EditConf {
+                        comment_token: syntax.language.comment_token(),
+                        modal,
+                        smart_tab,
+                        keep_indent: true,
+                        auto_indent: true,
+                    },
+                );
+        if !deltas.is_empty() {
+            self.buffer.set_cursor_before(old_cursor);
+            self.buffer.set_cursor_after(cursor.mode().clone());
+            for delta in &deltas {
+                self.apply_delta(&delta.1);
+            }
+        }
+        self.on_update_buffer();
+        self.update();
+        deltas
+    }
+
+    pub fn do_insert_buffer(
+        &mut self,
+        cursor: &mut Cursor,
+        s: &str
+    ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        let config = self.config.get_untracked();
+        let old_cursor = cursor.mode().clone();
+        let syntax = &self.syntax;
+        let deltas = Action::insert(
+            cursor,
+            &mut self.buffer,
+            s,
+            &|buffer, c, offset| {
+                syntax_prev_unmatched(buffer, syntax, c, offset)
+            },
+            config.auto_closing_matching_pairs,
+            config.auto_surround,
+        );
+        self.buffer.set_cursor_before(old_cursor);
+        self.buffer.set_cursor_after(cursor.mode().clone());
+        for delta in &deltas {
+            self.apply_delta(&delta.1);
+        }
+        self.on_update_buffer();
+        self.update();
+        deltas
+    }
+
+
+    pub fn update_semantic_styles(&mut self, semantic_styles: (Option<String>, Spans<String>), rev: u64) -> bool {
+        if self.buffer.rev() != rev {
+            return false;
+        }
+        self.semantic_styles = Some(semantic_styles);
+        self.update();
+        true
+    }
     pub fn clear_completion_lens(&mut self) {
         self.completion_lens = None;
-        let buffer = self.buffer.get_untracked();
-        self.update(&buffer);
+        self.update();
     }
     pub fn init_diagnostics(&mut self) {
-        let buffer = self.buffer.get_untracked();
-        self.init_diagnostics_with_buffer(&buffer);
-        self.update(&buffer);
+        self.init_diagnostics_with_buffer();
+        self.update();
     }
     pub fn update_viewport(&mut self, viewport: Rect) {
         if self.viewport != viewport {
-            let buffer = self.buffer.get_untracked();
             self.viewport = viewport;
             tracing::warn!("update_viewport {viewport:?}");
-            self.update(&buffer);
+            self.update();
         }
     }
 
-    pub fn on_update_buffer(&mut self) {
-        let buffer = self.buffer.get_untracked();
+    fn on_update_buffer(&mut self) {
         if self.syntax.styles.is_some() {
-            self.parser.update_code(&buffer, Some(&self.syntax));
+            self.parser.update_code(&self.buffer, Some(&self.syntax));
         } else {
-            self.parser.update_code(&buffer, None);
+            self.parser.update_code(&self.buffer, None);
         }
-        self.init_diagnostics_with_buffer(&buffer);
-        self.update(&buffer);
+        self.init_diagnostics_with_buffer();
+        // self.update();
     }
     pub fn update_folding_ranges(&mut self, action: UpdateFolding) {
         match action {
@@ -1649,24 +1792,21 @@ impl UpdateLines {
                 self.folding_ranges.update_ranges(ranges);
             }
         }
-        let buffer = self.buffer.get_untracked();
-        self.update(&buffer);
+        self.update();
     }
 
     pub fn update_inline_completion(&mut self, delta: &RopeDelta) {
         let Some((completion, ..)) = self.inline_completion.take() else {
             return;
         };
-        let buffer = self.buffer.get_untracked();
-
         let (line, col) = self.completion_pos;
-        let offset = buffer.offset_of_line_col(line, col);
+        let offset = self.buffer.offset_of_line_col(line, col);
 
         // Shift the position by the rope delta
         let mut transformer = Transformer::new(delta);
 
         let new_offset = transformer.transform(offset, true);
-        let new_pos = buffer.offset_to_line_col(new_offset);
+        let new_pos = self.buffer.offset_to_line_col(new_offset);
 
         if delta.as_simple_insert().is_some() {
             let (iv, new_len) = delta.summary();
@@ -1684,7 +1824,7 @@ impl UpdateLines {
         } else {
             self.inline_completion = Some((completion, new_pos.0, new_pos.1));
         }
-        self.update(&buffer);
+        self.update();
     }
 
     pub fn apply_delta(&mut self, delta: &RopeDelta) {
@@ -1695,13 +1835,12 @@ impl UpdateLines {
         } else if let Some(styles) = self.syntax.styles.as_mut() {
             styles.apply_shape(delta);
         }
-        let buffer = self.buffer.get_untracked();
         self.syntax.lens.apply_delta(delta);
         self.update_diagnostics(delta);
         self.update_inlay_hints(delta);
-        self.update_completion_lens(delta, &buffer);
+        self.update_completion_lens(delta);
 
-        self.update(&buffer);
+        self.update();
     }
     pub fn trigger_syntax_change(
         &mut self,
@@ -1709,8 +1848,7 @@ impl UpdateLines {
     ) {
         self.syntax.cancel_flag.store(1, atomic::Ordering::Relaxed);
         self.syntax.cancel_flag = Arc::new(AtomicUsize::new(0));
-        let buffer = self.buffer.get_untracked();
-        self.update(&buffer);
+        self.update();
     }
     pub fn set_inline_completion(
         &mut self,
@@ -1719,30 +1857,33 @@ impl UpdateLines {
         col: usize,
     ) {
         self.inline_completion = Some((inline_completion, line, col));
-        let buffer = self.buffer.get_untracked();
-        self.update(&buffer);
+        self.update();
     }
 
     pub fn clear_inline_completion(&mut self) {
         self.inline_completion = None;
-        let buffer = self.buffer.get_untracked();
-        self.update(&buffer);
+        self.update();
     }
 
-    pub fn set_syntax(&mut self, syntax: Syntax) {
+    pub fn set_syntax_with_rev(&mut self, syntax: Syntax, rev: u64) -> bool {
+        if self.buffer.rev() != rev {
+            return false;
+        }
+        self.set_syntax(syntax)
+    }
+    pub fn set_syntax(&mut self, syntax: Syntax) -> bool {
         self.syntax = syntax;
         if self.style_from_lsp {
-            return;
+            return false;
         }
         // if self.semantic_styles.is_none() {
         //     self.line_styles.clear();
         // }
-        let buffer = self.buffer.get_untracked();
         self.line_styles.clear();
         if let Some(x) = self.syntax.styles.as_ref() {
             x.iter().for_each(|(Interval { start, end }, style)| {
-                let origin_line = buffer.line_of_offset(start);
-                let origin_line_offset = buffer.offset_of_line(origin_line);
+                let origin_line = self.buffer.line_of_offset(start);
+                let origin_line_offset = self.buffer.offset_of_line(origin_line);
                 let entry = self.line_styles.entry(origin_line).or_default();
                 entry.push(NewLineStyle {
                     origin_line,
@@ -1752,15 +1893,15 @@ impl UpdateLines {
                 });
             })
         };
-        self.update_parser(&buffer);
+        self.update_parser();
 
-        self.update(&buffer);
+        self.update();
+        true
     }
 
     pub fn set_inlay_hints(&mut self, inlay_hint: Spans<InlayHint>) {
         self.inlay_hints = Some(inlay_hint);
-        let buffer = self.buffer.get_untracked();
-        self.update(&buffer);
+        self.update();
     }
 
     pub fn set_completion_lens(
@@ -1771,8 +1912,7 @@ impl UpdateLines {
     ) {
         self.completion_lens = Some(completion_lens);
         self.completion_pos = (line, col);
-        let buffer = self.buffer.get_untracked();
-        self.update(&buffer);
+        self.update();
     }
 
     pub fn update_semantic_styles_from_lsp(
@@ -1781,13 +1921,12 @@ impl UpdateLines {
     ) {
         // self.semantic_styles = Some(styles);
         self.style_from_lsp = true;
-        let buffer = self.buffer.get_untracked();
         styles
             .1
             .iter()
             .for_each(|(Interval { start, end }, fg_color)| {
-                let origin_line = buffer.line_of_offset(start);
-                let origin_line_offset = buffer.offset_of_line(origin_line);
+                let origin_line = self.buffer.line_of_offset(start);
+                let origin_line_offset = self.buffer.offset_of_line(origin_line);
                 let entry = self.line_styles.entry(origin_line).or_default();
                 entry.push(NewLineStyle {
                     origin_line,
@@ -1796,8 +1935,7 @@ impl UpdateLines {
                     fg_color: Some(fg_color.clone()),
                 });
             });
-        let buffer = self.buffer.get_untracked();
-        self.update(&buffer);
+        self.update();
     }
 }
 
@@ -2246,24 +2384,27 @@ pub struct Signals {
     viewport: RwSignal<Rect>,
     folding_items_signal: RwSignal<Vec<FoldingDisplayItem>>,
     screen_lines_signal: RwSignal<ScreenLines>,
+    buffer_rev: RwSignal<u64>,
+    buffer: RwSignal<Buffer>,
     pub screen_lines: ScreenLines,
 }
 
 impl Signals {
-    pub fn new(cx: Scope, style: &EditorStyle, viewport: Rect) -> Self {
+    pub fn new(cx: Scope, style: &EditorStyle, viewport: Rect, rev: u64, buffer: Buffer) -> Self {
         let show_indent_guide =
             cx.create_rw_signal((style.show_indent_guide(), style.indent_guide()));
         let screen_lines = ScreenLines::new(cx, viewport);
         let screen_lines_signal = cx.create_rw_signal(screen_lines.clone());
         let viewport = cx.create_rw_signal(viewport);
         let folding_items_signal = cx.create_rw_signal(Vec::new());
-
+        let buffer_rev= cx.create_rw_signal(rev);
+        let buffer= cx.create_rw_signal(buffer);
         Self {
             show_indent_guide,
             viewport,
             folding_items_signal,
             screen_lines,
-            screen_lines_signal,
+            screen_lines_signal, buffer_rev, buffer
         }
     }
 }
@@ -2280,6 +2421,14 @@ impl DocLines {
     pub fn trigger_folding_items(&mut self, folding_items: Vec<FoldingDisplayItem>) {
         self.signals.folding_items_signal.set(folding_items);
     }
+
+    pub fn trigger_buffer_rev(&mut self, buffer_rev: u64) {
+        self.signals.buffer_rev.set(buffer_rev);
+    }
+    pub fn trigger_buffer(&mut self, buffer: Buffer) {
+        self.signals.buffer.set(buffer);
+    }
+
     pub fn folding_items_signal(&self) -> ReadSignal<Vec<FoldingDisplayItem>> {
         self.signals.folding_items_signal.read_only()
     }
@@ -2300,6 +2449,14 @@ impl DocLines {
     }
     pub fn signal_show_indent_guide(&self) -> ReadSignal<(bool, Color)> {
         self.signals.show_indent_guide.read_only()
+    }
+
+    pub fn signal_buffer_rev(&self) -> ReadSignal<u64> {
+        self.signals.buffer_rev.read_only()
+    }
+
+    pub fn signal_buffer(&self) -> ReadSignal<Buffer> {
+        self.signals.buffer.read_only()
     }
 }
 
@@ -2347,23 +2504,38 @@ pub trait RopeTextPosition: RopeText {
     }
 }
 impl<T: RopeText> RopeTextPosition for T {}
+
+
+/// Get the previous unmatched character `c` from the `offset` using `syntax` if applicable
+fn syntax_prev_unmatched(
+    buffer: &Buffer,
+    syntax: &Syntax,
+    c: char,
+    offset: usize,
+) -> Option<usize> {
+    if syntax.layers.is_some() {
+        syntax.find_tag(offset, true, &CharBuffer::new(c))
+    } else {
+        WordCursor::new(buffer.text(), offset).previous_unmatched(c)
+    }
+}
 // #[cfg(test)]
 mod test {
     use std::path::PathBuf;
     use floem::kurbo::Rect;
-    use floem::reactive::{RwSignal, Scope, SignalGet};
+    use floem::reactive::{RwSignal, Scope};
     use floem::views::editor::EditorStyle;
     use floem_editor_core::buffer::Buffer;
     use floem_editor_core::buffer::rope_text::RopeText;
     use itertools::Itertools;
     use lapce_xi_rope::Interval;
     use lapce_xi_rope::spans::{Spans, SpansBuilder};
-    use lsp_types::{InlayHint, Position};
+    use lsp_types::{InlayHint};
 
     use crate::{DiagnosticData, EditorViewKind};
     use crate::config::EditorConfig;
     use crate::lines::{DocLines, RopeTextPosition};
-    use crate::lines::fold::{FoldingDisplayItem, FoldingDisplayType, FoldingRange};
+    use crate::lines::fold::{FoldingDisplayItem, FoldingRange};
     use crate::syntax::{BracketParser, Syntax};
 
     #[test]
@@ -2464,7 +2636,6 @@ struct A;
         // { x0: 0.0, y0: 0.0, x1: 591.1680297851563, y1: 538.1586303710938 }
         let view = Rect::new(0.0, 0.0, 591.0, 538.0);
         let editor_style = EditorStyle::default();
-        let buffer = cx.create_rw_signal(buffer);
         let kind = cx.create_rw_signal(EditorViewKind::Normal);
         let language = crate::language::LapceLanguage::Rust;
         let grammars_dir: PathBuf = "C:\\Users\\36225\\AppData\\Local\\lapce\\Lapce-Debug\\data\\grammars".into();
@@ -2498,7 +2669,7 @@ struct A;
         println!(
             "DocLines viewport={:?} {}",
             lines.viewport,
-            lines.buffer.get_untracked().text()
+            lines.buffer.text()
         );
         for origin_folded_line in &lines.origin_folded_lines {
             println!("{:?}", origin_folded_line);
