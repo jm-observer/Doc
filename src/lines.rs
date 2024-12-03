@@ -7,7 +7,7 @@ use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
 
 use floem::context::StyleCx;
-use floem::kurbo::Rect;
+use floem::kurbo::{Point, Rect};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{
     batch, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
@@ -30,7 +30,7 @@ use floem_editor_core::buffer::{Buffer, InvalLines};
 use floem_editor_core::buffer::rope_text::RopeText;
 use floem_editor_core::char_buffer::CharBuffer;
 use floem_editor_core::command::EditCommand;
-use floem_editor_core::cursor::{Cursor, CursorAffinity};
+use floem_editor_core::cursor::{Cursor, CursorAffinity, CursorMode};
 use floem_editor_core::editor::{Action, EditConf, EditType};
 use floem_editor_core::indent::IndentStyle;
 use floem_editor_core::line_ending::LineEnding;
@@ -104,6 +104,42 @@ impl OriginFoldedLine {
             .phantom_text
             .cursor_position_of_final_col(final_offset);
         offset_of_buffer
+    }
+
+    /// 求原始的行的偏移，最终出现在第几个视觉行，以及在视觉行的偏移位置，以及合并行的偏移位置
+    fn visual_line_of_line_and_offset(&self, origin_line: usize, offset:usize) -> (usize, usize, usize) {
+        let final_offset = self
+            .text_layout
+            .phantom_text
+            .final_col_of_col(origin_line, offset, true);
+        let (sub_line, offset_of_visual) = self.visual_line_of_final_offset(final_offset);
+        (sub_line, offset_of_visual, final_offset)
+    }
+
+    /// 求最终的行偏移出现在第几个视觉行，以及在视觉行的偏移位置
+    fn visual_line_of_final_offset(&self, final_offset:usize) -> (usize, usize) {
+        // 空行时，会出现==的情况
+        if final_offset > self.text_layout.text.line().text().len() {
+            panic!("final_offset={final_offset} >= {}", self.text_layout.text.line().text().len())
+        }
+        let folded_line_layout = self.text_layout.text.line_layout();
+        if folded_line_layout.len() == 1 {
+            return (0, final_offset);
+        }
+        let mut sub_line_index = folded_line_layout.len() - 1;
+        let mut final_offset_line = final_offset;
+        // let mut last_char = false;
+
+        for (index, sub_line) in folded_line_layout.iter().enumerate() {
+            if final_offset_line <= sub_line.glyphs.len() {
+                sub_line_index = index;
+                // last_char = final_offset == sub_line.glyphs.len() - self.text_layout.text.;
+                break;
+            } else {
+                final_offset_line -= sub_line.glyphs.len();
+            }
+        }
+        (sub_line_index, final_offset_line)
     }
 }
 
@@ -605,20 +641,6 @@ impl DocLines {
         &self.visual_lines[self.visual_lines.len() - 1]
     }
 
-    // pub fn visual_line_of_offset(
-    //     &self,
-    //     offset: usize,
-    //     affinity: CursorAffinity,
-    // ) -> (VLineInfo, usize, bool) {
-    //     let (origin_line, offset_of_line) = {
-    //         let origin_line = self.buffer.line_of_offset(offset);
-    //         let origin_line_start_offset = self.buffer.offset_of_line(origin_line);
-    //         (origin_line, origin_line_start_offset)
-    //     };
-    //     let offset = offset - offset_of_line;
-    //     self.visual_line_of_origin_line_offset(origin_line, offset, affinity)
-    // }
-
     /// 原始字符所在的视觉行，以及行的偏移位置和是否是最后一个字符
     pub fn visual_line_of_origin_line_offset(
         &self,
@@ -664,6 +686,24 @@ impl DocLines {
         );
 
         (visual_line.vline_info(), final_offset, last_char)
+    }
+
+    pub fn buffer_offset_of_point(
+        &self,
+        _mode: &CursorMode,
+        point: Point,
+    ) -> (usize, bool) {
+        let info = self.signals.screen_lines.visual_line_of_y(point.y);
+        // info.visual_line.origin_line
+        let text_layout = &info.visual_line.text_layout;
+        let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
+        let hit_point = text_layout.text.hit_point(Point::new(point.x, y as f64));
+        let (_line, _col, offset_of_buffer) = text_layout
+            .phantom_text
+            .cursor_position_of_final_col(hit_point.index);
+
+
+        (offset_of_buffer, hit_point.is_inside)
     }
 
     /// 原始位移字符所在的行信息（折叠行、原始行、视觉行）
@@ -780,12 +820,12 @@ impl DocLines {
         )
     }
 
-    /// 原始位移字符所在的视觉行，以及行的偏移位置和是否是最后一个字符，point
+    /// 原始位移字符所在的视觉行，以及视觉行的偏移位置，合并行的偏移位置和是否是最后一个字符，point
     pub fn visual_line_of_offset(
         &self,
         offset: usize,
         _affinity: CursorAffinity,
-    ) -> (VisualLine, usize, bool) {
+    ) -> (VisualLine, usize, usize, bool) {
         // 位于的原始行，以及在原始行的起始offset
         let (origin_line, offset_of_origin_line) = {
                 let origin_line = self.buffer.line_of_offset(offset);
@@ -794,36 +834,15 @@ impl DocLines {
             };
         let offset = offset - offset_of_origin_line;
         let folded_line = self.folded_line_of_origin_line(origin_line);
-        let mut final_offset = folded_line
-            .text_layout
-            .phantom_text
-            .final_col_of_col(origin_line, offset, false);
-        let folded_line_layout = folded_line.text_layout.text.line_layout();
-        let mut sub_line_index = folded_line_layout.len() - 1;
-        let mut last_char = false;
 
-        for (index, sub_line) in folded_line_layout.iter().enumerate() {
-            if final_offset < sub_line.glyphs.len() {
-                sub_line_index = index;
-                last_char = final_offset == sub_line.glyphs.len() - 1;
-                break;
-            } else {
-                final_offset -= sub_line.glyphs.len();
-            }
-        }
-
-        // hit_position_aff(
-        //     &folded_line.text_layout.text,
-        //     col,
-        //     affinity == CursorAffinity::Backward,
-        // )
-        // .point;
+        let (sub_line_index, offset_of_visual, offset_of_folded) = folded_line.visual_line_of_line_and_offset(origin_line, offset);
         let visual_line = self.visual_line_of_folded_line_and_sub_index(
             folded_line.line_index,
             sub_line_index,
         );
+        let last_char = offset_of_folded >= folded_line.text_layout.text.line().text().len() - self.buffer.line_ending().len();
 
-        (visual_line.clone(), final_offset, last_char)
+        (visual_line.clone(), offset_of_visual, offset_of_folded, last_char)
     }
 
     pub fn visual_lines(&self, start: usize, end: usize) -> Vec<VisualLine> {
@@ -2235,16 +2254,17 @@ fn preedit_phantom(
 }
 
 fn push_strip_suffix(line_content_original: &str, rs: &mut String) {
-    if let Some(s) = line_content_original.strip_suffix("\r\n") {
-        rs.push_str(s);
-        // rs.push_str("  ");
-        // format!("{s}  ")
-    } else if let Some(s) = line_content_original.strip_suffix('\n') {
-        rs.push_str(s);
-        // rs.push(' ');
-    } else {
-        rs.push_str(line_content_original);
-    }
+    // if let Some(s) = line_content_original.strip_suffix("\r\n") {
+    //     rs.push_str(s);
+    //     rs.push_str("  ");
+    //     // format!("{s}  ")
+    // } else if let Some(s) = line_content_original.strip_suffix('\n') {
+    //     rs.push_str(s);
+    //     rs.push(' ');
+    // } else {
+    //     rs.push_str(line_content_original);
+    // }
+    rs.push_str(line_content_original);
 }
 
 fn apply_layout_styles(layout_line: &mut TextLayoutLine) {
@@ -2522,25 +2542,36 @@ fn syntax_prev_unmatched(
 // #[cfg(test)]
 mod test {
     use std::path::PathBuf;
-    use floem::kurbo::Rect;
+    use floem::kurbo::{Point, Rect};
     use floem::reactive::{RwSignal, Scope};
     use floem::views::editor::EditorStyle;
     use floem_editor_core::buffer::Buffer;
     use floem_editor_core::buffer::rope_text::RopeText;
+    use floem_editor_core::cursor::{CursorAffinity, CursorMode};
     use itertools::Itertools;
     use lapce_xi_rope::Interval;
     use lapce_xi_rope::spans::{Spans, SpansBuilder};
-    use lsp_types::{InlayHint};
+    use lsp_types::{InlayHint, Position};
 
     use crate::{DiagnosticData, EditorViewKind};
     use crate::config::EditorConfig;
     use crate::lines::{DocLines, RopeTextPosition};
-    use crate::lines::fold::{FoldingDisplayItem, FoldingRange};
+    use crate::lines::fold::{FoldingDisplayItem, FoldingDisplayType, FoldingRange};
     use crate::syntax::{BracketParser, Syntax};
 
     #[test]
     fn test() {
-        let (_lines, _) = _init_lines(None);
+        let (lines, _) = _init_lines(None);
+        // let (vl, offset, last_char) = lines.visual_line_of_offset(70, CursorAffinity::Backward);
+        // println!("{vl:?}, offset={offset}, {last_char}");
+        // |fn main() {n
+        // |012345678901
+        println!("{:?} {:?}", lines.buffer.line_content(0), lines.buffer.line_ending());
+        let (vl, offset_of_visual, offset_folded, last_char) = lines.visual_line_of_offset(11, CursorAffinity::Backward);
+        println!("offset_of_visual={offset_of_visual},offset_folded={offset_folded}, {last_char}, {vl:?}");
+
+        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_point(&CursorMode::Normal(0), Point::new(72.2, 58.1));
+        println!("offset_of_buffer={offset_of_buffer},is_inside={is_inside}");
     }
 
     #[test]
@@ -2608,14 +2639,14 @@ mod test {
     } else {
         println!("startss");
     }
-	let a = A;
+    let a = A;
 }
 struct A;
-
 "#;
         let buffer = Buffer::new(
             code
         );
+        println!("line_ending {:?}", buffer.line_ending());
         (code.to_string(), buffer)
     }
 
@@ -2624,7 +2655,7 @@ struct A;
         let folding = _init_lsp_folding_range();
         let hints = _init_inlay_hint(&buffer);
 
-        let config_str = r##"{"font_family":"JetBrains Mono","font_size":13,"line_height":23,"enable_inlay_hints":true,"inlay_hint_font_size":0,"enable_error_lens":false,"error_lens_end_of_line":true,"error_lens_multiline":false,"error_lens_font_size":0,"enable_completion_lens":false,"enable_inline_completion":true,"completion_lens_font_size":0,"only_render_error_styling":false,"diagnostic_error":{"r":229,"g":20,"b":0,"a":255},"diagnostic_warn":{"r":233,"g":167,"b":0,"a":255},"inlay_hint_fg":{"r":108,"g":118,"b":128,"a":255},"inlay_hint_bg":{"r":245,"g":245,"b":245,"a":255},"error_lens_error_foreground":{"r":228,"g":86,"b":73,"a":255},"error_lens_warning_foreground":{"r":193,"g":132,"b":1,"a":255},"error_lens_other_foreground":{"r":160,"g":161,"b":167,"a":255},"completion_lens_foreground":{"r":160,"g":161,"b":167,"a":255},"editor_foreground":{"r":56,"g":58,"b":66,"a":255},"syntax":{"punctuation.delimiter":{"r":193,"g":132,"b":1,"a":255},"attribute":{"r":193,"g":132,"b":1,"a":255},"method":{"r":64,"g":120,"b":242,"a":255},"bracket.color.3":{"r":166,"g":38,"b":164,"a":255},"builtinType":{"r":18,"g":63,"b":184,"a":255},"enumMember":{"r":146,"g":17,"b":167,"a":255},"bracket.color.2":{"r":193,"g":132,"b":1,"a":255},"markup.heading":{"r":228,"g":86,"b":73,"a":255},"markup.link.url":{"r":64,"g":120,"b":242,"a":255},"string.escape":{"r":1,"g":132,"b":188,"a":255},"structure":{"r":193,"g":132,"b":1,"a":255},"text.reference":{"r":193,"g":132,"b":1,"a":255},"comment":{"r":160,"g":161,"b":167,"a":255},"markup.list":{"r":209,"g":154,"b":102,"a":255},"variable.other.member":{"r":228,"g":86,"b":73,"a":255},"type":{"r":56,"g":58,"b":66,"a":255},"keyword":{"r":7,"g":60,"b":183,"a":255},"text.uri":{"r":1,"g":132,"b":188,"a":255},"enum":{"r":56,"g":58,"b":66,"a":255},"constructor":{"r":193,"g":132,"b":1,"a":255},"interface":{"r":56,"g":58,"b":66,"a":255},"selfKeyword":{"r":166,"g":38,"b":164,"a":255},"type.builtin":{"r":1,"g":132,"b":188,"a":255},"escape":{"r":1,"g":132,"b":188,"a":255},"field":{"r":228,"g":86,"b":73,"a":255},"function.method":{"r":64,"g":120,"b":242,"a":255},"markup.link.text":{"r":166,"g":38,"b":164,"a":255},"property":{"r":136,"g":22,"b":150,"a":255},"struct":{"r":56,"g":58,"b":66,"a":255},"bracket.color.1":{"r":64,"g":120,"b":242,"a":255},"enum-member":{"r":228,"g":86,"b":73,"a":255},"string":{"r":80,"g":161,"b":79,"a":255},"text.title":{"r":209,"g":154,"b":102,"a":255},"bracket.unpaired":{"r":228,"g":86,"b":73,"a":255},"constant":{"r":193,"g":132,"b":1,"a":255},"typeAlias":{"r":56,"g":58,"b":66,"a":255},"function":{"r":61,"g":108,"b":126,"a":255},"markup.link.label":{"r":166,"g":38,"b":164,"a":255},"markup.bold":{"r":209,"g":154,"b":102,"a":255},"markup.italic":{"r":209,"g":154,"b":102,"a":255},"number":{"r":193,"g":132,"b":1,"a":255},"tag":{"r":64,"g":120,"b":242,"a":255},"variable":{"r":56,"g":58,"b":66,"a":255},"embedded":{"r":1,"g":132,"b":188,"a":255}}}"##;
+        let config_str = r##"{"auto_closing_matching_pairs":true, "auto_surround":true,"font_family":"JetBrains Mono","font_size":13,"line_height":23,"enable_inlay_hints":true,"inlay_hint_font_size":0,"enable_error_lens":false,"error_lens_end_of_line":true,"error_lens_multiline":false,"error_lens_font_size":0,"enable_completion_lens":false,"enable_inline_completion":true,"completion_lens_font_size":0,"only_render_error_styling":false,"diagnostic_error":{"r":229,"g":20,"b":0,"a":255},"diagnostic_warn":{"r":233,"g":167,"b":0,"a":255},"inlay_hint_fg":{"r":108,"g":118,"b":128,"a":255},"inlay_hint_bg":{"r":245,"g":245,"b":245,"a":255},"error_lens_error_foreground":{"r":228,"g":86,"b":73,"a":255},"error_lens_warning_foreground":{"r":193,"g":132,"b":1,"a":255},"error_lens_other_foreground":{"r":160,"g":161,"b":167,"a":255},"completion_lens_foreground":{"r":160,"g":161,"b":167,"a":255},"editor_foreground":{"r":56,"g":58,"b":66,"a":255},"syntax":{"punctuation.delimiter":{"r":193,"g":132,"b":1,"a":255},"attribute":{"r":193,"g":132,"b":1,"a":255},"method":{"r":64,"g":120,"b":242,"a":255},"bracket.color.3":{"r":166,"g":38,"b":164,"a":255},"builtinType":{"r":18,"g":63,"b":184,"a":255},"enumMember":{"r":146,"g":17,"b":167,"a":255},"bracket.color.2":{"r":193,"g":132,"b":1,"a":255},"markup.heading":{"r":228,"g":86,"b":73,"a":255},"markup.link.url":{"r":64,"g":120,"b":242,"a":255},"string.escape":{"r":1,"g":132,"b":188,"a":255},"structure":{"r":193,"g":132,"b":1,"a":255},"text.reference":{"r":193,"g":132,"b":1,"a":255},"comment":{"r":160,"g":161,"b":167,"a":255},"markup.list":{"r":209,"g":154,"b":102,"a":255},"variable.other.member":{"r":228,"g":86,"b":73,"a":255},"type":{"r":56,"g":58,"b":66,"a":255},"keyword":{"r":7,"g":60,"b":183,"a":255},"text.uri":{"r":1,"g":132,"b":188,"a":255},"enum":{"r":56,"g":58,"b":66,"a":255},"constructor":{"r":193,"g":132,"b":1,"a":255},"interface":{"r":56,"g":58,"b":66,"a":255},"selfKeyword":{"r":166,"g":38,"b":164,"a":255},"type.builtin":{"r":1,"g":132,"b":188,"a":255},"escape":{"r":1,"g":132,"b":188,"a":255},"field":{"r":228,"g":86,"b":73,"a":255},"function.method":{"r":64,"g":120,"b":242,"a":255},"markup.link.text":{"r":166,"g":38,"b":164,"a":255},"property":{"r":136,"g":22,"b":150,"a":255},"struct":{"r":56,"g":58,"b":66,"a":255},"bracket.color.1":{"r":64,"g":120,"b":242,"a":255},"enum-member":{"r":228,"g":86,"b":73,"a":255},"string":{"r":80,"g":161,"b":79,"a":255},"text.title":{"r":209,"g":154,"b":102,"a":255},"bracket.unpaired":{"r":228,"g":86,"b":73,"a":255},"constant":{"r":193,"g":132,"b":1,"a":255},"typeAlias":{"r":56,"g":58,"b":66,"a":255},"function":{"r":61,"g":108,"b":126,"a":255},"markup.link.label":{"r":166,"g":38,"b":164,"a":255},"markup.bold":{"r":209,"g":154,"b":102,"a":255},"markup.italic":{"r":209,"g":154,"b":102,"a":255},"number":{"r":193,"g":132,"b":1,"a":255},"tag":{"r":64,"g":120,"b":242,"a":255},"variable":{"r":56,"g":58,"b":66,"a":255},"embedded":{"r":1,"g":132,"b":188,"a":255}}}"##;
         let config: EditorConfig = serde_json::from_str(config_str).unwrap();
         let cx = Scope::new();
         let config = cx.create_rw_signal(config);

@@ -68,6 +68,15 @@ impl ScreenLines {
         Some(info.clone().with_base(self.base))
     }
 
+    pub fn visual_line_of_y(&self, y: f64) -> &VisualLineInfo {
+        for vli in &self.visual_lines {
+            if y <= vli.y {
+                return vli;
+            }
+        }
+        self.visual_lines.last().unwrap()
+    }
+
     pub fn vline_info(&self, rvline: RVLine) -> Option<VLineInfo<VLine>> {
         self.info.get(&rvline).map(|info| info.vline_info)
     }
