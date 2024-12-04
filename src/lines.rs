@@ -119,8 +119,8 @@ impl OriginFoldedLine {
     /// 求最终的行偏移出现在第几个视觉行，以及在视觉行的偏移位置
     fn visual_line_of_final_offset(&self, final_offset:usize) -> (usize, usize) {
         // 空行时，会出现==的情况
-        if final_offset > self.text_layout.text.line().text().len() {
-            panic!("final_offset={final_offset} >= {}", self.text_layout.text.line().text().len())
+        if final_offset > self.len() {
+            panic!("final_offset={final_offset} >= {}", self.len())
         }
         let folded_line_layout = self.text_layout.text.line_layout();
         if folded_line_layout.len() == 1 {
@@ -140,6 +140,14 @@ impl OriginFoldedLine {
             }
         }
         (sub_line_index, final_offset_line)
+    }
+
+    fn len(&self) -> usize {
+        self.text_layout.text.line().text().len()
+    }
+
+    fn len_without_rn(&self, ending: LineEnding) -> usize {
+        self.len().max(ending.len()) - ending.len()
     }
 }
 
@@ -702,6 +710,7 @@ impl DocLines {
             .phantom_text
             .cursor_position_of_final_col(hit_point.index);
 
+        println!("point={point:?} _line={_line} _col={_col} offset_of_buffer={offset_of_buffer} {info:?}");
 
         (offset_of_buffer, hit_point.is_inside)
     }
@@ -840,7 +849,7 @@ impl DocLines {
             folded_line.line_index,
             sub_line_index,
         );
-        let last_char = offset_of_folded >= folded_line.text_layout.text.line().text().len() - self.buffer.line_ending().len();
+        let last_char = offset_of_folded >= folded_line.len_without_rn(self.buffer.line_ending());
 
         (visual_line.clone(), offset_of_visual, offset_of_folded, last_char)
     }
@@ -1550,7 +1559,6 @@ impl DocLines {
         let phantom_text = &layout_line.phantom_text;
         // 暂不考虑
         for (start, end, color) in line_styles {
-            error!("diagnostic {}-{}", start, end);
             let Some(start) = phantom_text.col_at(start) else {
                 continue;
             };
@@ -2006,6 +2014,8 @@ pub fn compute_screen_lines(
                 info: Rc::new(info),
                 diff_sections: None,
                 base,
+                line_height: line_height as f64
+                ,
             }
         }
         EditorViewKind::Diff(_diff_info) => {
@@ -2254,17 +2264,15 @@ fn preedit_phantom(
 }
 
 fn push_strip_suffix(line_content_original: &str, rs: &mut String) {
-    // if let Some(s) = line_content_original.strip_suffix("\r\n") {
-    //     rs.push_str(s);
-    //     rs.push_str("  ");
-    //     // format!("{s}  ")
-    // } else if let Some(s) = line_content_original.strip_suffix('\n') {
-    //     rs.push_str(s);
-    //     rs.push(' ');
-    // } else {
-    //     rs.push_str(line_content_original);
-    // }
-    rs.push_str(line_content_original);
+    if let Some(s) = line_content_original.strip_suffix("\r\n") {
+        rs.push_str(s);
+        rs.push_str("  ");
+    } else if let Some(s) = line_content_original.strip_suffix('\n') {
+        rs.push_str(s);
+        rs.push(' ');
+    } else {
+        rs.push_str(line_content_original);
+    }
 }
 
 fn apply_layout_styles(layout_line: &mut TextLayoutLine) {
@@ -2413,7 +2421,7 @@ impl Signals {
     pub fn new(cx: Scope, style: &EditorStyle, viewport: Rect, rev: u64, buffer: Buffer) -> Self {
         let show_indent_guide =
             cx.create_rw_signal((style.show_indent_guide(), style.indent_guide()));
-        let screen_lines = ScreenLines::new(cx, viewport);
+        let screen_lines = ScreenLines::new(cx, viewport, 0.0);
         let screen_lines_signal = cx.create_rw_signal(screen_lines.clone());
         let viewport = cx.create_rw_signal(viewport);
         let folding_items_signal = cx.create_rw_signal(Vec::new());
@@ -2539,7 +2547,7 @@ fn syntax_prev_unmatched(
         WordCursor::new(buffer.text(), offset).previous_unmatched(c)
     }
 }
-// #[cfg(test)]
+#[cfg(test)]
 mod test {
     use std::path::PathBuf;
     use floem::kurbo::{Point, Rect};
@@ -2566,12 +2574,17 @@ mod test {
         // println!("{vl:?}, offset={offset}, {last_char}");
         // |fn main() {n
         // |012345678901
-        println!("{:?} {:?}", lines.buffer.line_content(0), lines.buffer.line_ending());
-        let (vl, offset_of_visual, offset_folded, last_char) = lines.visual_line_of_offset(11, CursorAffinity::Backward);
-        println!("offset_of_visual={offset_of_visual},offset_folded={offset_folded}, {last_char}, {vl:?}");
+        // println!("{:?} {:?}", lines.buffer.line_content(0), lines.buffer.line_ending());
+        // let (vl, offset_of_visual, offset_folded, last_char) = lines.visual_line_of_offset(11, CursorAffinity::Backward);
+        // println!("offset_of_visual={offset_of_visual},offset_folded={offset_folded}, {last_char}, {vl:?}");
 
-        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_point(&CursorMode::Normal(0), Point::new(72.2, 58.1));
-        println!("offset_of_buffer={offset_of_buffer},is_inside={is_inside}");
+        // let (offset_of_buffer, is_inside) = lines.buffer_offset_of_point(&CursorMode::Normal(0), Point::new(72.2, 58.1));
+        // println!("offset_of_buffer={offset_of_buffer},is_inside={is_inside}");
+
+        //f
+        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_point(&CursorMode::Normal(0), Point::new(1.1, 33.1));
+        assert_eq!(offset_of_buffer, 0);
+        assert_eq!(is_inside, true);
     }
 
     #[test]

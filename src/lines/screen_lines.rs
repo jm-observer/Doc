@@ -14,6 +14,7 @@ use crate::lines::VisualLine;
 // we don't really have support for diffs in floem-editor! Is there a better design for this?
 // Possibly we should just move that out to a separate field on Lapce's editor.
 // 不允许滚到到窗口没有文本！！！因此lines等不会为空
+// 从第2行开始
 #[derive(Clone)]
 pub struct ScreenLines {
     pub lines: Vec<RVLine>,
@@ -27,25 +28,27 @@ pub struct ScreenLines {
     // completely recompute the screen lines (or do somewhat intricate things to update them)
     // we simply have to update the `base_y`.
     pub base: Rect,
+    pub line_height: f64,
 }
 
 #[derive(Clone, Debug)]
 pub struct VisualLineInfo {
-    /// 该视觉行所属折叠行（原始行）在窗口的y偏移（不是整个文档的y偏移）。若该折叠行（原始行）只有1行视觉行，则y=vline_y
+    /// 该视觉行所属折叠行（原始行）在窗口的y偏移（不是整个文档的y偏移）。若该折叠行（原始行）只有1行视觉行，则y=vline_y。行顶的y值！！！
     pub y: f64,
-    /// 视觉行在窗口的y偏移（不是整个文档的y偏移）。
+    /// 视觉行在窗口的y偏移（不是整个文档的y偏移）。行顶的y值！！！
     pub vline_y: f64,
     pub visual_line: VisualLine,
 }
 
 impl ScreenLines {
-    pub fn new(_cx: Scope, viewport: Rect) -> ScreenLines {
+    pub fn new(_cx: Scope, viewport: Rect, line_height: f64) -> ScreenLines {
         ScreenLines {
             lines: Default::default(),
             visual_lines: Default::default(),
             info: Default::default(),
             diff_sections: Default::default(),
             base: viewport,
+            line_height
         }
     }
 
@@ -70,7 +73,7 @@ impl ScreenLines {
 
     pub fn visual_line_of_y(&self, y: f64) -> &VisualLineInfo {
         for vli in &self.visual_lines {
-            if y <= vli.y {
+            if vli.y <= y && y < vli.y + self.line_height {
                 return vli;
             }
         }
