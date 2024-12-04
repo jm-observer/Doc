@@ -5,10 +5,10 @@ use std::{
     str::FromStr,
 };
 use std::sync::LazyLock;
+use log::{debug, error, warn};
 
 use regex::Regex;
 use strum_macros::{AsRefStr, Display, EnumMessage, EnumString, IntoStaticStr};
-use tracing::{event, Level};
 use tree_sitter::{Point, TreeCursor};
 
 use crate::{LineStyle, syntax::highlight::{HighlightIssue}};
@@ -1702,7 +1702,7 @@ impl LapceLanguage {
         match LapceLanguage::from_str(name.to_lowercase().as_str()) {
             Ok(v) => Some(v),
             Err(e) => {
-                event!(Level::DEBUG, "failed parsing `{name}` LapceLanguage: {e}");
+                debug!( "failed parsing `{name}` LapceLanguage: {e}");
                 None
             }
         }
@@ -1800,32 +1800,31 @@ pub fn load_grammar(
     library_path.set_extension(std::env::consts::DLL_EXTENSION);
 
     if !library_path.exists() {
-        event!(Level::WARN, "Grammar not found at: {library_path:?}");
+        warn!( "Grammar not found at: {library_path:?}");
 
         // Load backwar compat libraries
         library_path = path.join(format!("tree-sitter-{grammar_name}"));
         library_path.set_extension(std::env::consts::DLL_EXTENSION);
 
         if !library_path.exists() {
-            event!(Level::WARN, "Grammar not found at: {library_path:?}");
+            warn!( "Grammar not found at: {library_path:?}");
             return Err(HighlightIssue::Error("grammar not found".to_string()));
         }
     }
 
-    event!(Level::DEBUG, "Loading grammar from user grammar dir");
+    debug!( "Loading grammar from user grammar dir");
     let library = match unsafe { libloading::Library::new(&library_path) } {
         Ok(v) => v,
         Err(e) => {
             let err = format!("Failed to load '{}': '{e}'", library_path.display());
-            event!(Level::ERROR, err);
+            error!("{}", err);
             return Err(HighlightIssue::Error(err));
         }
     };
 
     let language_fn_name =
         format!("tree_sitter_{}", grammar_fn_name.replace('-', "_"));
-    event!(
-        Level::DEBUG,
+    debug!(
         "Loading grammar with address: '{language_fn_name}'"
     );
     let language = unsafe {
@@ -1835,9 +1834,9 @@ pub fn load_grammar(
             Ok(v) => v,
             Err(e) => {
                 let err = format!("Failed to load '{language_fn_name}': '{e}'");
-                event!(Level::ERROR, err);
+                error!("{}", err);
                 if let Some(e) = library.close().err() {
-                    event!(Level::ERROR, "Failed to drop loaded library: {e}");
+                    error!( "Failed to drop loaded library: {e}");
                 };
                 return Err(HighlightIssue::Error(err));
             }
@@ -1954,8 +1953,7 @@ pub fn read_grammar_query(queries_dir: &Path, name: &str, kind: &str) -> String 
 
     let file = queries_dir.join(name).join(kind);
     let query = std::fs::read_to_string(&file).unwrap_or_else(|err| {
-        tracing::event!(
-            tracing::Level::WARN,
+        warn!(
             "Failed to read queries at: {file:?}, {err}"
         );
         String::new()

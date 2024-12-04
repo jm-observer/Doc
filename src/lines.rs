@@ -44,7 +44,7 @@ use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Position};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use tracing::{error, warn};
+use log::{warn};
 
 use crate::{DiagnosticData, EditorViewKind};
 use crate::lines::action::UpdateFolding;
@@ -1796,7 +1796,7 @@ impl UpdateLines {
     pub fn update_viewport(&mut self, viewport: Rect) {
         if self.viewport != viewport {
             self.viewport = viewport;
-            tracing::warn!("update_viewport {viewport:?}");
+            warn!("update_viewport {viewport:?}");
             self.update();
         }
     }
@@ -2555,7 +2555,7 @@ mod test {
     use floem::views::editor::EditorStyle;
     use floem_editor_core::buffer::Buffer;
     use floem_editor_core::buffer::rope_text::RopeText;
-    use floem_editor_core::cursor::{CursorAffinity, CursorMode};
+    use floem_editor_core::cursor::{CursorMode};
     use itertools::Itertools;
     use lapce_xi_rope::Interval;
     use lapce_xi_rope::spans::{Spans, SpansBuilder};
@@ -2705,32 +2705,8 @@ struct A;
                 lines.update_folding_ranges(folded.into());
             }
         }
-        _log(&lines);
+        lines.log();
         (lines, config)
     }
 
-    fn _log(lines: &DocLines) {
-        println!(
-            "DocLines viewport={:?} {}",
-            lines.viewport,
-            lines.buffer.text()
-        );
-        for origin_folded_line in &lines.origin_folded_lines {
-            println!("{:?}", origin_folded_line);
-        }
-        for visual_line in &lines.visual_lines {
-            println!("{:?}", visual_line);
-        }
-        for visual_line in &lines.signals.screen_lines.visual_lines {
-            println!("{:?}", visual_line);
-        }
-        println!("folding_items");
-        for item in &lines.folding_items {
-            println!("{:?}", item);
-        }
-        println!("folding_ranges");
-        for range in &lines.folding_ranges.0 {
-            println!("{:?}", range);
-        }
-    }
 }

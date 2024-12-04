@@ -20,6 +20,7 @@ use std::sync::LazyLock;
 use arc_swap::ArcSwap;
 
 use lapce_xi_rope::Rope;
+use log::error;
 use regex::Regex;
 use tree_sitter::{
     Language, Point, Query, QueryCaptures, QueryCursor, QueryMatch, Tree,
@@ -106,7 +107,7 @@ fn get_grammar(grammar_name: &str, grammar_fn_name: &str, language_name: &str, g
             Some(grammar)
         }
         Err(err) => {
-            tracing::error!("{} {:?}", language_name, err);
+            error!("{} {:?}", language_name, err);
             None
         }
     }

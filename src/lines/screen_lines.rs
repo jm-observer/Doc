@@ -7,6 +7,7 @@ use floem::kurbo::Rect;
 use floem::reactive::{Scope};
 use floem::views::editor::view::{DiffSection, LineInfo};
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
+use log::info;
 
 use crate::lines::VisualLine;
 
@@ -325,7 +326,7 @@ impl ScreenLines {
     // }
 
     pub fn log(&self) {
-        tracing::info!("{:?}", self.lines);
-        tracing::info!("{:?}", self.info);
+        info!("{:?}", self.lines);
+        info!("{:?}", self.info);
     }
 }

@@ -6,9 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "0.4.17"
-custom-utils = "0.10.14"
-
 floem = { path="../floem" }
 floem-editor-core = {  path="../floem/editor-core"  }
 serde             = { version = "1.0" }
@@ -16,44 +13,25 @@ serde_json        = { version = "1.0" }
 lsp-types = { version = "0.95.1", features = ["proposed"] }
 im                = { version = "15.0.0", features = ["serde"] }
 lapce-xi-rope = { version = "0.3.2", features = ["serde"] }
-
 smallvec          = { version = "1.13.2" }
 itertools = "0.12.1"
-
-
 slotmap     = "1.0"
 tree-sitter = "0.22.6"
 ahash       = "0.8.11"
 hashbrown   = { version = "0.14.5", features = ["raw"] }
 regex             = { version = "1.10.5" }
-
 strum             = { version = "0.26.2" }
 strum_macros      = { version = "0.26.2" }
 thiserror         = { version = "1.0" }
 libloading  = "0.8.1"
 directories       = { version = "4.0.1" }
 arc-swap    = "1.6.0"
+log = "0.4.22"
 
-[dependencies.tracing]
-git     = "https://github.com/jm-observer/tracing"
-#rev     = "908cc432a5994f6e17c8f36e13c217dc40085704"
-package = "tracing"
-
-[dependencies.tracing-log]
-git     = "https://github.com/jm-observer/tracing"
-#rev     = "908cc432a5994f6e17c8f36e13c217dc40085704"
-package = "tracing-log"
-
-[dependencies.tracing-subscriber]
-git     = "https://github.com/jm-observer/tracing"
-#rev     = "908cc432a5994f6e17c8f36e13c217dc40085704"
-package = "tracing-subscriber"
-
-[dependencies.tracing-appender]
-git     = "https://github.com/jm-observer/tracing"
-#rev     = "908cc432a5994f6e17c8f36e13c217dc40085704"
-package = "tracing-appender"
 
 [build-dependencies]
 anyhow            = { version = "1.0" }
-git2              = { version = "0.19.0", features = ["vendored-openssl"] }
+custom-utils = "0.10.16"
+
+[patch.crates-io]
+custom-utils = {path = "../custom-utils"}

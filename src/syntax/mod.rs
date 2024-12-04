@@ -25,6 +25,7 @@ use lapce_xi_rope::{
     spans::{Spans, SpansBuilder},
     Interval, Rope,
 };
+use log::error;
 use slotmap::{DefaultKey as LayerId, HopSlotMap};
 use thiserror::Error;
 use tree_sitter::{Node, Parser, Point, QueryCursor, Tree};
@@ -507,7 +508,7 @@ impl SyntaxLayers {
         let cancel_flag = AtomicUsize::new(0);
         if let Some(source) = source {
             if let Err(err) = syntax.update(0, 0, source, None, &cancel_flag, grammars_directory, queries_directory) {
-                tracing::error!("{:?}", err);
+                error!("{:?}", err);
             }
         }
 
@@ -760,7 +761,7 @@ impl SyntaxLayers {
                                     }
                                 }
                                 Err(err) => {
-                                    tracing::error!("{:?}", err);
+                                    error!("{:?}", err);
                                 }
                             }
                         }
@@ -784,7 +785,7 @@ impl SyntaxLayers {
                                     }
                                 }
                                 Err(err) => {
-                                    tracing::error!("{:?}", err);
+                                    error!("{:?}", err);
                                 }
                             }
                         }
@@ -979,7 +980,7 @@ impl Syntax {
         if let Err(err) =
             layers.update(self.rev, new_rev, &new_text, edits, &self.cancel_flag, grammars_directory, queries_directory)
         {
-            tracing::error!("{:?}", err);
+            error!("{:?}", err);
         }
         let tree = layers.try_tree();
 
