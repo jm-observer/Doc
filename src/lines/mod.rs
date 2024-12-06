@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
 use std::ops::Range;
-use std::rc::Rc;
 use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
 
@@ -22,11 +20,9 @@ use floem::views::editor::phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
-use floem::views::editor::view::LineInfo;
-use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent, RVLine, VLine, VLineInfo};
+use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent, VLine, VLineInfo};
 use floem_editor_core::buffer::{Buffer, InvalLines};
 use floem_editor_core::buffer::rope_text::RopeText;
-use floem_editor_core::char_buffer::CharBuffer;
 use floem_editor_core::command::EditCommand;
 use floem_editor_core::cursor::{Cursor, CursorAffinity, CursorMode};
 use floem_editor_core::editor::{Action, EditConf, EditType};
@@ -35,14 +31,16 @@ use floem_editor_core::line_ending::LineEnding;
 use floem_editor_core::mode::MotionMode;
 use floem_editor_core::register::Register;
 use floem_editor_core::selection::Selection;
-use floem_editor_core::word::{CharClassification, get_char_property, WordCursor};
+use floem_editor_core::word::{CharClassification, get_char_property};
 use itertools::Itertools;
 use lapce_xi_rope::{Interval, Rope, RopeDelta, Transformer};
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Position};
-use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use log::{info, warn};
+use line::{OriginFoldedLine, OriginLine, VisualLine};
+use signal::Signals;
+use style::NewLineStyle;
 
 use crate::{DiagnosticData, EditorViewKind};
 use crate::lines::action::UpdateFolding;
@@ -58,196 +56,14 @@ pub mod diff;
 pub mod fold;
 pub mod screen_lines;
 mod encoding;
+pub mod line;
+mod util;
+mod signal;
+mod style;
 
 // /// Minimum width that we'll allow the view to be wrapped at.
 // const MIN_WRAPPED_WIDTH: f32 = 100.0;
 
-type LineStyles = HashMap<usize, Vec<NewLineStyle>>;
-
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug)]
-pub struct OriginLine {
-    pub line_index: usize,
-    pub start_offset: usize,
-}
-#[allow(dead_code)]
-#[derive(Clone)]
-pub struct OriginFoldedLine {
-    pub line_index: usize,
-    // [origin_line_start..origin_line_end]
-    pub origin_line_start: usize,
-    pub origin_line_end: usize,
-    pub origin_interval: Interval,
-    pub text_layout: Arc<TextLayoutLine>,
-}
-#[allow(dead_code)]
-impl OriginFoldedLine {
-    fn final_offset_of_visual_line(
-        &self,
-        sub_line_index: usize,
-        line_offset: usize,
-    ) -> usize {
-        let final_offset =
-            self.text_layout.text.line_layout().iter().enumerate().fold(
-                line_offset,
-                |mut offset, (index, layout)| {
-                    if sub_line_index < index {
-                        offset += layout.glyphs.len();
-                    }
-                    offset
-                },
-            );
-        let (_orgin_line, _offset_of_line, offset_of_buffer) = self
-            .text_layout
-            .phantom_text
-            .cursor_position_of_final_col(final_offset);
-        offset_of_buffer
-    }
-
-    /// 求原始的行的偏移，最终出现在第几个视觉行，以及在视觉行的偏移位置，以及合并行的偏移位置
-    fn visual_line_of_line_and_offset(&self, origin_line: usize, offset:usize) -> (usize, usize, usize) {
-        let final_offset = self
-            .text_layout
-            .phantom_text
-            .final_col_of_col(origin_line, offset, true);
-        let (sub_line, offset_of_visual) = self.visual_line_of_final_offset(final_offset);
-        (sub_line, offset_of_visual, final_offset)
-    }
-
-    /// 求最终的行偏移出现在第几个视觉行，以及在视觉行的偏移位置
-    fn visual_line_of_final_offset(&self, final_offset:usize) -> (usize, usize) {
-        // 空行时，会出现==的情况
-        if final_offset > self.len() {
-            panic!("final_offset={final_offset} >= {}", self.len())
-        }
-        let folded_line_layout = self.text_layout.text.line_layout();
-        if folded_line_layout.len() == 1 {
-            return (0, final_offset);
-        }
-        let mut sub_line_index = folded_line_layout.len() - 1;
-        let mut final_offset_line = final_offset;
-        // let mut last_char = false;
-
-        for (index, sub_line) in folded_line_layout.iter().enumerate() {
-            if final_offset_line <= sub_line.glyphs.len() {
-                sub_line_index = index;
-                // last_char = final_offset == sub_line.glyphs.len() - self.text_layout.text.;
-                break;
-            } else {
-                final_offset_line -= sub_line.glyphs.len();
-            }
-        }
-        (sub_line_index, final_offset_line)
-    }
-
-    fn len(&self) -> usize {
-        self.text_layout.text.line().text().len()
-    }
-
-    fn len_without_rn(&self, ending: LineEnding) -> usize {
-        self.len().max(ending.len()) - ending.len()
-    }
-}
-
-impl Debug for OriginFoldedLine {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "OriginFoldedLine line_index={} origin_line_start={} origin_line_end={} origin_interval={}  phantom_text={:?}",
-               self.line_index, self.origin_line_start, self.origin_line_end, self.origin_interval, self.text_layout.phantom_text)
-    }
-}
-
-#[derive(Clone)]
-pub struct VisualLine {
-    pub line_index: usize,
-    pub origin_interval: Interval,
-    pub visual_interval: Interval,
-    pub origin_line: usize,
-    pub origin_folded_line: usize,
-    pub origin_folded_line_sub_index: usize,
-    pub text_layout: Arc<TextLayoutLine>,
-}
-
-impl Debug for VisualLine {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VisualLine")
-            .field("line_index", &self.line_index)
-            .field("origin_interval", &self.origin_interval)
-            .field("visual_interval", &self.visual_interval)
-            .field("origin_line", &self.origin_line)
-            .field("origin_folded_line", &self.origin_folded_line)
-            .field(
-                "origin_folded_line_sub_index",
-                &self.origin_folded_line_sub_index,
-            )
-            .field("text_layout", &self.text_layout.text.line().layout_opt())
-            .field("phantom_text", &self.text_layout.phantom_text)
-            .finish()
-    }
-}
-
-impl VisualLine {
-    pub fn rvline(&self) -> RVLine {
-        RVLine {
-            line: self.origin_folded_line,
-            line_index: self.origin_folded_line_sub_index,
-        }
-    }
-
-    pub fn vline(&self) -> VLine {
-        VLine(self.line_index)
-    }
-
-    pub fn vline_info(&self) -> VLineInfo {
-        let rvline = self.rvline();
-        let vline = self.vline();
-        let interval = self.origin_interval;
-        // todo?
-        let origin_line = self.origin_folded_line;
-        VLineInfo {
-            interval,
-            rvline,
-            origin_line,
-            vline,
-        }
-    }
-
-    // 行号
-    pub fn line_number(
-        &self,
-        show_relative: bool,
-        current_number: Option<usize>,
-    ) -> Option<usize> {
-        if self.origin_folded_line_sub_index == 0 {
-            let line_number = self.origin_line + 1;
-            Some(if show_relative {
-                if let Some(current_number) = current_number {
-                    if line_number == current_number {
-                        line_number
-                    } else {
-                        line_number.abs_diff(current_number)
-                    }
-                } else {
-                    line_number
-                }
-            } else {
-                line_number
-            })
-        } else {
-            None
-        }
-    }
-}
-
-impl From<&VisualLine> for RVLine {
-    fn from(value: &VisualLine) -> Self {
-        value.rvline()
-    }
-}
-impl From<&VisualLine> for VLine {
-    fn from(value: &VisualLine) -> Self {
-        value.vline()
-    }
-}
 #[derive(Clone)]
 pub struct LinesOfOriginOffset {
     pub origin_offset: usize,
@@ -349,16 +165,17 @@ pub struct DocLines {
     // lsp
     pub semantic_styles: Option<(Option<String>, Spans<String>)>,
     pub parser: BracketParser,
-    pub line_styles: LineStyles,
+    pub line_styles: HashMap<usize, Vec<NewLineStyle>>,
     pub editor_style: EditorStyle,
     viewport: Rect,
     pub config: ReadSignal<EditorConfig>,
     pub buffer: Buffer,
     pub kind: RwSignal<EditorViewKind>,
-    pub signals: Signals,
+    pub(crate) signals: Signals,
     style_from_lsp: bool,
     folding_items: Vec<FoldingDisplayItem>,
     pub line_height: usize,
+    pub screen_lines: ScreenLines,
 }
 
 impl DocLines {
@@ -374,10 +191,11 @@ impl DocLines {
         buffer: Buffer,
         kind: RwSignal<EditorViewKind>,
     ) -> Self {
+        let screen_lines = ScreenLines::new(cx, viewport, 0.0);
         let signals =
-            Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone());
+            Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone(), screen_lines.clone());
         let mut lines = Self {
-            signals,
+            signals, screen_lines,
             // font_size_cache_id: id,
             layout_event: Listener::new_empty(cx), // font_size_cache_id: id,
             viewport,
@@ -702,7 +520,7 @@ impl DocLines {
         _mode: &CursorMode,
         point: Point,
     ) -> (usize, bool) {
-        let info = self.signals.screen_lines.visual_line_of_y(point.y);
+        let info = self.screen_lines.visual_line_of_y(point.y);
         // info.visual_line.origin_line
         let text_layout = &info.visual_line.text_layout;
         let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
@@ -1134,7 +952,7 @@ impl DocLines {
         }
 
         // todo filter by folded?
-        if let Some(preedit) = preedit_phantom(
+        if let Some(preedit) = util::preedit_phantom(
             &self.preedit,
             &self.buffer,
             Some(config.editor_foreground),
@@ -1174,7 +992,7 @@ impl DocLines {
         let mut font_system = FONT_SYSTEM.lock();
         {
             let line_content_original = self.buffer.line_content(line);
-            push_strip_suffix(&line_content_original, &mut line_content);
+            util::push_strip_suffix(&line_content_original, &mut line_content);
         }
         let mut diagnostic_styles = Vec::new();
         let mut max_severity: Option<DiagnosticSeverity> = None;
@@ -1204,7 +1022,7 @@ impl DocLines {
 
         while let Some(collapsed_line) = collapsed_line_col.take() {
             {
-                push_strip_suffix(
+                util::push_strip_suffix(
                     self.buffer.line_content(collapsed_line).as_ref(),
                     &mut line_content,
                 );
@@ -1297,7 +1115,7 @@ impl DocLines {
             phantom_text,
         };
         // 下划线？背景色？
-        apply_layout_styles(&mut layout_line);
+        util::apply_layout_styles(&mut layout_line);
         self.apply_diagnostic_styles(
             &mut layout_line,
             config,
@@ -1341,7 +1159,7 @@ impl DocLines {
     fn update_with_trigger_buffer(&mut self, trigger_buffer: bool) {
         self.update_lines();
         let screen_lines = self._compute_screen_lines();
-        self.signals.screen_lines = screen_lines.clone();
+        self.screen_lines = screen_lines.clone();
 
         let folding_items = self.folding_ranges.to_display_items(&screen_lines);
         self.folding_items = folding_items.clone();
@@ -1512,7 +1330,7 @@ impl DocLines {
         let min_val = (y0 / line_height as f64).floor() as usize;
         let max_val = (y1 / line_height as f64).floor() as usize;
         let vline_infos = self.visual_lines(min_val, max_val);
-        compute_screen_lines(
+        util::compute_screen_lines(
             view_kind,
             self.viewport,
             vline_infos,
@@ -1526,7 +1344,7 @@ impl DocLines {
         self.viewport
     }
     pub fn screen_lines(&self) -> ScreenLines {
-        self.signals.screen_lines.clone()
+        self.screen_lines.clone()
     }
 
     pub fn log(&self) {
@@ -1541,7 +1359,7 @@ impl DocLines {
         for visual_line in &self.visual_lines {
             warn!("{:?}", visual_line);
         }
-        for visual_line in &self.signals.screen_lines.visual_lines {
+        for visual_line in &self.screen_lines.visual_lines {
             warn!("{:?}", visual_line);
         }
         warn!("folding_items");
@@ -1574,7 +1392,7 @@ impl DocLines {
                 continue;
             };
             let styles =
-                extra_styles_for_range(layout, start, end, None, None, Some(color));
+                util::extra_styles_for_range(layout, start, end, None, None, Some(color));
             layout_line.extra_style.extend(styles);
         }
 
@@ -1675,8 +1493,8 @@ impl ComputeLines {
             true,
         )
             .point;
-        let line_height = self.signals.screen_lines.line_height;
-        let screen_line = self.signals.screen_lines.visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index).cloned();
+        let line_height = self.screen_lines.line_height;
+        let screen_line = self.screen_lines.visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index).cloned();
 
         (vl, offset_of_visual, offset_folded, last_char, point, screen_line, line_height)
     }
@@ -1797,7 +1615,7 @@ impl UpdateLines {
             &mut self.buffer,
             s,
             &|buffer, c, offset| {
-                syntax_prev_unmatched(buffer, syntax, c, offset)
+                util::syntax_prev_unmatched(buffer, syntax, c, offset)
             },
             config.auto_closing_matching_pairs,
             config.auto_surround,
@@ -2002,391 +1820,6 @@ impl UpdateLines {
     }
 }
 
-pub fn compute_screen_lines(
-    view_kind: EditorViewKind,
-    base: Rect,
-    vline_infos: Vec<VisualLine>,
-    min_visual: usize,
-    line_height: usize,
-    y0: f64,
-) -> ScreenLines {
-    match view_kind {
-        EditorViewKind::Normal => {
-            let mut rvlines = Vec::new();
-            let mut visual_lines = Vec::new();
-            let mut info = HashMap::new();
-
-            // let vline_infos = self.visual_lines(min_val, max_val);
-
-            for visual_line in vline_infos {
-                let rvline = visual_line.rvline();
-                rvlines.push(rvline);
-                let y_idx = min_visual + rvlines.len();
-                let vline_y = y_idx * line_height;
-                let line_y = vline_y - rvline.line_index * line_height;
-
-                let vline_info = visual_line.vline_info();
-                let visual_line_info = VisualLineInfo {
-                    y: line_y as f64 - y0,
-                    vline_y: vline_y as f64 - y0,
-                    visual_line,
-                };
-                visual_lines.push(visual_line_info.clone());
-
-                // Add the information to make it cheap to get in the future.
-                // This y positions are shifted by the baseline y0
-                info.insert(
-                    rvline,
-                    LineInfo {
-                        y: line_y as f64 - y0,
-                        vline_y: vline_y as f64 - y0,
-                        vline_info,
-                    },
-                );
-            }
-            ScreenLines {
-                lines: rvlines,
-                visual_lines,
-                info: Rc::new(info),
-                diff_sections: None,
-                base,
-                line_height: line_height as f64
-                ,
-            }
-        }
-        EditorViewKind::Diff(_diff_info) => {
-            // TODO: let lines in diff view be wrapped, possibly screen_lines should be impl'd
-            // on DiffEditorData
-            todo!()
-            // let mut y_idx = 0;
-            // let mut rvlines = Vec::new();
-            // let mut info = HashMap::new();
-            // let mut diff_sections = Vec::new();
-            // let mut last_change: Option<&DiffLines> = None;
-            // let mut changes = diff_info.changes.iter().peekable();
-            // let is_right = diff_info.is_right;
-            //
-            // let line_y = |info: VLineInfo<()>, vline_y: usize| -> usize {
-            //     vline_y.saturating_sub(info.rvline.line_index * line_height)
-            // };
-            //
-            // while let Some(change) = changes.next() {
-            //     match (is_right, change) {
-            //         (true, DiffLines::Left(range)) => {
-            //             if let Some(DiffLines::Right(_)) = changes.peek() {
-            //             } else {
-            //                 let len = range.len();
-            //                 diff_sections.push(DiffSection {
-            //                     y_idx,
-            //                     height: len,
-            //                     kind: DiffSectionKind::NoCode,
-            //                 });
-            //                 y_idx += len;
-            //             }
-            //         }
-            //         (false, DiffLines::Right(range)) => {
-            //             let len = if let Some(DiffLines::Left(r)) = last_change {
-            //                 range.len() - r.len().min(range.len())
-            //             } else {
-            //                 range.len()
-            //             };
-            //             if len > 0 {
-            //                 diff_sections.push(DiffSection {
-            //                     y_idx,
-            //                     height: len,
-            //                     kind: DiffSectionKind::NoCode,
-            //                 });
-            //                 y_idx += len;
-            //             }
-            //         }
-            //         (true, DiffLines::Right(range))
-            //         | (false, DiffLines::Left(range)) => {
-            //             // TODO: count vline count in the range instead
-            //             let height = range.len();
-            //
-            //             diff_sections.push(DiffSection {
-            //                 y_idx,
-            //                 height,
-            //                 kind: if is_right {
-            //                     DiffSectionKind::Added
-            //                 } else {
-            //                     DiffSectionKind::Removed
-            //                 },
-            //             });
-            //
-            //             let initial_y_idx = y_idx;
-            //             // Mopve forward by the count given.
-            //             y_idx += height;
-            //
-            //             if y_idx < min_vline.get() {
-            //                 if is_right {
-            //                     if let Some(DiffLines::Left(r)) = last_change {
-            //                         // TODO: count vline count in the other editor since this is skipping an amount dependent on those vlines
-            //                         let len = r.len() - r.len().min(range.len());
-            //                         if len > 0 {
-            //                             diff_sections.push(DiffSection {
-            //                                 y_idx,
-            //                                 height: len,
-            //                                 kind: DiffSectionKind::NoCode,
-            //                             });
-            //                             y_idx += len;
-            //                         }
-            //                     };
-            //                 }
-            //                 last_change = Some(change);
-            //                 continue;
-            //             }
-            //
-            //             let start_rvline =
-            //                 lines.rvline_of_line(text_prov, range.start);
-            //
-            //             // TODO: this wouldn't need to produce vlines if screen lines didn't
-            //             // require them.
-            //             let iter = lines
-            //                 .iter_rvlines_init(
-            //                     text_prov,
-            //                     cache_rev,
-            //                     config_id,
-            //                     start_rvline,
-            //                     false,
-            //                 )
-            //                 .take_while(|vline_info| {
-            //                     vline_info.rvline.line < range.end
-            //                 })
-            //                 .enumerate();
-            //             for (i, rvline_info) in iter {
-            //                 let rvline = rvline_info.rvline;
-            //                 if initial_y_idx + i < min_vline.0 {
-            //                     continue;
-            //                 }
-            //
-            //                 rvlines.push(rvline);
-            //                 let vline_y = (initial_y_idx + i) * line_height;
-            //                 info.insert(
-            //                     rvline,
-            //                     LineInfo {
-            //                         y: line_y(rvline_info, vline_y) as f64 - y0,
-            //                         vline_y: vline_y as f64 - y0,
-            //                         vline_info: rvline_info,
-            //                     },
-            //                 );
-            //
-            //                 if initial_y_idx + i > max_vline.0 {
-            //                     break;
-            //                 }
-            //             }
-            //
-            //             if is_right {
-            //                 if let Some(DiffLines::Left(r)) = last_change {
-            //                     // TODO: count vline count in the other editor since this is skipping an amount dependent on those vlines
-            //                     let len = r.len() - r.len().min(range.len());
-            //                     if len > 0 {
-            //                         diff_sections.push(DiffSection {
-            //                             y_idx,
-            //                             height: len,
-            //                             kind: DiffSectionKind::NoCode,
-            //                         });
-            //                         y_idx += len;
-            //                     }
-            //                 };
-            //             }
-            //         }
-            //         (_, DiffLines::Both(bothinfo)) => {
-            //             let start = if is_right {
-            //                 bothinfo.right.start
-            //             } else {
-            //                 bothinfo.left.start
-            //             };
-            //             let len = bothinfo.right.len();
-            //             let diff_height = len
-            //                 - bothinfo
-            //                     .skip
-            //                     .as_ref()
-            //                     .map(|skip| skip.len().saturating_sub(1))
-            //                     .unwrap_or(0);
-            //             if y_idx + diff_height < min_vline.get() {
-            //                 y_idx += diff_height;
-            //                 last_change = Some(change);
-            //                 continue;
-            //             }
-            //
-            //             let start_rvline = lines.rvline_of_line(text_prov, start);
-            //
-            //             let mut iter = lines
-            //                 .iter_rvlines_init(
-            //                     text_prov,
-            //                     cache_rev,
-            //                     config_id,
-            //                     start_rvline,
-            //                     false,
-            //                 )
-            //                 .take_while(|info| info.rvline.line < start + len);
-            //             while let Some(rvline_info) = iter.next() {
-            //                 let line = rvline_info.rvline.line;
-            //
-            //                 // Skip over the lines
-            //                 if let Some(skip) = bothinfo.skip.as_ref() {
-            //                     if Some(skip.start) == line.checked_sub(start) {
-            //                         y_idx += 1;
-            //                         // Skip by `skip` count
-            //                         for _ in 0..skip.len().saturating_sub(1) {
-            //                             iter.next();
-            //                         }
-            //                         continue;
-            //                     }
-            //                 }
-            //
-            //                 // Add the vline if it is within view
-            //                 if y_idx >= min_vline.get() {
-            //                     rvlines.push(rvline_info.rvline);
-            //                     let vline_y = y_idx * line_height;
-            //                     info.insert(
-            //                         rvline_info.rvline,
-            //                         LineInfo {
-            //                             y: line_y(rvline_info, vline_y) as f64 - y0,
-            //                             vline_y: vline_y as f64 - y0,
-            //                             vline_info: rvline_info,
-            //                         },
-            //                     );
-            //                 }
-            //
-            //                 y_idx += 1;
-            //
-            //                 if y_idx - 1 > max_vline.get() {
-            //                     break;
-            //                 }
-            //             }
-            //         }
-            //     }
-            //     last_change = Some(change);
-            // }
-            // ScreenLines {
-            //     lines: Rc::new(rvlines),
-            //     info: Rc::new(info),
-            //     diff_sections: Some(Rc::new(diff_sections)),
-            //     base,
-            // }
-        }
-    }
-}
-
-fn preedit_phantom(
-    preedit: &PreeditData,
-    buffer: &Buffer,
-    under_line: Option<Color>,
-    line: usize,
-) -> Option<PhantomText> {
-    let preedit = preedit.preedit.get_untracked()?;
-
-    let (ime_line, col) = buffer.offset_to_line_col(preedit.offset);
-
-    if line != ime_line {
-        return None;
-    }
-
-    Some(PhantomText {
-        kind: PhantomTextKind::Ime,
-        line,
-        text: preedit.text,
-        affinity: None,
-        final_col: col,
-        merge_col: col,
-        font_size: None,
-        fg: None,
-        bg: None,
-        under_line,
-        col,
-    })
-}
-
-fn push_strip_suffix(line_content_original: &str, rs: &mut String) {
-    if let Some(s) = line_content_original.strip_suffix("\r\n") {
-        rs.push_str(s);
-        // rs.push_str("  ");
-    } else if let Some(s) = line_content_original.strip_suffix('\n') {
-        rs.push_str(s);
-        // rs.push(' ');
-    } else {
-        rs.push_str(line_content_original);
-    }
-}
-
-fn apply_layout_styles(layout_line: &mut TextLayoutLine) {
-    layout_line.extra_style.clear();
-    let layout = &layout_line.text;
-    layout_line
-        .phantom_text
-        .iter_phantom_text()
-        .for_each(|phantom| {
-            if (phantom.bg.is_none() && phantom.under_line.is_none())
-                || phantom.text.is_empty()
-            {
-                return;
-            }
-            let iter = extra_styles_for_range(
-                layout,
-                phantom.final_col,
-                phantom.final_col + phantom.text.len(),
-                phantom.bg,
-                phantom.under_line,
-                None,
-            );
-            for style in iter {
-                layout_line.extra_style.push(style)
-            }
-        });
-}
-
-fn extra_styles_for_range(
-    text_layout: &TextLayout,
-    start: usize,
-    end: usize,
-    bg_color: Option<Color>,
-    under_line: Option<Color>,
-    wave_line: Option<Color>,
-) -> impl Iterator<Item=LineExtraStyle> + '_ {
-    let start_hit = text_layout.hit_position(start);
-    let end_hit = text_layout.hit_position(end);
-
-    text_layout
-        .layout_runs()
-        .enumerate()
-        .filter_map(move |(current_line, run)| {
-            if current_line < start_hit.line || current_line > end_hit.line {
-                return None;
-            }
-
-            let x = if current_line == start_hit.line {
-                start_hit.point.x
-            } else {
-                run.glyphs.first().map(|g| g.x).unwrap_or(0.0) as f64
-            };
-            let end_x = if current_line == end_hit.line {
-                end_hit.point.x
-            } else {
-                run.glyphs.last().map(|g| g.x + g.w).unwrap_or(0.0) as f64
-            };
-            let width = end_x - x;
-
-            if width == 0.0 {
-                return None;
-            }
-
-            let height = (run.max_ascent + run.max_descent) as f64;
-            let y = run.line_y as f64 - run.max_ascent as f64;
-
-            Some(LineExtraStyle {
-                x,
-                y,
-                width: Some(width),
-                height,
-                bg_color,
-                under_line,
-                wave_line,
-            })
-        })
-}
-
 type LinesEditorStyle = DocLines;
 impl LinesEditorStyle {
     pub fn modal(&self) -> bool {
@@ -2442,36 +1875,6 @@ impl LinesEditorStyle {
     }
 }
 
-#[derive(Clone)]
-pub struct Signals {
-    show_indent_guide: RwSignal<(bool, Color)>,
-    viewport: RwSignal<Rect>,
-    folding_items_signal: RwSignal<Vec<FoldingDisplayItem>>,
-    screen_lines_signal: RwSignal<ScreenLines>,
-    buffer_rev: RwSignal<u64>,
-    buffer: RwSignal<Buffer>,
-    pub screen_lines: ScreenLines,
-}
-
-impl Signals {
-    pub fn new(cx: Scope, style: &EditorStyle, viewport: Rect, rev: u64, buffer: Buffer) -> Self {
-        let show_indent_guide =
-            cx.create_rw_signal((style.show_indent_guide(), style.indent_guide()));
-        let screen_lines = ScreenLines::new(cx, viewport, 0.0);
-        let screen_lines_signal = cx.create_rw_signal(screen_lines.clone());
-        let viewport = cx.create_rw_signal(viewport);
-        let folding_items_signal = cx.create_rw_signal(Vec::new());
-        let buffer_rev= cx.create_rw_signal(rev);
-        let buffer= cx.create_rw_signal(buffer);
-        Self {
-            show_indent_guide,
-            viewport,
-            folding_items_signal,
-            screen_lines,
-            screen_lines_signal, buffer_rev, buffer
-        }
-    }
-}
 #[allow(dead_code)]
 /// 以界面为单位，进行触发。
 impl DocLines {
@@ -2524,14 +1927,6 @@ impl DocLines {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct NewLineStyle {
-    pub origin_line: usize,
-    pub origin_line_offset_start: usize,
-    pub origin_line_offset_end: usize,
-    pub fg_color: Option<String>,
-}
-
 
 pub trait RopeTextPosition: RopeText {
     /// Converts a UTF8 offset to a UTF16 LSP position
@@ -2569,20 +1964,6 @@ pub trait RopeTextPosition: RopeText {
 }
 impl<T: RopeText> RopeTextPosition for T {}
 
-
-/// Get the previous unmatched character `c` from the `offset` using `syntax` if applicable
-fn syntax_prev_unmatched(
-    buffer: &Buffer,
-    syntax: &Syntax,
-    c: char,
-    offset: usize,
-) -> Option<usize> {
-    if syntax.layers.is_some() {
-        syntax.find_tag(offset, true, &CharBuffer::new(c))
-    } else {
-        WordCursor::new(buffer.text(), offset).previous_unmatched(c)
-    }
-}
 #[cfg(test)]
 mod test {
     #![allow(unused_imports)]

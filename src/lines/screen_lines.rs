@@ -9,7 +9,7 @@ use floem::views::editor::view::{DiffSection, LineInfo};
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
 use log::info;
 
-use crate::lines::VisualLine;
+use crate::lines::line::VisualLine;
 
 // TODO(minor): We have diff sections in screen lines because Lapce uses them, but
 // we don't really have support for diffs in floem-editor! Is there a better design for this?
@@ -344,9 +344,7 @@ impl ScreenLines {
         for visual_line in &self.visual_lines {
             if visual_line.visual_line.origin_folded_line == folded_line && visual_line.visual_line.origin_folded_line_sub_index == sub_line {
                 return Some(visual_line)
-            } else if visual_line.visual_line.origin_folded_line == folded_line && visual_line.visual_line.origin_folded_line_sub_index > sub_line {
-                break;
-            } else if visual_line.visual_line.origin_folded_line > folded_line {
+            } else if (visual_line.visual_line.origin_folded_line == folded_line && visual_line.visual_line.origin_folded_line_sub_index > sub_line ) || visual_line.visual_line.origin_folded_line > folded_line{
                 break;
             }
         }
