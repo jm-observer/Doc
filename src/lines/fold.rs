@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use floem::peniko::Color;
-use floem::views::editor::phantom_text::{PhantomText, PhantomTextKind};
+use super::phantom_text::{PhantomText, PhantomTextKind};
 use floem_editor_core::buffer::Buffer;
 use floem_editor_core::buffer::rope_text::RopeText;
 use im::HashMap;

@@ -14,9 +14,9 @@ use floem::text::{
     Attrs, AttrsList, FamilyOwned, FONT_SYSTEM, LineHeightValue, TextLayout, Wrap,
 };
 use floem::views::editor::EditorStyle;
-use floem::views::editor::layout::{LineExtraStyle, TextLayoutLine};
+use layout::{LineExtraStyle, TextLayoutLine};
 use floem::views::editor::listener::Listener;
-use floem::views::editor::phantom_text::{
+use phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
@@ -60,6 +60,8 @@ pub mod line;
 mod util;
 mod signal;
 mod style;
+pub mod phantom_text;
+pub mod layout;
 
 // /// Minimum width that we'll allow the view to be wrapped at.
 // const MIN_WRAPPED_WIDTH: f32 = 100.0;

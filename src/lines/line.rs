@@ -1,6 +1,6 @@
 use lapce_xi_rope::Interval;
 use std::sync::Arc;
-use floem::views::editor::layout::TextLayoutLine;
+use super::layout::TextLayoutLine;
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
 use std::fmt::{Debug, Formatter};
 use floem_editor_core::line_ending::LineEnding;
