@@ -23,9 +23,7 @@ use floem::views::editor::phantom_text::{
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
 use floem::views::editor::view::LineInfo;
-use floem::views::editor::visual_line::{
-    LayoutEvent, RVLine, VLine, VLineInfo,
-};
+use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent, RVLine, VLine, VLineInfo};
 use floem_editor_core::buffer::{Buffer, InvalLines};
 use floem_editor_core::buffer::rope_text::RopeText;
 use floem_editor_core::char_buffer::CharBuffer;
@@ -44,7 +42,7 @@ use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Position};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use log::{warn};
+use log::{info, warn};
 
 use crate::{DiagnosticData, EditorViewKind};
 use crate::lines::action::UpdateFolding;
@@ -360,6 +358,7 @@ pub struct DocLines {
     pub signals: Signals,
     style_from_lsp: bool,
     folding_items: Vec<FoldingDisplayItem>,
+    pub line_height: usize,
 }
 
 impl DocLines {
@@ -405,6 +404,7 @@ impl DocLines {
             kind,
             style_from_lsp: false,
             folding_items: Default::default(),
+            line_height: 0,
         };
         lines.update_lines();
         lines
@@ -427,7 +427,8 @@ impl DocLines {
         self.origin_lines.clear();
         self.origin_folded_lines.clear();
         self.visual_lines.clear();
-        self.max_width = 0.0
+        self.max_width = 0.0;
+        self.line_height  = 0;
     }
 
     fn update_parser(&mut self) {
@@ -446,9 +447,9 @@ impl DocLines {
         let mut origin_folded_line_index = 0;
         let mut visual_line_index = 0;
         let config = self.config.get_untracked();
+        self.line_height = config.line_height;
 
         let font_size = config.font_size;
-        let line_height = config.line_height;
         let family = Cow::Owned(
             FamilyOwned::parse_list(&config.font_family).collect(),
         );
@@ -456,7 +457,7 @@ impl DocLines {
             .color(self.editor_style.ed_text_color())
             .family(&family)
             .font_size(font_size as f32)
-            .line_height(LineHeightValue::Px(line_height as f32));
+            .line_height(LineHeightValue::Px(self.line_height as f32));
         let viewport = self.viewport;
         while current_line <= last_line {
             let start_offset = self.buffer.offset_of_line(current_line);
@@ -696,7 +697,7 @@ impl DocLines {
         (visual_line.vline_info(), final_offset, last_char)
     }
 
-    pub fn buffer_offset_of_point(
+    pub fn buffer_offset_of_click(
         &self,
         _mode: &CursorMode,
         point: Point,
@@ -706,11 +707,20 @@ impl DocLines {
         let text_layout = &info.visual_line.text_layout;
         let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
         let hit_point = text_layout.text.hit_point(Point::new(point.x, y as f64));
+        // let (_line, _col, offset_of_buffer) =  if !hit_point.is_inside {
+        //     text_layout
+        //         .phantom_text
+        //         .cursor_position_of_final_col(hit_point.index.max(1) - 1)
+        // } else {
+        //     text_layout
+        //         .phantom_text
+        //         .cursor_position_of_final_col(hit_point.index)
+        // };
         let (_line, _col, offset_of_buffer) = text_layout
             .phantom_text
             .cursor_position_of_final_col(hit_point.index);
 
-        println!("point={point:?} _line={_line} _col={_col} offset_of_buffer={offset_of_buffer} {info:?}");
+        // info!("point={point:?} _line={_line} _col={_col} offset_of_buffer={offset_of_buffer} {info:?}");
 
         (offset_of_buffer, hit_point.is_inside)
     }
@@ -813,7 +823,7 @@ impl DocLines {
             if index < next_visual_line.origin_folded_line_sub_index {
                 line_offset += layout.glyphs.len();
             } else if index >= next_visual_line.origin_folded_line_sub_index {
-                last_char = layout.glyphs.len() - 1;
+                last_char = layout.glyphs.len().max(1) - 1;
                 break;
             }
         }
@@ -1151,7 +1161,6 @@ impl DocLines {
         end_offset: usize,
         config: &EditorConfig,
         font_size: usize,
-        // line_height: usize,
         attrs: Attrs,
         viewport: Rect,
     ) -> Arc<TextLayoutLine> {
@@ -1494,11 +1503,10 @@ impl DocLines {
     fn _compute_screen_lines(&mut self) -> ScreenLines {
         // TODO: this should probably be a get since we need to depend on line-height
         // let doc_lines = doc.doc_lines.get_untracked();
-        let config = self.config.get_untracked();
         let view_kind = self.kind.get_untracked();
         let base = self.viewport;
 
-        let line_height = config.line_height;
+        let line_height = self.line_height;
         let (y0, y1) = (base.y0, base.y1);
         // Get the start and end (visual) lines that are visible in the viewport
         let min_val = (y0 / line_height as f64).floor() as usize;
@@ -1647,6 +1655,33 @@ impl DocLines {
     }
 }
 
+
+type ComputeLines = DocLines;
+
+impl ComputeLines {
+
+    /// return (visual line of offset, offset of visual line, offset of folded line, is last char, position of cursor, screen line, line_height)
+    ///
+    /// last_char should be check in future
+    pub fn cursor_position_of_buffer_offset(
+        &self,
+        offset: usize,
+        affinity: CursorAffinity,
+    ) -> (VisualLine, usize, usize, bool, Point, Option<VisualLineInfo>, f64) {
+        let (vl, offset_of_visual, offset_folded, last_char) = self.visual_line_of_offset(offset, affinity);
+        let point = hit_position_aff(
+            &vl.text_layout.text,
+            offset_folded,
+            true,
+        )
+            .point;
+        let line_height = self.signals.screen_lines.line_height;
+        let screen_line = self.signals.screen_lines.visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index).cloned();
+
+        (vl, offset_of_visual, offset_folded, last_char, point, screen_line, line_height)
+    }
+}
+
 type UpdateLines = DocLines;
 
 impl UpdateLines {
@@ -1656,6 +1691,7 @@ impl UpdateLines {
         self.buffer.detect_indent(|| {
             IndentStyle::from_str(self.syntax.language.indent_unit())
         });
+        info!("line_ending {:?}", self.buffer.line_ending());
         self.on_update_buffer();
         self.update();
         true
@@ -2266,10 +2302,10 @@ fn preedit_phantom(
 fn push_strip_suffix(line_content_original: &str, rs: &mut String) {
     if let Some(s) = line_content_original.strip_suffix("\r\n") {
         rs.push_str(s);
-        rs.push_str("  ");
+        // rs.push_str("  ");
     } else if let Some(s) = line_content_original.strip_suffix('\n') {
         rs.push_str(s);
-        rs.push(' ');
+        // rs.push(' ');
     } else {
         rs.push_str(line_content_original);
     }
@@ -2549,16 +2585,19 @@ fn syntax_prev_unmatched(
 }
 #[cfg(test)]
 mod test {
+    #![allow(unused_imports)]
     use std::path::PathBuf;
     use floem::kurbo::{Point, Rect};
     use floem::reactive::{RwSignal, Scope};
     use floem::views::editor::EditorStyle;
+    use floem::views::editor::visual_line::hit_position_aff;
     use floem_editor_core::buffer::Buffer;
     use floem_editor_core::buffer::rope_text::RopeText;
-    use floem_editor_core::cursor::{CursorMode};
+    use floem_editor_core::cursor::{CursorAffinity, CursorMode};
     use itertools::Itertools;
     use lapce_xi_rope::Interval;
     use lapce_xi_rope::spans::{Spans, SpansBuilder};
+    use log::info;
     use lsp_types::{InlayHint, Position};
 
     use crate::{DiagnosticData, EditorViewKind};
@@ -2569,22 +2608,47 @@ mod test {
 
     #[test]
     fn test() {
+        custom_utils::logger::logger_stdout_debug();
         let (lines, _) = _init_lines(None);
         // let (vl, offset, last_char) = lines.visual_line_of_offset(70, CursorAffinity::Backward);
-        // println!("{vl:?}, offset={offset}, {last_char}");
+        // info!("{vl:?}, offset={offset}, {last_char}");
         // |fn main() {n
         // |012345678901
-        // println!("{:?} {:?}", lines.buffer.line_content(0), lines.buffer.line_ending());
+        // info!("{:?} {:?}", lines.buffer.line_content(0), lines.buffer.line_ending());
         // let (vl, offset_of_visual, offset_folded, last_char) = lines.visual_line_of_offset(11, CursorAffinity::Backward);
-        // println!("offset_of_visual={offset_of_visual},offset_folded={offset_folded}, {last_char}, {vl:?}");
+
 
         // let (offset_of_buffer, is_inside) = lines.buffer_offset_of_point(&CursorMode::Normal(0), Point::new(72.2, 58.1));
-        // println!("offset_of_buffer={offset_of_buffer},is_inside={is_inside}");
-
+        // info!("offset_of_buffer={offset_of_buffer},is_inside={is_inside}");
+        //below end of buffer
+        {
+            let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(138.1, 417.1));
+            assert_eq!(offset_of_buffer, 139);
+            assert_eq!(is_inside, false);
+        }
         //f
-        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_point(&CursorMode::Normal(0), Point::new(1.1, 33.1));
-        assert_eq!(offset_of_buffer, 0);
-        assert_eq!(is_inside, true);
+        {
+            let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(1.1, 33.1));
+            assert_eq!(offset_of_buffer, 0);
+            assert_eq!(is_inside, true);
+        }
+        //end of first line
+        {
+            let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(163.1, 33.1));
+            assert_eq!(offset_of_buffer, 11);
+            assert_eq!(is_inside, false);
+        }
+
+
+        let (vl, offset_of_visual, offset_folded, last_char) = lines.visual_line_of_offset(0, CursorAffinity::Backward);
+        info!("offset_of_visual={offset_of_visual},offset_folded={offset_folded}, {last_char}, {vl:?}");
+
+        info!("hit_position_aff {:?}", hit_position_aff(
+            &vl.text_layout.text,
+            offset_folded,
+            true,
+        )
+            .point);
     }
 
     #[test]
@@ -2646,20 +2710,24 @@ mod test {
     }
 
     fn _init_code() -> (String, Buffer) {
-        let code = r#"fn main() {
-    if true {
-        println!("startss");
-    } else {
-        println!("startss");
-    }
-    let a = A;
-}
-struct A;
-"#;
+        let code = "fn main() {\r\n    if true {\r\n        println!(\"startss\");\r\n    } else {\r\n        println!(\"startss\");\r\n    }\r\n    let a = A;\r\n}\r\nstruct A;\r\n";
+//         let code = r#"fn main() {
+//     if true {
+//         println!("startss");
+//     } else {
+//         println!("startss");
+//     }
+//     let a = A;
+// }
+// struct A;
+// "#;
         let buffer = Buffer::new(
             code
         );
-        println!("line_ending {:?}", buffer.line_ending());
+        info!("line_ending {:?} {}", buffer.line_ending(), code);
+        info!("line_end_col {} {}", buffer.line_end_col(9, true), buffer.line_end_col(9, false));
+        info!("line_end_offset {:?} {}", buffer.line_end_offset(9, true), buffer.line_end_offset(9, false));
+        info!("{} offset_of_line {} {:?}", buffer.len(), buffer.offset_of_line(9), buffer.line_content(9));
         (code.to_string(), buffer)
     }
 

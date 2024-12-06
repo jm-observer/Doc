@@ -28,10 +28,14 @@ directories       = { version = "4.0.1" }
 arc-swap    = "1.6.0"
 log = "0.4.22"
 
-
-[build-dependencies]
-anyhow            = { version = "1.0" }
+[dev-dependencies]
 custom-utils = "0.10.16"
+
+
+#[build-dependencies]
+#anyhow            = { version = "1.0" }
+#custom-utils = "0.10.16"
+#floem = { path="../floem" }
 
 [patch.crates-io]
 custom-utils = {path = "../custom-utils"}
