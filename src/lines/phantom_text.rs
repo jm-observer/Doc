@@ -286,7 +286,7 @@ impl PhantomTextLine {
                 }
                     .into(),
             );
-        } else if len == 0 {
+        } else if origin_text_len == 0 {
             texts.push(
                 EmptyText {
                     line,
@@ -316,6 +316,11 @@ impl PhantomTextLine {
     }
 }
 
+/// 1. 视觉行的内容都可以由text拼接
+///
+/// 2. 末尾的空行，由EmptyText表示
+///
+/// 3. 所有的原始字符都归属某个Text
 #[derive(Debug, Default, Clone)]
 pub struct PhantomTextMultiLine {
     pub line: usize,
@@ -333,6 +338,7 @@ pub struct PhantomTextMultiLine {
     // 可以去掉，仅做记录
     // pub lines: Vec<PhantomTextLine>,
 }
+
 
 impl PhantomTextMultiLine {
     pub fn new(line: PhantomTextLine) -> Self {
@@ -719,29 +725,29 @@ impl PhantomTextMultiLine {
         combine_with_text(&self.text, origin)
     }
 
-    fn log(&self) {
-        info!(
-            "PhantomTextMultiLine line={} origin_text_len={} final_text_len={} len_of_line={:?}",
-            self.line, self.origin_text_len, self.final_text_len, self.len_of_line
-        );
-        for text in &self.text {
-            match text {
-                Text::Phantom { text } => {
-                    info!("Phantom {:?} line={} col={} merge_col={} final_col={} text={} text.len()={}", text.kind, text.line, text.col, text.merge_col, text.final_col, text.text, text.text.len());
-                }
-                Text::OriginText { text } => {
-                    info!(
-                        "OriginText line={} col={:?} merge_col={:?} final_col={:?}",
-                        text.line, text.col, text.merge_col, text.final_col
-                    );
-                }
-                Text::EmptyLine{text} => {
-                    info!("{:?}", text);
-                }
-            }
-        }
-        info!("");
-    }
+    // fn log(&self) {
+    //     info!(
+    //         "PhantomTextMultiLine line={} origin_text_len={} final_text_len={} len_of_line={:?}",
+    //         self.line, self.origin_text_len, self.final_text_len, self.len_of_line
+    //     );
+    //     for text in &self.text {
+    //         match text {
+    //             Text::Phantom { text } => {
+    //                 info!("Phantom {:?} line={} col={} merge_col={} final_col={} text={} text.len()={}", text.kind, text.line, text.col, text.merge_col, text.final_col, text.text, text.text.len());
+    //             }
+    //             Text::OriginText { text } => {
+    //                 info!(
+    //                     "OriginText line={} col={:?} merge_col={:?} final_col={:?}",
+    //                     text.line, text.col, text.merge_col, text.final_col
+    //                 );
+    //             }
+    //             Text::EmptyLine{text} => {
+    //                 info!("{:?}", text);
+    //             }
+    //         }
+    //     }
+    //     info!("");
+    // }
 }
 
 fn usize_offset(val: usize, offset: i32) -> usize {
