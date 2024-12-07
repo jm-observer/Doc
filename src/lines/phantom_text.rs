@@ -453,10 +453,10 @@ impl PhantomTextMultiLine {
     }
 
     /// return (origin line, origin line offset)
-    pub(crate) fn origin_info_of_visual_char(&self, visual_char_offset: usize) -> (usize, usize) {
-        if !(visual_char_offset == 0 || (visual_char_offset < self.final_text_len)) {
-            self.log();
-            panic!("visual_char_offset={}", visual_char_offset);
+    pub(crate) fn origin_info_of_visual_char(&self, mut visual_char_offset: usize) -> (usize, usize) {
+        // 因为通过hit_point获取的index会大于等于final_text_len
+        if visual_char_offset >= self.final_text_len {
+            visual_char_offset = self.final_text_len.max(1) - 1;
         }
         match self.text_of_visual_char(visual_char_offset) {
             Text::Phantom { text } => {
@@ -594,7 +594,7 @@ impl PhantomTextMultiLine {
                     text.final_col.start + pre_col - text.col.start + adjust_offset
                 }
                 Text::EmptyLine{..} => {
-                    panic!()
+                    0
                 }
             }
         } else {

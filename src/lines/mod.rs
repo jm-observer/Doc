@@ -362,7 +362,7 @@ impl DocLines {
                     text_layout: text_layout.clone(),
                     visual_interval: Interval::new(
                         visual_offset_start,
-                        visual_offset_end,
+                        visual_offset_end + 1,
                     ),
                 });
 
@@ -528,14 +528,14 @@ impl DocLines {
         let text_layout = &info.visual_line.text_layout;
         let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
         let hit_point = text_layout.text.hit_point(Point::new(point.x, y as f64));
-        let index = if hit_point.is_inside {
-            hit_point.index
-        } else {
-            hit_point.index.max(1) - 1
-        };
+        // let index = if hit_point.index {
+        //     hit_point.index
+        // } else {
+        //     hit_point.index.max(1) - 1
+        // };
         let (origin_line, origin_col) = text_layout
             .phantom_text
-            .origin_info_of_visual_char(index);
+            .origin_info_of_visual_char(hit_point.index);
         let offset_of_buffer = self.buffer.offset_of_line_col(origin_line, origin_col);
         (offset_of_buffer, hit_point.is_inside)
     }

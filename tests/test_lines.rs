@@ -22,6 +22,15 @@ fn test() {
 
     // let (offset_of_buffer, is_inside) = lines_util.buffer_offset_of_point(&CursorMode::Normal(0), Point::new(72.2, 58.1));
     // info!("offset_of_buffer={offset_of_buffer},is_inside={is_inside}");
+
+    // //visual line index = 1
+    // {
+    //     let point = Point::new(116.1, 68.1);
+    //     let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), point);
+    //     assert_eq!(offset_of_buffer, 14);
+    //     assert_eq!(is_inside, true);
+    // }
+
     //below end of buffer
     {
         let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(138.1, 417.1));
@@ -43,15 +52,6 @@ fn test() {
     }
 
 
-    let (vl, offset_of_visual, offset_folded, last_char) = lines.visual_line_of_offset(0, CursorAffinity::Backward);
-    info!("offset_of_visual={offset_of_visual},offset_folded={offset_folded}, {last_char}, {vl:?}");
-
-    info!("hit_position_aff {:?}", hit_position_aff(
-            &vl.text_layout.text,
-            offset_folded,
-            true,
-        )
-            .point);
 }
 
 #[test]
