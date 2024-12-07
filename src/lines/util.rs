@@ -317,10 +317,10 @@ pub fn preedit_phantom(
 pub fn push_strip_suffix(line_content_original: &str, rs: &mut String) {
     if let Some(s) = line_content_original.strip_suffix("\r\n") {
         rs.push_str(s);
-        // rs.push_str("  ");
+        rs.push_str("  ");
     } else if let Some(s) = line_content_original.strip_suffix('\n') {
         rs.push_str(s);
-        // rs.push(' ');
+        rs.push(' ');
     } else {
         rs.push_str(line_content_original);
     }

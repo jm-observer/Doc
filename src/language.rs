@@ -1984,7 +1984,7 @@ mod tests {
 
     #[test]
     fn test_lanaguage_from_path() {
-        let l = LapceLanguage::from_path(&PathBuf::new().join("test.rs"));
+        let l = LapceLanguage::from_path(&PathBuf::new().join("tests.rs"));
         assert_eq!(l, LapceLanguage::Rust);
     }
 }
