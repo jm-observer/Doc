@@ -336,17 +336,18 @@ impl DocLines {
                     });
                     continue;
                 }
-                visual_offset_end = visual_offset_start + layout.glyphs.len();
+                visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
                 let offset_info = text_layout
                     .phantom_text
-                    .cursor_position_of_final_col(visual_offset_start);
+                    .origin_info_of_visual_char(visual_offset_start);
                 let origin_interval_start =
-                    self.buffer.offset_of_line_col(offset_info.0, offset_info.1);
+                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
                 let offset_info = text_layout
                     .phantom_text
-                    .cursor_position_of_final_col(visual_offset_end);
+                    .origin_info_of_visual_char(visual_offset_end);
+
                 let origin_interval_end =
-                    self.buffer.offset_of_line_col(offset_info.0, offset_info.1);
+                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
                 let origin_interval = Interval {
                     start: origin_interval_start,
                     end: origin_interval_end + 1,
@@ -527,21 +528,15 @@ impl DocLines {
         let text_layout = &info.visual_line.text_layout;
         let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
         let hit_point = text_layout.text.hit_point(Point::new(point.x, y as f64));
-        // let (_line, _col, offset_of_buffer) =  if !hit_point.is_inside {
-        //     text_layout
-        //         .phantom_text
-        //         .cursor_position_of_final_col(hit_point.index.max(1) - 1)
-        // } else {
-        //     text_layout
-        //         .phantom_text
-        //         .cursor_position_of_final_col(hit_point.index)
-        // };
-        let (_line, _col, offset_of_buffer) = text_layout
+        let index = if hit_point.is_inside {
+            hit_point.index
+        } else {
+            hit_point.index.max(1) - 1
+        };
+        let (origin_line, origin_col) = text_layout
             .phantom_text
-            .cursor_position_of_final_col(hit_point.index);
-
-        // info!("point={point:?} _line={_line} _col={_col} offset_of_buffer={offset_of_buffer} {info:?}");
-
+            .origin_info_of_visual_char(index);
+        let offset_of_buffer = self.buffer.offset_of_line_col(origin_line, origin_col);
         (offset_of_buffer, hit_point.is_inside)
     }
 

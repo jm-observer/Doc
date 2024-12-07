@@ -113,11 +113,32 @@ pub struct OriginText {
     /// 在最终行文本的位置
     pub final_col: Interval,
 }
+
+impl OriginText {
+
+    /// 视觉偏移的原始偏移
+    pub fn origin_col_of_final_col(&self, final_col: usize) -> usize {
+        debug_assert!(self.final_col.contains(final_col));
+        final_col - self.final_col.start + self.col.start
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct EmptyText {
+    /// 在原始文本的行
+    pub line: usize,
+    /// Column on the line that the phantom text should be displayed at.Provided by lsp
+    ///
+    /// 在原始行文本的位置
+    pub offset_of_buffer: usize,
+}
 #[derive(Debug, Clone)]
 pub enum Text {
     Phantom { text: PhantomText },
     OriginText { text: OriginText },
-    Empty,
+    EmptyLine {
+        text: EmptyText
+    }
 }
 
 impl Text {
@@ -145,6 +166,12 @@ impl From<PhantomText> for Text {
 impl From<OriginText> for Text {
     fn from(text: OriginText) -> Self {
         Self::OriginText { text }
+    }
+}
+
+impl From<EmptyText> for Text {
+    fn from(text: EmptyText) -> Self {
+        Self::EmptyLine { text }
     }
 }
 
@@ -256,6 +283,14 @@ impl PhantomTextLine {
                     col: Interval::new(origin_last_end, origin_last_end + len),
                     merge_col: Interval::new(merge_last_end, merge_last_end + len),
                     final_col: Interval::new(final_last_end, final_last_end + len),
+                }
+                    .into(),
+            );
+        } else if len == 0 {
+            texts.push(
+                EmptyText {
+                    line,
+                    offset_of_buffer: offset_of_line,
                 }
                     .into(),
             );
@@ -373,7 +408,7 @@ impl PhantomTextMultiLine {
                     attrs_list.add_span(text.final_col..(text.final_col + text.text.len()), attrs);
                 }
             }
-            Text::OriginText { .. } | Text::Empty => {}
+            Text::OriginText { .. } | Text::EmptyLine {..} => {}
         });
     }
 
@@ -411,11 +446,54 @@ impl PhantomTextMultiLine {
                         return true;
                     }
                 }
-                Text::Empty => {}
+                Text::EmptyLine{..} => {}
             }
             false
         })
     }
+
+    /// return (origin line, origin line offset)
+    pub(crate) fn origin_info_of_visual_char(&self, visual_char_offset: usize) -> (usize, usize) {
+        if !(visual_char_offset == 0 || (visual_char_offset < self.final_text_len)) {
+            self.log();
+            panic!("visual_char_offset={}", visual_char_offset);
+        }
+        match self.text_of_visual_char(visual_char_offset) {
+            Text::Phantom { text } => {
+                (text.line, text.next_origin_col())
+            }
+            Text::OriginText { text } => {
+                (text.line, text.origin_col_of_final_col(visual_char_offset))
+            }
+            Text::EmptyLine { text } => {
+                (text.line, 0)
+            }
+        }
+    }
+
+        /// 视觉字符的Text
+    fn text_of_visual_char(&self, visual_char_offset: usize) -> &Text {
+        debug_assert!(visual_char_offset == 0 || (visual_char_offset < self.final_text_len));
+        self.text.iter().find(|x| {
+            match x {
+                Text::Phantom { text } => {
+                    if text.final_col <= visual_char_offset && visual_char_offset < text.next_final_col() {
+                        return true;
+                    }
+                }
+                Text::OriginText { text } => {
+                    if text.final_col.contains(visual_char_offset) {
+                        return true;
+                    }
+                }
+                Text::EmptyLine{..} => {
+                    return true
+                }
+            }
+            false
+        }).unwrap()
+    }
+
 
     fn text_of_origin_line_col(&self, origin_line: usize, origin_col: usize) -> Option<&Text> {
         self.text.iter().find(|x| {
@@ -437,7 +515,7 @@ impl PhantomTextMultiLine {
                         return true;
                     }
                 }
-                Text::Empty => return true,
+                Text::EmptyLine{..} => return true,
             }
             false
         })
@@ -456,7 +534,7 @@ impl PhantomTextMultiLine {
                         return true;
                     }
                 }
-                Text::Empty => {
+                Text::EmptyLine{..} => {
                     return true;
                 }
             }
@@ -486,7 +564,7 @@ impl PhantomTextMultiLine {
             Text::OriginText { text } => {
                 Some(text.final_col.start + merge_col - text.merge_col.start)
             }
-            Text::Empty => None,
+            Text::EmptyLine{..} => None,
         }
     }
 
@@ -515,7 +593,7 @@ impl PhantomTextMultiLine {
                 Text::OriginText { text } => {
                     text.final_col.start + pre_col - text.col.start + adjust_offset
                 }
-                Text::Empty => {
+                Text::EmptyLine{..} => {
                     panic!()
                 }
             }
@@ -544,7 +622,7 @@ impl PhantomTextMultiLine {
                         self.offset_of_line + text.merge_col.start + col - text.final_col.start,
                     );
                 }
-                Text::Empty => {
+                Text::EmptyLine{..} => {
                     panic!()
                 }
             }
@@ -640,6 +718,30 @@ impl PhantomTextMultiLine {
     pub fn final_line_content(&self, origin: &str) -> String {
         combine_with_text(&self.text, origin)
     }
+
+    fn log(&self) {
+        info!(
+            "PhantomTextMultiLine line={} origin_text_len={} final_text_len={} len_of_line={:?}",
+            self.line, self.origin_text_len, self.final_text_len, self.len_of_line
+        );
+        for text in &self.text {
+            match text {
+                Text::Phantom { text } => {
+                    info!("Phantom {:?} line={} col={} merge_col={} final_col={} text={} text.len()={}", text.kind, text.line, text.col, text.merge_col, text.final_col, text.text, text.text.len());
+                }
+                Text::OriginText { text } => {
+                    info!(
+                        "OriginText line={} col={:?} merge_col={:?} final_col={:?}",
+                        text.line, text.col, text.merge_col, text.final_col
+                    );
+                }
+                Text::EmptyLine{text} => {
+                    info!("{:?}", text);
+                }
+            }
+        }
+        info!("");
+    }
 }
 
 fn usize_offset(val: usize, offset: i32) -> usize {
@@ -697,7 +799,7 @@ fn combine_with_text(lines: &SmallVec<[Text; 6]>, origin: &str) -> String {
                     text.merge_col.end.min(origin.len()),
                 ));
             }
-            Text::Empty => {
+            Text::EmptyLine{..} => {
                 break;
             }
         }
@@ -1296,29 +1398,7 @@ mod test {
         unsafe { text.get_unchecked(begin..end) }
     }
 
-    fn print_lines(lines: &PhantomTextMultiLine) {
-        println!(
-            "PhantomTextMultiLine line={} origin_text_len={} final_text_len={} len_of_line={:?}",
-            lines.line, lines.origin_text_len, lines.final_text_len, lines.len_of_line
-        );
-        for text in &lines.text {
-            match text {
-                Text::Phantom { text } => {
-                    println!("Phantom {:?} line={} col={} merge_col={} final_col={} text={} text.len()={}", text.kind, text.line, text.col, text.merge_col, text.final_col, text.text, text.text.len());
-                }
-                Text::OriginText { text } => {
-                    println!(
-                        "OriginText line={} col={:?} merge_col={:?} final_col={:?}",
-                        text.line, text.col, text.merge_col, text.final_col
-                    );
-                }
-                Text::Empty => {
-                    println!("Empty");
-                }
-            }
-        }
-        println!();
-    }
+
 
     fn print_line(lines: &PhantomTextLine) {
         println!(
@@ -1336,7 +1416,7 @@ mod test {
                         text.line, text.col, text.merge_col, text.final_col
                     );
                 }
-                Text::Empty => {
+                Text::EmptyLine => {
                     println!("Empty");
                 }
             }

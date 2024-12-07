@@ -25,7 +25,7 @@ fn test() {
     //below end of buffer
     {
         let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(138.1, 417.1));
-        assert_eq!(offset_of_buffer, 139);
+        assert_eq!(offset_of_buffer, 143);
         assert_eq!(is_inside, false);
     }
     //f
@@ -36,8 +36,9 @@ fn test() {
     }
     //end of first line
     {
-        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(163.1, 33.1));
-        assert_eq!(offset_of_buffer, 11);
+        let point = Point::new(163.1, 33.1);
+        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), point);
+        assert_eq!(offset_of_buffer, 15);
         assert_eq!(is_inside, false);
     }
 
