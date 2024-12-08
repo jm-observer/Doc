@@ -339,12 +339,12 @@ impl DocLines {
                 visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
                 let offset_info = text_layout
                     .phantom_text
-                    .origin_info_of_visual_char(visual_offset_start);
+                    .cursor_position_of_final_col(visual_offset_start);
                 let origin_interval_start =
                     self.buffer.offset_of_line(offset_info.0) + offset_info.1;
                 let offset_info = text_layout
                     .phantom_text
-                    .origin_info_of_visual_char(visual_offset_end);
+                    .cursor_position_of_final_col(visual_offset_end);
 
                 let origin_interval_end =
                     self.buffer.offset_of_line(offset_info.0) + offset_info.1;
@@ -533,9 +533,9 @@ impl DocLines {
         // } else {
         //     hit_point.index.max(1) - 1
         // };
-        let (origin_line, origin_col) = text_layout
+        let (origin_line, origin_col, _offset_of_line) = text_layout
             .phantom_text
-            .origin_info_of_visual_char(hit_point.index);
+            .cursor_position_of_final_col(hit_point.index);
         let offset_of_buffer = self.buffer.offset_of_line_col(origin_line, origin_col);
         (offset_of_buffer, hit_point.is_inside)
     }

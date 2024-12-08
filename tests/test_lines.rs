@@ -1,5 +1,5 @@
 use floem::kurbo::Point;
-use floem_editor_core::cursor::{CursorMode};
+use floem_editor_core::cursor::{CursorAffinity, CursorMode};
 use lsp_types::Position;
 use doc::lines::fold::{FoldingDisplayItem, FoldingDisplayType};
 use crate::lines_util::_init_lines;
@@ -7,7 +7,7 @@ use crate::lines_util::_init_lines;
 mod lines_util;
 
 #[test]
-fn test() {
+fn test_buffer_offset_of_click() {
     custom_utils::logger::logger_stdout_debug();
     let (lines, _) = _init_lines(None);
 
@@ -30,14 +30,25 @@ fn test() {
         assert_eq!(offset_of_buffer, 15);
         assert_eq!(is_inside, false);
     }
-
-
 }
+
+#[test]
+fn test_next_visual_line() {
+    custom_utils::logger::logger_stdout_debug();
+    let (lines, _) = _init_lines(None);
+
+    //move to last line
+    {
+        let (visual_line, _, _) = lines.next_visual_line(8, 9 , CursorAffinity::Backward);
+        assert_eq!(visual_line.line_index, 9);
+    }
+}
+
 
 #[test]
 fn test_folded_line_1() {
     custom_utils::logger::logger_stdout_debug();
-    let (lines, _) = _init_lines(Some(vec![FoldingDisplayItem {
+    let (_lines, _) = _init_lines(Some(vec![FoldingDisplayItem {
         position: Position {
             line: 1,
             character: 12,

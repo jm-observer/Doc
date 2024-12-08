@@ -130,7 +130,7 @@ pub struct EmptyText {
     /// Column on the line that the phantom text should be displayed at.Provided by lsp
     ///
     /// 在原始行文本的位置
-    pub offset_of_buffer: usize,
+    pub offset_of_line: usize,
 }
 #[derive(Debug, Clone)]
 pub enum Text {
@@ -290,7 +290,7 @@ impl PhantomTextLine {
             texts.push(
                 EmptyText {
                     line,
-                    offset_of_buffer: offset_of_line,
+                    offset_of_line: offset_of_line,
                 }
                     .into(),
             );
@@ -438,44 +438,27 @@ impl PhantomTextMultiLine {
     //     self.text_of_final_offset(final_col.min(self.final_text_len - 1)).unwrap()
     // }
 
-    /// 最终行偏移的文本信息。在文本外的偏移返回none
-    fn text_of_final_offset(&self, final_offset: usize) -> Option<&Text> {
-        self.text.iter().find(|x| {
-            match x {
-                Text::Phantom { text } => {
-                    if text.final_col <= final_offset && final_offset < text.next_final_col() {
-                        return true;
-                    }
-                }
-                Text::OriginText { text } => {
-                    if text.final_col.contains(final_offset) {
-                        return true;
-                    }
-                }
-                Text::EmptyLine{..} => {}
-            }
-            false
-        })
-    }
+    // /// 最终行偏移的文本信息。在文本外的偏移返回none
+    // fn text_of_visual_char(&self, final_offset: usize) -> Option<&Text> {
+    //     self.text.iter().find(|x| {
+    //         match x {
+    //             Text::Phantom { text } => {
+    //                 if text.final_col <= final_offset && final_offset < text.next_final_col() {
+    //                     return true;
+    //                 }
+    //             }
+    //             Text::OriginText { text } => {
+    //                 if text.final_col.contains(final_offset) {
+    //                     return true;
+    //                 }
+    //             }
+    //             Text::EmptyLine{..} => {}
+    //         }
+    //         false
+    //     })
+    // }
 
-    /// return (origin line, origin line offset)
-    pub(crate) fn origin_info_of_visual_char(&self, mut visual_char_offset: usize) -> (usize, usize) {
-        // 因为通过hit_point获取的index会大于等于final_text_len
-        if visual_char_offset >= self.final_text_len {
-            visual_char_offset = self.final_text_len.max(1) - 1;
-        }
-        match self.text_of_visual_char(visual_char_offset) {
-            Text::Phantom { text } => {
-                (text.line, text.next_origin_col())
-            }
-            Text::OriginText { text } => {
-                (text.line, text.origin_col_of_final_col(visual_char_offset))
-            }
-            Text::EmptyLine { text } => {
-                (text.line, 0)
-            }
-        }
-    }
+
 
         /// 视觉字符的Text
     fn text_of_visual_char(&self, visual_char_offset: usize) -> &Text {
@@ -551,7 +534,7 @@ impl PhantomTextMultiLine {
     /// 最终文本的原始文本位移。若为幽灵则返回none.超过最终文本长度，则返回none(不应该在此情况下调用该方法)
     pub fn origin_col_of_final_offset(&self, final_col: usize) -> Option<(usize, usize)> {
         // let final_col = final_col.min(self.final_text_len - 1);
-        if let Some(Text::OriginText { text }) = self.text_of_final_offset(final_col) {
+        if let Text::OriginText { text } = self.text_of_visual_char(final_col) {
             let origin_col = text.col.start + final_col - text.final_col.start;
             return Some((text.line, origin_col));
         }
@@ -608,46 +591,65 @@ impl PhantomTextMultiLine {
         }
     }
 
-    /// Translate a column position into the position it would be before combining
-    ///
-    /// 将列位置转换为合并前的位置，也就是原始文本的位置？意义在于计算光标的位置（光标是用原始文本的offset来记录位置的）
-    ///
-    /// return  (line, index of line, index of buffer)
-    ///         (origin_line, _offset_of_line, offset_buffer)
-    pub fn cursor_position_of_final_col(&self, col: usize) -> (usize, usize, usize) {
-        let text = self.text_of_final_offset(col);
-        if let Some(text) = text {
-            match text {
-                Text::Phantom { text } => {
-                    return (text.line, text.col, self.offset_of_line + text.merge_col)
-                }
-                Text::OriginText { text } => {
-                    return (
-                        text.line,
-                        text.col.start + col - text.final_col.start,
-                        self.offset_of_line + text.merge_col.start + col - text.final_col.start,
-                    );
-                }
-                Text::EmptyLine{..} => {
-                    panic!()
-                }
+    /// return (origin line, origin line offset, offset_of_line)
+    pub fn cursor_position_of_final_col(&self, mut visual_char_offset: usize) -> (usize, usize, usize) {
+        // 因为通过hit_point获取的index会大于等于final_text_len
+        if visual_char_offset >= self.final_text_len {
+            visual_char_offset = self.final_text_len.max(1) - 1;
+        }
+        match self.text_of_visual_char(visual_char_offset) {
+            Text::Phantom { text } => {
+                (text.line, text.next_origin_col(), self.offset_of_line)
+            }
+            Text::OriginText { text } => {
+                (text.line, text.origin_col_of_final_col(visual_char_offset), self.offset_of_line)
+            }
+            Text::EmptyLine { text } => {
+                (text.line, 0, text.offset_of_line)
             }
         }
-        let (line, offset, _) = self.len_of_line.last().unwrap();
-        (
-            *line,
-            (*offset).max(1) - 1,
-            (self.offset_of_line + self.origin_text_len).max(1) - 1,
-        )
-        // let (line, offset, _) = self.len_of_line.last().unwrap();
-        // (*line, *offset-1)
     }
+
+    // /// Translate a column position into the position it would be before combining
+    // ///
+    // /// 将列位置转换为合并前的位置，也就是原始文本的位置？意义在于计算光标的位置（光标是用原始文本的offset来记录位置的）
+    // ///
+    // /// return  (line, index of line, index of buffer)
+    // ///         (origin_line, _offset_of_line, offset_buffer)
+    // pub fn cursor_position_of_final_col(&self, col: usize) -> (usize, usize, usize) {
+    //     let text = self.text_of_visual_char(col);
+    //     // if let Some(text) = text {
+    //         match text {
+    //             Text::Phantom { text } => {
+    //                 return (text.line, text.col, self.offset_of_line + text.merge_col)
+    //             }
+    //             Text::OriginText { text } => {
+    //                 return (
+    //                     text.line,
+    //                     text.col.start + col - text.final_col.start,
+    //                     self.offset_of_line + text.merge_col.start + col - text.final_col.start,
+    //                 );
+    //             }
+    //             Text::EmptyLine{..} => {
+    //                 panic!()
+    //             }
+    //         }
+    //     // }
+    //     let (line, offset, _) = self.len_of_line.last().unwrap();
+    //     (
+    //         *line,
+    //         (*offset).max(1) - 1,
+    //         (self.offset_of_line + self.origin_text_len).max(1) - 1,
+    //     )
+    //     // let (line, offset, _) = self.len_of_line.last().unwrap();
+    //     // (*line, *offset-1)
+    // }
 
     /// Translate a column position into the position it would be before combining
     ///
     /// 获取偏移位置的幽灵文本以及在该幽灵文本的偏移值
     pub fn phantom_text_of_final_col(&self, col: usize) -> Option<(PhantomText, usize)> {
-        let text = self.text_of_final_offset(col)?;
+        let text = self.text_of_visual_char(col);
         if let Text::Phantom { text } = text {
             Some((text.clone(), text.final_col - col))
         } else {
@@ -822,6 +824,7 @@ mod test {
     #![allow(unused_variables, dead_code)]
 
     use std::default::Default;
+    use log::info;
 
     use smallvec::SmallVec;
 
@@ -1137,7 +1140,7 @@ mod test {
 
     fn _check_empty_origin_position_of_final_col() {
         let line = PhantomTextMultiLine::new(empty_data());
-        print_lines(&line);
+        info!("{:?}", line);
         let orgin_text: Vec<char> = "".chars().into_iter().collect();
         {
             assert_eq!(line.cursor_position_of_final_col(9), (6, 0, 0));
