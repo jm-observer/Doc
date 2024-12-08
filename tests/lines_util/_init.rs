@@ -8,11 +8,11 @@ use itertools::Itertools;
 use lapce_xi_rope::Interval;
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use log::info;
-use lsp_types::InlayHint;
+use lsp_types::{InlayHint, Position};
 use doc::config::EditorConfig;
 use doc::{DiagnosticData, EditorViewKind};
 use doc::language::LapceLanguage;
-use doc::lines::fold::{FoldingDisplayItem, FoldingRange};
+use doc::lines::fold::{FoldingDisplayItem, FoldingDisplayType, FoldingRange};
 use doc::lines::{DocLines, RopeTextPosition};
 use doc::syntax::{BracketParser, Syntax};
 
@@ -28,7 +28,7 @@ pub fn _init_lsp_folding_range() -> Vec<FoldingRange> {
 }
 
 pub fn _init_inlay_hint(buffer: &Buffer) -> Spans<InlayHint> {
-    let hints = r#"[{"position":{"line":6,"character":6},"label":[{"value":": "},{"value":"A","location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":8,"character":7},"end":{"line":8,"character":8}}}}],"kind":1,"textEdits":[{"range":{"start":{"line":6,"character":6},"end":{"line":6,"character":6}},"newText":": A"}],"paddingLeft":false,"paddingRight":false}]"#;
+    let hints = r#"[{"position":{"line":6,"character":9},"label":[{"value":": "},{"value":"A","location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":8,"character":7},"end":{"line":8,"character":8}}}}],"kind":1,"textEdits":[{"range":{"start":{"line":6,"character":9},"end":{"line":6,"character":9}},"newText":": A"}],"paddingLeft":false,"paddingRight":false}]"#;
     let mut hints: Vec<InlayHint> = serde_json::from_str(hints).unwrap();
     let len = buffer.len();
     hints.sort_by(|left, right| left.position.cmp(&right.position));
@@ -65,7 +65,42 @@ pub fn _init_code() -> (String, Buffer) {
     (code.to_string(), buffer)
 }
 
-pub fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>) -> (DocLines, RwSignal<EditorConfig>) {
+pub fn _init_origin_code() -> (DocLines, RwSignal<EditorConfig>) {
+    _init_lines(None)
+}
+
+///  2|   if true {...} else {\r\n
+pub fn _init_folded_code_v1() -> (DocLines, RwSignal<EditorConfig>) {
+    _init_lines(Some(vec![FoldingDisplayItem {
+        position: Position {
+            line: 1,
+            character: 12,
+        },
+        y: 0,
+        ty: FoldingDisplayType::UnfoldStart,
+    }]))
+}
+
+///  2|   if true {...} else {...}\r\n
+pub fn _init_folded_code_v2() -> (DocLines, RwSignal<EditorConfig>) {
+    _init_lines(Some(vec![FoldingDisplayItem {
+        position: Position {
+            line: 1,
+            character: 12,
+        },
+        y: 0,
+        ty: FoldingDisplayType::UnfoldStart,
+    }, FoldingDisplayItem {
+        position: Position {
+            line: 5,
+            character: 5,
+        },
+        y: 0,
+        ty: FoldingDisplayType::UnfoldEnd,
+    }]))
+}
+
+fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>) -> (DocLines, RwSignal<EditorConfig>) {
     let (code, buffer) = _init_code();
     let folding = _init_lsp_folding_range();
     let hints = _init_inlay_hint(&buffer);

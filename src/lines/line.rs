@@ -122,7 +122,7 @@ impl Debug for VisualLine {
                 "origin_folded_line_sub_index",
                 &self.origin_folded_line_sub_index,
             )
-            .field("text_layout", &self.text_layout.text.line().layout_opt())
+            .field("text_layout layout len=", &self.text_layout.text.line().layout_opt().map(|x| x.len()))
             .field("phantom_text", &self.text_layout.phantom_text)
             .finish()
     }

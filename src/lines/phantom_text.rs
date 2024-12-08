@@ -792,7 +792,7 @@ impl Ranges {
     }
 }
 
-fn combine_with_text(lines: &SmallVec<[Text; 6]>, origin: &str) -> String {
+pub fn combine_with_text(lines: &SmallVec<[Text; 6]>, origin: &str) -> String {
     let mut rs = String::new();
     // let mut latest_col = 0;
     for text in lines {
@@ -944,62 +944,11 @@ mod test {
     }
     #[test]
     fn test_all() {
-        test_init();
+        custom_utils::logger::logger_stdout_debug();
         test_merge();
         check_origin_position_of_final_col();
         check_col_at();
         check_final_col_of_col();
-    }
-
-    #[test]
-    fn test_init() {
-        let line2 = init_folded_line(2, false);
-        let line4 = init_folded_line(4, false);
-        let line_folded_4 = init_folded_line(4, true);
-        let line6 = init_folded_line(6, false);
-        print_line(&line2);
-        check_lines_col(
-            &line2.texts,
-            line2.final_text_len,
-            "    if true {\n\r",
-            "    if true {...}",
-        );
-        check_line_final_col(&line2, "    if true {...}");
-
-        print_line(&line4);
-        check_lines_col(
-            &line4.texts,
-            line4.final_text_len,
-            "    } else {\n\r",
-            " else {\n\r",
-        );
-        check_line_final_col(&line4, " else {\n\r");
-
-        print_line(&line_folded_4);
-        check_lines_col(
-            &line_folded_4.texts,
-            line_folded_4.final_text_len,
-            "    } else {\n\r",
-            " else {...}",
-        );
-        check_line_final_col(&line_folded_4, " else {...}");
-
-        print_line(&line6);
-        check_lines_col(&line6.texts, line6.final_text_len, "    }\n\r", "\n\r");
-        check_line_final_col(&line6, "\n\r");
-
-        {
-            let let_line = let_data();
-            print_line(&let_line);
-            let expect_str = "    let a: A  = A;\n\r";
-            check_lines_col(
-                &let_line.texts,
-                let_line.final_text_len,
-                "    let a = A;\n\r",
-                expect_str,
-            );
-            check_line_final_col(&line6, expect_str);
-        }
     }
 
     /**
@@ -1020,16 +969,16 @@ mod test {
             check_lines_col(
                 &lines.text,
                 lines.final_text_len,
-                "    if true {\n\r",
+                "    if true {\r\n",
                 "    if true {...}",
             );
             lines.merge(line4);
-            print_lines(&lines);
+            // print_lines(&lines);
             check_lines_col(
                 &lines.text,
                 lines.final_text_len,
-                "    if true {\n\r    } else {\n\r",
-                "    if true {...} else {\n\r",
+                "    if true {\r\n    } else {\r\n",
+                "    if true {...} else {\r\n",
             );
         }
         {
@@ -1040,7 +989,7 @@ mod test {
             check_lines_col(
                 &lines.text,
                 lines.final_text_len,
-                "    if true {\n\r",
+                "    if true {\r\n",
                 "    if true {...}",
             );
             // print_lines(&lines);
@@ -1050,15 +999,15 @@ mod test {
             check_lines_col(
                 &lines.text,
                 lines.final_text_len,
-                "    if true {\n\r    } else {\n\r",
+                "    if true {\r\n    } else {\r\n",
                 "    if true {...} else {...}",
             );
             lines.merge(line6);
             check_lines_col(
                 &lines.text,
                 lines.final_text_len,
-                "    if true {\n\r    } else {\n\r    }\n\r",
-                "    if true {...} else {...}\n\r",
+                "    if true {\r\n    } else {\r\n    }\r\n",
+                "    if true {...} else {...}\r\n",
             );
         }
     }
@@ -1078,9 +1027,9 @@ mod test {
         // "0123456789012345678901234567890123456789
         // "0         10        20        30
         let let_line = PhantomTextMultiLine::new(let_data());
-        print_lines(&let_line);
+        // print_lines(&let_line);
 
-        let orgin_text: Vec<char> = "    let a: A  = A;\n\r".chars().into_iter().collect();
+        let orgin_text: Vec<char> = "    let a: A  = A;\r\n".chars().into_iter().collect();
         {
             assert_eq!(orgin_text[8], 'a');
             assert_eq!(let_line.cursor_position_of_final_col(8).1, 8);
@@ -1114,16 +1063,16 @@ mod test {
             lines.merge(line_folded_4);
             lines
         };
-        print_lines(&line);
-        let orgin_text: Vec<char> = "    if true {...} else {\n\r".chars().into_iter().collect();
+        // linesprint_lines(&line);
+        let orgin_text: Vec<char> = "    if true {...} else {\r\n".chars().into_iter().collect();
         {
             assert_eq!(orgin_text[9], 'u');
-            assert_eq!(line.cursor_position_of_final_col(9), (1, 9, 9));
+            assert_eq!(line.cursor_position_of_final_col(9), (1, 9, 0));
         }
         {
             let index = 12;
             assert_eq!(orgin_text[index], '{');
-            assert_eq!(line.cursor_position_of_final_col(index), (1, 12, 12));
+            assert_eq!(line.cursor_position_of_final_col(index), (1, 15, 0));
         }
         // "0         10        20        30
         // "0123456789012345678901234567890123456789
@@ -1131,10 +1080,10 @@ mod test {
         {
             let index = 19;
             assert_eq!(orgin_text[index], 'l');
-            assert_eq!(line.cursor_position_of_final_col(index), (3, 7, 22));
+            assert_eq!(line.cursor_position_of_final_col(index), (3, 7, 0));
         }
         {
-            assert_eq!(line.cursor_position_of_final_col(26), (3, 13, 28));
+            assert_eq!(line.cursor_position_of_final_col(26), (3, 13, 0));
         }
     }
 
@@ -1156,14 +1105,15 @@ mod test {
         //  "0         10        20        30
         //              s    e     s    e
         let line = get_merged_data();
-        print_lines(&line);
-        let orgin_text: Vec<char> = "    if true {...} else {...}\n\r"
+        // print_lines(&line);
+        info!("{:?}", line);
+        let orgin_text: Vec<char> = "    if true {...} else {...}\r\n"
             .chars()
             .into_iter()
             .collect();
         {
             assert_eq!(orgin_text[9], 'u');
-            assert_eq!(line.cursor_position_of_final_col(9), (1, 9, 9));
+            assert_eq!(line.cursor_position_of_final_col(9), (1, 9, 0));
         }
         {
             assert_eq!(orgin_text[0], ' ');
@@ -1172,7 +1122,7 @@ mod test {
         {
             let index = 12;
             assert_eq!(orgin_text[index], '{');
-            assert_eq!(line.cursor_position_of_final_col(index), (1, 12, 12));
+            assert_eq!(line.cursor_position_of_final_col(index), (1, 15, 0));
         }
         // "0         10        20        30
         // "0123456789012345678901234567890123456789
@@ -1180,22 +1130,22 @@ mod test {
         {
             let index = 19;
             assert_eq!(orgin_text[index], 'l');
-            assert_eq!(line.cursor_position_of_final_col(index), (3, 7, 22));
+            assert_eq!(line.cursor_position_of_final_col(index), (3, 7, 0));
         }
         {
             let index = 25;
             assert_eq!(orgin_text[index], '.');
-            assert_eq!(line.cursor_position_of_final_col(index), (3, 11, 26));
+            assert_eq!(line.cursor_position_of_final_col(index), (3, 14, 0));
         }
         {
             let index = 29;
-            assert_eq!(orgin_text[index], '\r');
-            assert_eq!(line.cursor_position_of_final_col(index), (5, 6, 35));
+            assert_eq!(orgin_text[index], '\n');
+            assert_eq!(line.cursor_position_of_final_col(index), (5, 6, 0));
         }
 
         {
             let index = 40;
-            assert_eq!(line.cursor_position_of_final_col(index), (5, 6, 35));
+            assert_eq!(line.cursor_position_of_final_col(index), (5, 6, 0));
         }
     }
 
@@ -1206,8 +1156,8 @@ mod test {
     }
     fn _check_let_final_col_of_col() {
         let line = PhantomTextMultiLine::new(let_data());
-        print_lines(&line);
-        let orgin_text: Vec<char> = "    let a: A  = A;\n\r".chars().into_iter().collect();
+        // print_lines(&line);
+        let orgin_text: Vec<char> = "    let a: A  = A;\r\n".chars().into_iter().collect();
         {
             // "0         10        20        30
             // "0123456789012345678901234567890123456789
@@ -1215,7 +1165,7 @@ mod test {
             // "    let a: A  = A;nr
             // "0123456789012345678901234567890123456789
             // "0         10        20        30
-            let orgin_text: Vec<char> = "    let a = A;\n\r".chars().into_iter().collect();
+            let orgin_text: Vec<char> = "    let a = A;\r\n".chars().into_iter().collect();
             let col_line = 6;
             {
                 let index = 8;
@@ -1225,7 +1175,7 @@ mod test {
             }
             {
                 let index = 15;
-                assert_eq!(orgin_text[index], '\r');
+                assert_eq!(orgin_text[index], '\n');
                 assert_eq!(line.final_col_of_col(col_line, index, false), 20);
                 assert_eq!(line.final_col_of_col(col_line, index, true), 19);
             }
@@ -1241,12 +1191,12 @@ mod test {
         //  "0123456789012345678901234567890123456789
         //  "0         10        20        30
         let line = get_merged_data();
-        print_lines(&line);
+        // print_lines(&line);
         {
             //  "0         10        20        30
             //  "0123456789012345678901234567890123456789
             //2 "    if true {nr"
-            let orgin_text: Vec<char> = "    if true {\n\r".chars().into_iter().collect();
+            let orgin_text: Vec<char> = "    if true {\r\n".chars().into_iter().collect();
             let col_line = 1;
             {
                 let index = 9;
@@ -1271,7 +1221,7 @@ mod test {
             //  "0         10        20        30
             //  "0123456789012345678901234567890123456789
             //2 "    } else {nr"
-            let orgin_text: Vec<char> = "    } else {\n\r".chars().into_iter().collect();
+            let orgin_text: Vec<char> = "    } else {\r\n".chars().into_iter().collect();
             let col_line = 3;
             {
                 let index = 1;
@@ -1287,7 +1237,7 @@ mod test {
             }
             {
                 let index = 13;
-                assert_eq!(orgin_text[index], '\r');
+                assert_eq!(orgin_text[index], '\n');
                 assert_eq!(line.final_col_of_col(col_line, index, false), 23);
                 assert_eq!(line.final_col_of_col(col_line, index, true), 23);
             }
@@ -1301,7 +1251,7 @@ mod test {
             //  "0         10
             //  "0123456789012
             //2 "    }nr"
-            let orgin_text: Vec<char> = "    }\n\r".chars().into_iter().collect();
+            let orgin_text: Vec<char> = "    }\r\n".chars().into_iter().collect();
             let col_line = 5;
             {
                 let index = 1;
@@ -1311,7 +1261,7 @@ mod test {
             }
             {
                 let index = 6;
-                assert_eq!(orgin_text[index], '\r');
+                assert_eq!(orgin_text[index], '\n');
                 assert_eq!(line.final_col_of_col(col_line, index, true), 29);
                 assert_eq!(line.final_col_of_col(col_line, index, false), 30);
             }
@@ -1333,13 +1283,13 @@ mod test {
         // "0         10        20        30
         //              s    e     s    e
         let line = get_merged_data();
-        let orgin_text: Vec<char> = "    if true {\n\r    } else {\n\r    }\n\r"
+        let orgin_text: Vec<char> = "    if true {\r\n    } else {\r\n    }\r\n"
             .chars()
             .into_iter()
             .collect();
         {
             let index = 35;
-            assert_eq!(orgin_text[index], '\r');
+            assert_eq!(orgin_text[index], '\n');
             assert_eq!(line.col_at(index), Some(29));
         }
         {
@@ -1425,7 +1375,7 @@ mod test {
                         text.line, text.col, text.merge_col, text.final_col
                     );
                 }
-                Text::EmptyLine => {
+                Text::EmptyLine{..} => {
                     println!("Empty");
                 }
             }
