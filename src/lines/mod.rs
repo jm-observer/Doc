@@ -178,6 +178,8 @@ pub struct DocLines {
     folding_items: Vec<FoldingDisplayItem>,
     pub line_height: usize,
     pub screen_lines: ScreenLines,
+    // start from 1
+    pub last_line: usize,
 }
 
 impl DocLines {
@@ -194,10 +196,11 @@ impl DocLines {
         kind: RwSignal<EditorViewKind>,
     ) -> Self {
         let screen_lines = ScreenLines::new(cx, viewport, 0.0);
+        let last_line = buffer.last_line() + 1;
         let signals =
-            Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone(), screen_lines.clone());
+            Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone(), screen_lines.clone(), last_line);
         let mut lines = Self {
-            signals, screen_lines,
+            signals, screen_lines, last_line,
             // font_size_cache_id: id,
             layout_event: Listener::new_empty(cx), // font_size_cache_id: id,
             viewport,
@@ -249,6 +252,7 @@ impl DocLines {
         self.visual_lines.clear();
         self.max_width = 0.0;
         self.line_height  = 0;
+        self.last_line = 0;
     }
 
     fn update_parser(&mut self) {
@@ -1166,9 +1170,10 @@ impl DocLines {
             self.trigger_screen_lines(screen_lines);
             self.trigger_buffer_rev(self.buffer.rev());
             if trigger_buffer {
-                self.trigger_buffer(self.buffer.clone())
+                self.trigger_buffer(self.buffer.clone());
             }
-        })
+        });
+        self.trigger_last_line(self.buffer.last_line() + 1);
     }
 
     // pub fn update_folding_ranges(&mut self, new: Vec<FoldingRange>) {
@@ -1213,7 +1218,7 @@ impl DocLines {
         for diag in diagnostics.into_iter() {
             let start = self.buffer.offset_of_position(&diag.range.start);
             let end = self.buffer.offset_of_position(&diag.range.end);
-            warn!("start={start} end={end} {:?}", diag);
+            // warn!("start={start} end={end} {:?}", diag);
             span.add_span(Interval::new(start, end), diag);
         }
         let span = span.build();
@@ -1647,7 +1652,6 @@ impl UpdateLines {
     pub fn update_viewport(&mut self, viewport: Rect) {
         if self.viewport != viewport {
             self.viewport = viewport;
-            warn!("update_viewport {viewport:?}");
             self.update();
         }
     }
@@ -1872,9 +1876,11 @@ impl LinesEditorStyle {
     }
 }
 
+type LinesSignals = DocLines;
+
 #[allow(dead_code)]
 /// 以界面为单位，进行触发。
-impl DocLines {
+impl LinesSignals {
     pub fn trigger_screen_lines(&mut self, screen_lines: ScreenLines) {
         self.signals.screen_lines_signal.set(screen_lines);
     }
@@ -1921,6 +1927,17 @@ impl DocLines {
 
     pub fn signal_buffer(&self) -> ReadSignal<Buffer> {
         self.signals.buffer.read_only()
+    }
+
+
+    fn trigger_last_line(&mut self, last_line: usize) {
+        if self.last_line != last_line {
+            self.last_line = last_line;
+            self.signals.last_line.set(last_line);
+        }
+    }
+    pub fn signal_last_line(&self) -> ReadSignal<usize> {
+        self.signals.last_line.read_only()
     }
 }
 

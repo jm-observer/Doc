@@ -290,7 +290,7 @@ impl PhantomTextLine {
             texts.push(
                 EmptyText {
                     line,
-                    offset_of_line: offset_of_line,
+                    offset_of_line
                 }
                     .into(),
             );
