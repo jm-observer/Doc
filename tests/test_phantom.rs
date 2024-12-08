@@ -3,7 +3,7 @@ use floem_editor_core::cursor::{CursorAffinity, CursorMode};
 use log::debug;
 use lsp_types::Position;
 use doc::lines::fold::{FoldingDisplayItem, FoldingDisplayType};
-use crate::lines_util::{_init_folded_code_v1, _init_folded_code_v2, check_line_final_col, check_lines_col};
+use crate::lines_util::{_init_folded_code_v1, _init_folded_code_v2, _init_origin_code, check_line_final_col, check_lines_col};
 
 mod lines_util;
 

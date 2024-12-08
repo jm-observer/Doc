@@ -1346,9 +1346,9 @@ impl DocLines {
 
     pub fn log(&self) {
         warn!(
-            "DocLines viewport={:?} {}",
+            "DocLines viewport={:?} buffer.len()=[{}]",
             self.viewport,
-            self.buffer.text().to_string()
+            self.buffer.text().len()
         );
         for origin_folded_line in &self.origin_folded_lines {
             warn!("{:?}", origin_folded_line);
@@ -1526,14 +1526,14 @@ impl UpdateLines {
         let rs = self.buffer.edit(iter, edit_type);
         self.apply_delta(&rs.1);
         self.on_update_buffer();
-        self.update();
+        self.update_with_trigger_buffer(true);
         rs
     }
     pub fn reload_buffer(&mut self, content: Rope, set_pristine: bool) -> (Rope, RopeDelta, InvalLines) {
         let rs = self.buffer.reload(content, set_pristine);
         self.apply_delta(&rs.1);
         self.on_update_buffer();
-        self.update();
+        self.update_with_trigger_buffer(true);
         rs
     }
 
@@ -1557,7 +1557,7 @@ impl UpdateLines {
             self.apply_delta(&delta.1);
         }
         self.on_update_buffer();
-        self.update();
+        self.update_with_trigger_buffer(true);
         rs
     }
 
@@ -1595,7 +1595,7 @@ impl UpdateLines {
             }
         }
         self.on_update_buffer();
-        self.update();
+        self.update_with_trigger_buffer(true);
         deltas
     }
 
@@ -1623,7 +1623,7 @@ impl UpdateLines {
             self.apply_delta(&delta.1);
         }
         self.on_update_buffer();
-        self.update();
+        self.update_with_trigger_buffer(true);
         deltas
     }
 
@@ -1717,8 +1717,8 @@ impl UpdateLines {
         self.update_diagnostics(delta);
         self.update_inlay_hints(delta);
         self.update_completion_lens(delta);
-
-        self.update();
+        //
+        // self.update();
     }
     pub fn trigger_syntax_change(
         &mut self,
