@@ -118,7 +118,9 @@ impl OriginText {
 
     /// 视觉偏移的原始偏移
     pub fn origin_col_of_final_col(&self, final_col: usize) -> usize {
-        debug_assert!(self.final_col.contains(final_col));
+        if self.final_col.contains(final_col) {
+
+        }
         final_col - self.final_col.start + self.col.start
     }
 }
@@ -597,7 +599,7 @@ impl PhantomTextMultiLine {
         if visual_char_offset >= self.final_text_len {
             visual_char_offset = self.final_text_len.max(1) - 1;
         }
-        match self.text_of_visual_char(visual_char_offset) {
+        match self.text_of_final_col(visual_char_offset) {
             Text::Phantom { text } => {
                 (text.line, text.next_origin_col(), self.offset_of_line)
             }
@@ -608,6 +610,14 @@ impl PhantomTextMultiLine {
                 (text.line, 0, text.offset_of_line)
             }
         }
+    }
+    /// return (origin line, origin line offset, offset_of_line)
+    pub fn text_of_final_col(&self, mut visual_char_offset: usize) -> &Text {
+        // 因为通过hit_point获取的index会大于等于final_text_len
+        if visual_char_offset >= self.final_text_len {
+            visual_char_offset = self.final_text_len.max(1) - 1;
+        }
+        self.text_of_visual_char(visual_char_offset)
     }
 
     // /// Translate a column position into the position it would be before combining

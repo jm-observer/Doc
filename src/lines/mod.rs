@@ -35,7 +35,7 @@ use floem_editor_core::word::{CharClassification, get_char_property};
 use itertools::Itertools;
 use lapce_xi_rope::{Interval, Rope, RopeDelta, Transformer};
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
-use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Position};
+use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Location, Position};
 use smallvec::SmallVec;
 use log::{info, warn};
 use line::{OriginFoldedLine, OriginLine, VisualLine};
@@ -47,6 +47,7 @@ use crate::lines::action::UpdateFolding;
 use crate::config::EditorConfig;
 use crate::lines::encoding::{offset_utf16_to_utf8, offset_utf8_to_utf16};
 use crate::lines::fold::{FoldingDisplayItem, FoldingRanges};
+use crate::lines::phantom_text::Text;
 use crate::lines::screen_lines::{ScreenLines, VisualLineInfo};
 use crate::syntax::{BracketParser, Syntax};
 use crate::syntax::edit::SyntaxEdit;
@@ -82,6 +83,7 @@ pub struct LinesOfOriginOffset {
 pub struct DocLinesManager {
     lines: RwSignal<DocLines>,
 }
+
 impl DocLinesManager {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -138,6 +140,7 @@ impl DocLinesManager {
         self.with_untracked(|x| x.lines_of_origin_offset(origin_offset))
     }
 }
+
 #[derive(Clone)]
 pub struct DocLines {
     origin_lines: Vec<OriginLine>,
@@ -200,7 +203,9 @@ impl DocLines {
         let signals =
             Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone(), screen_lines.clone(), last_line);
         let mut lines = Self {
-            signals, screen_lines, last_line,
+            signals,
+            screen_lines,
+            last_line,
             // font_size_cache_id: id,
             layout_event: Listener::new_empty(cx), // font_size_cache_id: id,
             viewport,
@@ -251,7 +256,7 @@ impl DocLines {
         self.origin_folded_lines.clear();
         self.visual_lines.clear();
         self.max_width = 0.0;
-        self.line_height  = 0;
+        self.line_height = 0;
         self.last_line = 0;
     }
 
@@ -543,6 +548,50 @@ impl DocLines {
         let offset_of_buffer = self.buffer.offset_of_line_col(origin_line, origin_col);
         (offset_of_buffer, hit_point.is_inside)
     }
+    pub fn inlay_hint_of_click(
+        &self,
+        point: Point,
+    ) -> FindHintRs {
+        let info = self.screen_lines.visual_line_of_y(point.y);
+        let text_layout = &info.visual_line.text_layout;
+        let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
+        let hit_point = text_layout.text.hit_point(Point::new(point.x, y as f64));
+        if let Text::Phantom { text: phantom } = text_layout
+            .phantom_text
+            .text_of_final_col(hit_point.index) {
+            let phantom_offset = hit_point.index - phantom.final_col;
+            if let PhantomTextKind::InlayHint = phantom.kind {
+                let line = phantom.line as u32;
+                let index = phantom.col as u32;
+                if let Some(hints) = &self.inlay_hints {
+                    if let Some(location) = hints.iter().find_map(|(_, hint)| {
+                        if hint.position.line == line
+                            && hint.position.character == index
+                        {
+                            if let InlayHintLabel::LabelParts(parts) = &hint.label {
+                                let mut start = 0;
+                                for part in parts {
+                                    let end = start + part.value.len();
+                                    if start <= phantom_offset
+                                        && phantom_offset < end
+                                    {
+                                        return part.location.clone();
+                                    }
+                                    start = end;
+                                }
+                            }
+                        }
+                        None
+                    }) {
+                        return FindHintRs::Match(location);
+                    }
+                }
+            }
+            FindHintRs::MatchWithoutLocation
+        } else {
+            FindHintRs::NoHint
+        }
+    }
 
     /// 原始位移字符所在的行信息（折叠行、原始行、视觉行）
     pub fn lines_of_origin_offset(
@@ -666,10 +715,10 @@ impl DocLines {
     ) -> (VisualLine, usize, usize, bool) {
         // 位于的原始行，以及在原始行的起始offset
         let (origin_line, offset_of_origin_line) = {
-                let origin_line = self.buffer.line_of_offset(offset);
-                let origin_line_start_offset = self.buffer.offset_of_line(origin_line);
-                (origin_line, origin_line_start_offset)
-            };
+            let origin_line = self.buffer.line_of_offset(offset);
+            let origin_line_start_offset = self.buffer.offset_of_line(origin_line);
+            (origin_line, origin_line_start_offset)
+        };
         let offset = offset - offset_of_origin_line;
         let folded_line = self.folded_line_of_origin_line(origin_line);
 
@@ -1373,8 +1422,6 @@ impl DocLines {
         for range in &self.folding_ranges.0 {
             warn!("{:?}", range);
         }
-
-
     }
 
     fn apply_diagnostic_styles(
@@ -1401,7 +1448,6 @@ impl DocLines {
 
         // Add the styling for the diagnostic severity, if applicable
         if let Some(max_severity) = max_severity {
-
             let size = layout_line.text.size();
             let x1 = if !config.error_lens_end_of_line {
                 let error_end_x = size.width;
@@ -1480,7 +1526,6 @@ impl DocLines {
 type ComputeLines = DocLines;
 
 impl ComputeLines {
-
     /// return (visual line of offset, offset of visual line, offset of folded line, is last char, position of cursor, line_height)
     ///
     /// last_char should be check in future
@@ -1514,7 +1559,6 @@ impl ComputeLines {
 type UpdateLines = DocLines;
 
 impl UpdateLines {
-
     pub fn init_buffer(&mut self, content: Rope) -> bool {
         self.buffer.init_content(content);
         self.buffer.detect_indent(|| {
@@ -1587,20 +1631,20 @@ impl UpdateLines {
         let mut clipboard = SystemClipboard::new();
         let old_cursor = cursor.mode().clone();
         let deltas =
-                Action::do_edit(
-                    cursor,
-                    &mut self.buffer,
-                    cmd,
-                    &mut clipboard,
-                    register,
-                    EditConf {
-                        comment_token: syntax.language.comment_token(),
-                        modal,
-                        smart_tab,
-                        keep_indent: true,
-                        auto_indent: true,
-                    },
-                );
+            Action::do_edit(
+                cursor,
+                &mut self.buffer,
+                cmd,
+                &mut clipboard,
+                register,
+                EditConf {
+                    comment_token: syntax.language.comment_token(),
+                    modal,
+                    smart_tab,
+                    keep_indent: true,
+                    auto_indent: true,
+                },
+            );
         if !deltas.is_empty() {
             self.buffer.set_cursor_before(old_cursor);
             self.buffer.set_cursor_after(cursor.mode().clone());
@@ -1616,7 +1660,7 @@ impl UpdateLines {
     pub fn do_insert_buffer(
         &mut self,
         cursor: &mut Cursor,
-        s: &str
+        s: &str,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
         let config = self.config.get_untracked();
         let old_cursor = cursor.mode().clone();
@@ -1831,6 +1875,7 @@ impl UpdateLines {
 }
 
 type LinesEditorStyle = DocLines;
+
 impl LinesEditorStyle {
     pub fn modal(&self) -> bool {
         self.editor_style.modal()
@@ -1985,4 +2030,12 @@ pub trait RopeTextPosition: RopeText {
         (line, column)
     }
 }
+
 impl<T: RopeText> RopeTextPosition for T {}
+
+#[derive(Debug)]
+pub enum FindHintRs {
+    NoHint,
+    MatchWithoutLocation,
+    Match(Location),
+}
