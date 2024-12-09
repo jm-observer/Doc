@@ -5,6 +5,17 @@ use crate::lines_util::{_init_code, _init_origin_code};
 
 mod lines_util;
 
+
+#[test]
+fn test_performance() {
+    custom_utils::logger::logger_stdout_debug();
+    let file: PathBuf = "resources/test_code/empty.rs".into();
+    let editor: PathBuf = "resources/test_code/editor.rs".into();
+    let editor_code = std::fs::read_to_string(editor).unwrap();
+    let (mut lines, _) = _init_origin_code(_init_code(file));
+    lines.init_buffer(editor_code.into());
+}
+
 #[test]
 fn test_buffer_offset_of_click() {
     custom_utils::logger::logger_stdout_debug();
@@ -40,7 +51,7 @@ fn test_buffer_offset_of_click_2() {
     let (mut lines, _) = _init_origin_code(_init_code(file));
 
     // scroll 23 line { x0: 0.0, y0: 480.0, x1: 606.8886108398438, y1: 1018.1586303710938 }
-    lines.update_viewport(Rect::new(0.0, 480.0, 606.8, 1018.1));
+    lines.update_viewport_by_scroll(Rect::new(0.0, 480.0, 606.8, 1018.1));
     //below end of buffer
     {
         // single_click (144.00931549072266, 632.1586074829102) new_offset=480

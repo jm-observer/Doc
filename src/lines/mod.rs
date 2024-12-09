@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
+use std::time::Duration;
 
 use floem::context::StyleCx;
 use floem::kurbo::{Point, Rect};
@@ -290,9 +291,11 @@ impl DocLines {
             .font_size(font_size as f32)
             .line_height(LineHeightValue::Px(self.line_height as f32));
         let viewport = self.viewport;
+        // let mut duration = Duration::from_secs(0);
         while current_line <= last_line {
             let start_offset = self.buffer.offset_of_line(current_line);
             let end_offset = self.buffer.offset_of_line(current_line + 1);
+            // let time = std::time::SystemTime::now();
             let text_layout = self.new_text_layout(
                 current_line,
                 start_offset,
@@ -302,6 +305,7 @@ impl DocLines {
                 attrs,
                 viewport,
             );
+            // duration += time.elapsed().unwrap();
             let origin_line_start = text_layout.phantom_text.line;
             let origin_line_end = text_layout.phantom_text.last_line;
 
@@ -392,6 +396,7 @@ impl DocLines {
             current_line = origin_line_end + 1;
             origin_folded_line_index += 1;
         }
+        // info!("new_text_layout {:?}", duration);
     }
 
     // pub fn wrap(&self, viewport: Rect, es: &EditorStyle) -> ResolvedWrap {
@@ -1157,10 +1162,11 @@ impl DocLines {
 
         // ?
         // let indent_line = self.indent_line(line, &line_content_original);
-
-        let offset = self.buffer.first_non_blank_character_on_line(line);
-        let (_, col) = self.buffer.offset_to_line_col(offset);
-        let indent = text_layout.hit_position(col).point.x;
+        // ? comment for performance
+        // let offset = self.buffer.first_non_blank_character_on_line(line);
+        // let (_, col) = self.buffer.offset_to_line_col(offset);
+        // let indent = text_layout.hit_position(col).point.x;
+        let indent = 0.0;
 
         let mut layout_line = TextLayoutLine {
             text: text_layout,
@@ -1570,8 +1576,10 @@ impl UpdateLines {
             IndentStyle::from_str(self.syntax.language.indent_unit())
         });
         info!("line_ending {:?}", self.buffer.line_ending());
+        // let time = std::time::SystemTime::now();
         self.on_update_buffer();
         self.update();
+        // info!("update elapsed {:?}", time.elapsed().unwrap());
         true
     }
 
