@@ -1,13 +1,15 @@
+use std::path::PathBuf;
 use floem::kurbo::Point;
 use floem_editor_core::cursor::{CursorAffinity, CursorMode};
-use crate::lines_util::{_init_origin_code};
+use crate::lines_util::{_init_code, _init_origin_code};
 
 mod lines_util;
 
 #[test]
 fn test_buffer_offset_of_click() {
     custom_utils::logger::logger_stdout_debug();
-    let (lines, _) = _init_origin_code();
+    let file: PathBuf = "resources/test_code/main.rs".into();
+    let (lines, _) = _init_origin_code(_init_code(file));
 
     //below end of buffer
     {
@@ -17,13 +19,13 @@ fn test_buffer_offset_of_click() {
     }
     //f
     {
-        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(1.1, 33.1));
+        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(1.1, 13.1));
         assert_eq!(offset_of_buffer, 0);
         assert_eq!(is_inside, true);
     }
     //end of first line
     {
-        let point = Point::new(163.1, 33.1);
+        let point = Point::new(163.1, 13.1);
         let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), point);
         assert_eq!(offset_of_buffer, 15);
         assert_eq!(is_inside, false);
@@ -33,7 +35,8 @@ fn test_buffer_offset_of_click() {
 #[test]
 fn test_next_visual_line() {
     custom_utils::logger::logger_stdout_debug();
-    let (lines, _) = _init_origin_code();
+    let file: PathBuf = "resources/test_code/main.rs".into();
+    let (lines, _) = _init_origin_code(_init_code(file));
 
     //move to last line
     {

@@ -35,7 +35,6 @@ pub fn compute_screen_lines(
 
             for visual_line in vline_infos {
                 let rvline = visual_line.rvline();
-                rvlines.push(rvline);
                 let y_idx = min_visual + rvlines.len();
                 let vline_y = y_idx * line_height;
                 let line_y = vline_y - rvline.line_index * line_height;
@@ -46,6 +45,7 @@ pub fn compute_screen_lines(
                     vline_y: vline_y as f64 - y0,
                     visual_line,
                 };
+                rvlines.push(rvline);
                 visual_lines.push(visual_line_info.clone());
 
                 // Add the information to make it cheap to get in the future.

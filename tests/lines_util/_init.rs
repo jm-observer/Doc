@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::fs::File;
+use std::path::{Path, PathBuf};
 use floem::kurbo::Rect;
 use floem::reactive::{RwSignal, Scope};
 use floem::views::editor::EditorStyle;
@@ -43,34 +44,22 @@ pub fn _init_inlay_hint(buffer: &Buffer) -> Spans<InlayHint> {
     hints_span.build()
 }
 
-pub fn _init_code() -> (String, Buffer) {
-    let code = "pub fn main() {\r\n    if true {\r\n        println!(\"startss\");\r\n    } else {\r\n        println!(\"startss\");\r\n    }\r\n    let a = A;\r\n}\r\nstruct A;\r\n";
-    //         let code = r#"pub fn main() {
-    //     if true {
-    //         println!("startss");
-    //     } else {
-    //         println!("startss");
-    //     }
-    //     let a = A;
-    // }
-    // struct A;
-    // "#;
+pub fn _init_code(file: PathBuf) -> (String, Buffer) {
+    // let code = "pub fn main() {\r\n    if true {\r\n        println!(\"startss\");\r\n    } else {\r\n        println!(\"startss\");\r\n    }\r\n    let a = A;\r\n}\r\nstruct A;\r\n";
+    let code = load_code(&file);
     let buffer = Buffer::new(
-        code
+        code.as_str()
     );
-    info!("line_ending {:?} len={} {}", buffer.line_ending(), code.len(), code);
-    info!("line_end_col {} {}", buffer.line_end_col(9, true), buffer.line_end_col(9, false));
-    info!("line_end_offset {:?} {}", buffer.line_end_offset(9, true), buffer.line_end_offset(9, false));
-    info!("{} offset_of_line {} {:?}", buffer.len(), buffer.offset_of_line(9), buffer.line_content(9));
-    (code.to_string(), buffer)
+    info!("line_ending {:?} len={}", buffer.line_ending(), code.len());
+    (code, buffer)
 }
 
-pub fn _init_origin_code() -> (DocLines, RwSignal<EditorConfig>) {
-    _init_lines(None)
+pub fn _init_origin_code((code, buffer): (String, Buffer)) -> (DocLines, RwSignal<EditorConfig>) {
+    _init_lines(None, (code, buffer))
 }
 
 ///  2|   if true {...} else {\r\n
-pub fn _init_folded_code_v1() -> (DocLines, RwSignal<EditorConfig>) {
+pub fn _init_folded_code_v1((code, buffer): (String, Buffer)) -> (DocLines, RwSignal<EditorConfig>) {
     _init_lines(Some(vec![FoldingDisplayItem {
         position: Position {
             line: 1,
@@ -78,11 +67,11 @@ pub fn _init_folded_code_v1() -> (DocLines, RwSignal<EditorConfig>) {
         },
         y: 0,
         ty: FoldingDisplayType::UnfoldStart,
-    }]))
+    }]), (code, buffer))
 }
 
 ///  2|   if true {...} else {...}\r\n
-pub fn _init_folded_code_v2() -> (DocLines, RwSignal<EditorConfig>) {
+pub fn _init_folded_code_v2((code, buffer): (String, Buffer)) -> (DocLines, RwSignal<EditorConfig>) {
     _init_lines(Some(vec![FoldingDisplayItem {
         position: Position {
             line: 1,
@@ -97,11 +86,10 @@ pub fn _init_folded_code_v2() -> (DocLines, RwSignal<EditorConfig>) {
         },
         y: 0,
         ty: FoldingDisplayType::UnfoldEnd,
-    }]))
+    }]), (code, buffer))
 }
 
-fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>) -> (DocLines, RwSignal<EditorConfig>) {
-    let (code, buffer) = _init_code();
+fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String, Buffer)) -> (DocLines, RwSignal<EditorConfig>) {
     let folding = _init_lsp_folding_range();
     let hints = _init_inlay_hint(&buffer);
 
@@ -144,4 +132,8 @@ fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>) -> (DocLines, RwSignal<E
     }
     lines.log();
     (lines, config)
+}
+
+fn load_code(file: &Path) -> String {
+    std::fs::read_to_string(file).unwrap()
 }
