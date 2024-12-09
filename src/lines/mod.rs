@@ -1361,6 +1361,7 @@ impl DocLines {
         for visual_line in &self.visual_lines {
             warn!("{:?}", visual_line);
         }
+        warn!("screen_lines");
         for visual_line in &self.screen_lines.visual_lines {
             warn!("{:?}", visual_line);
         }
@@ -1480,16 +1481,16 @@ type ComputeLines = DocLines;
 
 impl ComputeLines {
 
-    /// return (visual line of offset, offset of visual line, offset of folded line, is last char, position of cursor, screen line, line_height)
+    /// return (visual line of offset, offset of visual line, offset of folded line, is last char, position of cursor, line_height)
     ///
     /// last_char should be check in future
     pub fn cursor_position_of_buffer_offset(
         &self,
         offset: usize,
         affinity: CursorAffinity,
-    ) -> (VisualLine, usize, usize, bool, Point, Option<VisualLineInfo>, f64) {
+    ) -> (VisualLine, usize, usize, bool, Option<Point>, f64) {
         let (vl, offset_of_visual, offset_folded, last_char) = self.visual_line_of_offset(offset, affinity);
-        let point = hit_position_aff(
+        let mut point = hit_position_aff(
             &vl.text_layout.text,
             offset_folded,
             true,
@@ -1498,7 +1499,15 @@ impl ComputeLines {
         let line_height = self.screen_lines.line_height;
         let screen_line = self.screen_lines.visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index).cloned();
 
-        (vl, offset_of_visual, offset_folded, last_char, point, screen_line, line_height)
+        let point = if let Some(screen_line) = &screen_line {
+            point.y = self.viewport.y0 + screen_line.vline_y;
+            Some(point)
+        } else {
+            None
+        };
+
+
+        (vl, offset_of_visual, offset_folded, last_char, point, line_height)
     }
 }
 

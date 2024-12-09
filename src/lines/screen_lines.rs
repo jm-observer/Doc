@@ -73,6 +73,7 @@ impl ScreenLines {
     }
 
     pub fn visual_line_of_y(&self, y: f64) -> &VisualLineInfo {
+        let y = y - self.base.y0;
         for vli in &self.visual_lines {
             if vli.y <= y && y < vli.y + self.line_height {
                 return vli;

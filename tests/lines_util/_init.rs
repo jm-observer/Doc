@@ -130,7 +130,6 @@ fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String,
             lines.update_folding_ranges(folded.into());
         }
     }
-    lines.log();
     (lines, config)
 }
 

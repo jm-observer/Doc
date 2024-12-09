@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use floem::kurbo::Point;
+use floem::kurbo::{Point, Rect};
 use floem_editor_core::cursor::{CursorAffinity, CursorMode};
 use crate::lines_util::{_init_code, _init_origin_code};
 
@@ -32,15 +32,24 @@ fn test_buffer_offset_of_click() {
     }
 }
 
-#[test]
-fn test_next_visual_line() {
-    custom_utils::logger::logger_stdout_debug();
-    let file: PathBuf = "resources/test_code/main.rs".into();
-    let (lines, _) = _init_origin_code(_init_code(file));
 
-    //move to last line
+#[test]
+fn test_buffer_offset_of_click_2() {
+    custom_utils::logger::logger_stdout_debug();
+    let file: PathBuf = "resources/test_code/main_2.rs".into();
+    let (mut lines, _) = _init_origin_code(_init_code(file));
+
+    // scroll 23 line { x0: 0.0, y0: 480.0, x1: 606.8886108398438, y1: 1018.1586303710938 }
+    lines.update_viewport(Rect::new(0.0, 480.0, 606.8, 1018.1));
+    //below end of buffer
     {
-        let (visual_line, _, _) = lines.next_visual_line(8, 9 , CursorAffinity::Backward);
-        assert_eq!(visual_line.line_index, 9);
+        // single_click (144.00931549072266, 632.1586074829102) new_offset=480
+        let (offset_of_buffer, is_inside) = lines.buffer_offset_of_click(&CursorMode::Normal(0), Point::new(186.0, 608.1));
+        lines.log();
+        assert_eq!(offset_of_buffer, 456);
+        assert_eq!(is_inside, false);
+
+        let (_, _, _, _, point, _, _) = lines.cursor_position_of_buffer_offset(offset_of_buffer, CursorAffinity::Forward);
+        assert_eq!(point.y, 118.0 + lines.viewport().y0);
     }
 }
