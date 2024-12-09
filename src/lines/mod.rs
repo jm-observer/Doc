@@ -1707,10 +1707,12 @@ impl UpdateLines {
         self.init_diagnostics_with_buffer();
         self.update();
     }
-    pub fn update_viewport(&mut self, viewport: Rect) {
+    pub fn update_viewport_by_scroll(&mut self, viewport: Rect) {
         if self.viewport != viewport {
             self.viewport = viewport;
-            self.update();
+            let screen_lines = self._compute_screen_lines();
+            self.screen_lines = screen_lines.clone();
+            self.trigger_screen_lines(screen_lines);
         }
     }
 
