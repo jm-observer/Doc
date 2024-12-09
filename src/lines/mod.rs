@@ -1219,15 +1219,10 @@ impl DocLines {
 
     fn update_with_trigger_buffer(&mut self, trigger_buffer: bool) {
         self.update_lines();
-        let screen_lines = self._compute_screen_lines();
-        self.screen_lines = screen_lines.clone();
-
-        let folding_items = self.folding_ranges.to_display_items(&screen_lines);
-        self.folding_items = folding_items.clone();
-
         batch(|| {
-            self.trigger_folding_items(folding_items);
-            self.trigger_screen_lines(screen_lines);
+            // don't change the sort of statements
+            self.trigger_screen_lines();
+            self.trigger_folding_items();
             self.trigger_buffer_rev(self.buffer.rev());
             if trigger_buffer {
                 self.trigger_buffer(self.buffer.clone());
@@ -1718,9 +1713,8 @@ impl UpdateLines {
     pub fn update_viewport_by_scroll(&mut self, viewport: Rect) {
         if self.viewport != viewport {
             self.viewport = viewport;
-            let screen_lines = self._compute_screen_lines();
-            self.screen_lines = screen_lines.clone();
-            self.trigger_screen_lines(screen_lines);
+            self.trigger_screen_lines();
+            self.trigger_folding_items();
         }
     }
 
@@ -1953,14 +1947,18 @@ type LinesSignals = DocLines;
 #[allow(dead_code)]
 /// 以界面为单位，进行触发。
 impl LinesSignals {
-    pub fn trigger_screen_lines(&mut self, screen_lines: ScreenLines) {
+    pub fn trigger_screen_lines(&mut self) {
+        let screen_lines = self._compute_screen_lines();
+        self.screen_lines = screen_lines.clone();
         self.signals.screen_lines_signal.set(screen_lines);
     }
     pub fn screen_lines_signal(&self) -> ReadSignal<ScreenLines> {
         self.signals.screen_lines_signal.read_only()
     }
 
-    pub fn trigger_folding_items(&mut self, folding_items: Vec<FoldingDisplayItem>) {
+    pub fn trigger_folding_items(&mut self) {
+        let folding_items = self.folding_ranges.to_display_items(&self.screen_lines);
+        self.folding_items = folding_items.clone();
         self.signals.folding_items_signal.set(folding_items);
     }
 
