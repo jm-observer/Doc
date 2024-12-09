@@ -7,6 +7,7 @@ use smallvec::SmallVec;
 
 use floem_editor_core::cursor::CursorAffinity;
 use log::{info, warn};
+use lsp_types::Position;
 
 
 /// `PhantomText` is for text that is not in the actual document, but should be rendered with it.
@@ -194,6 +195,7 @@ pub enum PhantomTextKind {
         next_line: Option<usize>,
         // 被折叠的长度
         len: usize,
+        start_position: Position
     },
     // 折叠的起始位置。折叠是否跨行、结束位置的行、列位置
     // CrossLineFoldedRangStart {

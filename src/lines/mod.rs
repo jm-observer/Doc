@@ -121,6 +121,7 @@ impl DocLinesManager {
     }
 
     pub fn update(&self, f: impl FnOnce(&mut DocLines)) {
+        // not remove `batch`!
         batch(|| {
             self.lines.update(f);
         });
@@ -130,6 +131,7 @@ impl DocLinesManager {
         &self,
         f: impl FnOnce(&mut DocLines) -> O,
     ) -> Option<O> {
+        // not remove `batch`!
         batch(|| self.lines.try_update(f))
     }
 
@@ -548,10 +550,10 @@ impl DocLines {
         let offset_of_buffer = self.buffer.offset_of_line_col(origin_line, origin_col);
         (offset_of_buffer, hit_point.is_inside)
     }
-    pub fn inlay_hint_of_click(
-        &self,
+    pub fn result_of_left_click(
+        &mut self,
         point: Point,
-    ) -> FindHintRs {
+    ) -> ClickResult {
         let info = self.screen_lines.visual_line_of_y(point.y);
         let text_layout = &info.visual_line.text_layout;
         let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
@@ -583,13 +585,16 @@ impl DocLines {
                         }
                         None
                     }) {
-                        return FindHintRs::Match(location);
+                        return ClickResult::MatchHint(location);
                     }
                 }
+            } else if let PhantomTextKind::LineFoldedRang { start_position, .. } = phantom.kind {
+                self.update_folding_ranges(start_position.into());
+                return ClickResult::MatchFolded;
             }
-            FindHintRs::MatchWithoutLocation
+            ClickResult::MatchWithoutLocation
         } else {
-            FindHintRs::NoHint
+            ClickResult::NoHint
         }
     }
 
@@ -1726,6 +1731,9 @@ impl UpdateLines {
             UpdateFolding::New(ranges) => {
                 self.folding_ranges.update_ranges(ranges);
             }
+            UpdateFolding::UpdateByPhantom(position) => {
+                self.folding_ranges.update_by_phantom(position);
+            }
         }
         self.update();
     }
@@ -2034,8 +2042,9 @@ pub trait RopeTextPosition: RopeText {
 impl<T: RopeText> RopeTextPosition for T {}
 
 #[derive(Debug)]
-pub enum FindHintRs {
+pub enum ClickResult {
     NoHint,
     MatchWithoutLocation,
-    Match(Location),
+    MatchFolded,
+    MatchHint(Location),
 }

@@ -7,6 +7,7 @@ use im::HashMap;
 use lsp_types::Position;
 use serde::{Deserialize, Serialize};
 use crate::lines::screen_lines::ScreenLines;
+
 #[derive(Default, Clone)]
 pub struct FoldingRanges(pub Vec<FoldingRange>);
 
@@ -162,6 +163,17 @@ impl FoldingRanges {
             }
         }
     }
+
+    pub fn update_by_phantom(&mut self, position: Position) {
+        self.0.iter_mut().find_map(|range| {
+            if range.start == position {
+                range.status.click();
+                Some(())
+            } else {
+                None
+            }
+        });
+    }
 }
 
 impl FoldedRanges {
@@ -282,7 +294,7 @@ impl FoldedRange {
                 start_line_len - start
             };
             Some(PhantomText {
-                kind: PhantomTextKind::LineFoldedRang { next_line, len },
+                kind: PhantomTextKind::LineFoldedRang { next_line, len, start_position: self.start },
                 col: start,
                 text,
                 affinity: None,
@@ -299,7 +311,7 @@ impl FoldedRange {
             Some(PhantomText {
                 kind: PhantomTextKind::LineFoldedRang {
                     next_line: None,
-                    len: self.end.character as usize,
+                    len: self.end.character as usize, start_position: self.start
                 },
                 col: 0,
                 text,
@@ -381,6 +393,7 @@ impl FoldingRangeStatus {
         *self == Self::Fold
     }
 }
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct FoldingDisplayItem {
     pub position: Position,
