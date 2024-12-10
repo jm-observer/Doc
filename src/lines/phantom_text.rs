@@ -327,6 +327,7 @@ impl PhantomTextLine {
 /// 3. 所有的原始字符都归属某个Text
 #[derive(Debug, Default, Clone)]
 pub struct PhantomTextMultiLine {
+    /// 原始文本的行号
     pub line: usize,
     pub last_line: usize,
     // line行起点在文本中的偏移
@@ -1287,6 +1288,14 @@ mod test {
 
     #[test]
     fn check_col_at() {
+
+        {
+            // "0         10        20        30
+            // "0123456789012345678901234567890123456789
+            // "    let a = A;nr
+            // let line = PhantomTextMultiLine::new(let_data());
+            // line.col_at(8).is_some()
+        }
         // "0         10        20        30
         // "0123456789012345678901234567890123456789
         // "    if true {nr    } else {nr    }nr"

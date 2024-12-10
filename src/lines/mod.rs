@@ -1410,6 +1410,9 @@ impl DocLines {
             self.viewport,
             self.buffer.text().len()
         );
+        warn!(
+            "{:?}",self.config.get_untracked()
+        );
         for origin_folded_line in &self.origin_folded_lines {
             warn!("{:?}", origin_folded_line);
         }
@@ -1433,48 +1436,49 @@ impl DocLines {
     fn apply_diagnostic_styles(
         &self,
         layout_line: &mut TextLayoutLine,
-        config: &EditorConfig,
+        _config: &EditorConfig,
         line_styles: Vec<(usize, usize, Color)>,
-        max_severity: Option<DiagnosticSeverity>,
+        _max_severity: Option<DiagnosticSeverity>,
     ) {
         let layout = &mut layout_line.text;
         let phantom_text = &layout_line.phantom_text;
+
         // 暂不考虑
         for (start, end, color) in line_styles {
-            let Some(start) = phantom_text.col_at(start) else {
-                continue;
-            };
-            let Some(end) = phantom_text.col_at(end) else {
+            // col_at(end)可以为空，因为end是不包含的
+            let (Some(start), Some(end)) = (phantom_text.col_at(start), phantom_text.col_at(end - 1)) else {
+                warn!("line={} start={start}, end={end}, color={color:?} col_at empty", phantom_text.line);
                 continue;
             };
             let styles =
-                util::extra_styles_for_range(layout, start, end, None, None, Some(color));
+                util::extra_styles_for_range(layout, start, end + 1, None, None, Some(color));
             layout_line.extra_style.extend(styles);
         }
 
+        // 不要背景色，因此暂时comment
         // Add the styling for the diagnostic severity, if applicable
-        if let Some(max_severity) = max_severity {
-            let size = layout_line.text.size();
-            let x1 = if !config.error_lens_end_of_line {
-                let error_end_x = size.width;
-                Some(error_end_x.max(size.width))
-            } else {
-                None
-            };
-
-            // TODO(minor): Should we show the background only on wrapped lines that have the
-            // diagnostic actually on that line?
-            // That would make it more obvious where it is from and matches other editors.
-            layout_line.extra_style.push(LineExtraStyle {
-                x: 0.0,
-                y: 0.0,
-                width: x1,
-                height: size.height,
-                bg_color: Some(config.color_of_error_lens(max_severity)),
-                under_line: None,
-                wave_line: None,
-            });
-        }
+        // if let Some(max_severity) = max_severity {
+        //     let size = layout_line.text.size();
+        //     let x1 = if !config.error_lens_end_of_line {
+        //         let error_end_x = size.width;
+        //         Some(error_end_x.max(size.width))
+        //     } else {
+        //         None
+        //     };
+        //
+        //     // TODO(minor): Should we show the background only on wrapped lines that have the
+        //     // diagnostic actually on that line?
+        //     // That would make it more obvious where it is from and matches other editors.
+        //     layout_line.extra_style.push(LineExtraStyle {
+        //         x: 0.0,
+        //         y: 0.0,
+        //         width: x1,
+        //         height: size.height,
+        //         bg_color: Some(config.color_of_error_lens(max_severity)),
+        //         under_line: None,
+        //         wave_line: None,
+        //     });
+        // }
     }
 
     /// return (line,start, end, color)
@@ -1486,7 +1490,10 @@ impl DocLines {
         max_severity: &mut Option<DiagnosticSeverity>,
         line_offset: usize,
     ) -> Vec<(usize, usize, Color)> {
-        self.diagnostics.diagnostics_span.with_untracked(|diags| {
+        config
+            .enable_error_lens
+            .then_some(())
+            .map(|_|self.diagnostics.diagnostics_span.with_untracked(|diags| {
             diags
                 .iter_chunks(start_offset..end_offset)
                 .filter_map(|(iv, diag)| {
@@ -1519,7 +1526,7 @@ impl DocLines {
                     }
                 })
                 .collect()
-        })
+        })).unwrap_or_default()
     }
     fn update_inlay_hints(&mut self, delta: &RopeDelta) {
         if let Some(hints) = self.inlay_hints.as_mut() {
