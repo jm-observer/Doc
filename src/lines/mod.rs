@@ -21,17 +21,11 @@ use phantom_text::{
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
 use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent, VLine, VLineInfo};
-use floem_editor_core::buffer::{Buffer, InvalLines};
-use floem_editor_core::buffer::rope_text::RopeText;
 use floem_editor_core::command::EditCommand;
-use floem_editor_core::cursor::{Cursor, CursorAffinity, CursorMode};
-use floem_editor_core::editor::{Action, EditConf, EditType};
 use floem_editor_core::indent::IndentStyle;
 use floem_editor_core::line_ending::LineEnding;
 use floem_editor_core::mode::MotionMode;
 use floem_editor_core::register::Register;
-use floem_editor_core::selection::Selection;
-use floem_editor_core::word::{CharClassification, get_char_property};
 use itertools::Itertools;
 use lapce_xi_rope::{Interval, Rope, RopeDelta, Transformer};
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
@@ -45,24 +39,36 @@ use style::NewLineStyle;
 use crate::{DiagnosticData, EditorViewKind};
 use crate::lines::action::UpdateFolding;
 use crate::config::EditorConfig;
+use crate::lines::buffer::{Buffer, InvalLines};
+use crate::lines::buffer::rope_text::RopeText;
+use crate::lines::cursor::{Cursor, CursorAffinity, CursorMode};
+use crate::lines::edit::{Action, EditConf, EditType};
 use crate::lines::encoding::{offset_utf16_to_utf8, offset_utf8_to_utf16};
 use crate::lines::fold::{FoldingDisplayItem, FoldingRanges};
 use crate::lines::phantom_text::Text;
 use crate::lines::screen_lines::{ScreenLines};
+use crate::lines::selection::Selection;
+use crate::lines::word::{CharClassification, get_char_property};
 use crate::syntax::{BracketParser, Syntax};
 use crate::syntax::edit::SyntaxEdit;
 
-mod action;
+pub mod action;
 pub mod diff;
 pub mod fold;
 pub mod screen_lines;
-mod encoding;
+pub mod encoding;
 pub mod line;
-mod util;
+pub mod util;
 mod signal;
 mod style;
 pub mod phantom_text;
 pub mod layout;
+pub mod edit;
+pub mod buffer;
+pub mod indent;
+pub mod cursor;
+pub mod word;
+pub mod selection;
 
 // /// Minimum width that we'll allow the view to be wrapped at.
 // const MIN_WRAPPED_WIDTH: f32 = 100.0;
@@ -1206,10 +1212,10 @@ impl DocLines {
     // }
 
     fn update(&mut self) {
-        self.update_with_trigger_buffer(false)
+        self.update_with_trigger_buffer()
     }
 
-    fn update_with_trigger_buffer(&mut self, trigger_buffer: bool) {
+    fn update_with_trigger_buffer(&mut self) {
         self.update_lines();
         batch(|| {
             // don't change the sort of statements
@@ -1588,14 +1594,14 @@ impl UpdateLines {
         let rs = self.buffer.edit(iter, edit_type);
         self.apply_delta(&rs.1);
         self.on_update_buffer();
-        self.update_with_trigger_buffer(true);
+        self.update_with_trigger_buffer();
         rs
     }
     pub fn reload_buffer(&mut self, content: Rope, set_pristine: bool) -> (Rope, RopeDelta, InvalLines) {
         let rs = self.buffer.reload(content, set_pristine);
         self.apply_delta(&rs.1);
         self.on_update_buffer();
-        self.update_with_trigger_buffer(true);
+        self.update_with_trigger_buffer();
         rs
     }
 
@@ -1619,7 +1625,7 @@ impl UpdateLines {
             self.apply_delta(&delta.1);
         }
         self.on_update_buffer();
-        self.update_with_trigger_buffer(true);
+        self.update_with_trigger_buffer();
         rs
     }
 
@@ -1657,7 +1663,7 @@ impl UpdateLines {
             }
         }
         self.on_update_buffer();
-        self.update_with_trigger_buffer(true);
+        self.update_with_trigger_buffer();
         deltas
     }
 
@@ -1685,7 +1691,7 @@ impl UpdateLines {
             self.apply_delta(&delta.1);
         }
         self.on_update_buffer();
-        self.update_with_trigger_buffer(true);
+        self.update_with_trigger_buffer();
         deltas
     }
 

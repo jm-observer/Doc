@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 floem = { path="../floem" }
-floem-editor-core = {  path="../floem/editor-core"  }
+floem-editor-core = {  path="../floem/editor-core", features = ["serde"] }
 serde             = { version = "1.0" }
 serde_json        = { version = "1.0" }
 lsp-types = { version = "0.95.1", features = ["proposed"] }

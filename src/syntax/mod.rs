@@ -16,8 +16,6 @@ use std::{
 };
 
 use ahash::RandomState;
-use floem_editor_core::buffer::Buffer;
-use floem_editor_core::buffer::rope_text::RopeText;
 use floem_editor_core::util::{matching_bracket_general, matching_pair_direction};
 use hashbrown::raw::RawTable;
 use itertools::Itertools;
@@ -41,6 +39,8 @@ use self::{
 };
 use crate::{language::{self, LapceLanguage}, LineStyle, syntax::highlight::InjectionLanguageMarker};
 use crate::lens::{Lens, LensBuilder};
+use crate::lines::buffer::Buffer;
+use crate::lines::buffer::rope_text::RopeText;
 use crate::syntax::highlight::SCOPES;
 
 pub mod edit;

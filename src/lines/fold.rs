@@ -1,11 +1,11 @@
 use std::cmp::Ordering;
 use floem::peniko::Color;
 use super::phantom_text::{PhantomText, PhantomTextKind};
-use floem_editor_core::buffer::Buffer;
-use floem_editor_core::buffer::rope_text::RopeText;
 use im::HashMap;
 use lsp_types::Position;
 use serde::{Deserialize, Serialize};
+use crate::lines::buffer::Buffer;
+use crate::lines::buffer::rope_text::RopeText;
 use crate::lines::screen_lines::ScreenLines;
 
 #[derive(Default, Clone)]

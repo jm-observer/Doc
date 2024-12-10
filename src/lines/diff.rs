@@ -1,4 +1,4 @@
-use floem_editor_core::buffer::diff::DiffLines;
+use crate::lines::buffer::diff::DiffLines;
 
 #[derive(Clone)]
 pub struct DiffInfo {

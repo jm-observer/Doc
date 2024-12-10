@@ -1,4 +1,3 @@
-use floem_editor_core::buffer::Buffer;
 use floem_editor_core::char_buffer::CharBuffer;
 use floem_editor_core::word::WordCursor;
 use floem::kurbo::Rect;
@@ -11,8 +10,9 @@ use super::phantom_text::{PhantomText, PhantomTextKind};
 use super::layout::{LineExtraStyle, TextLayoutLine};
 use floem::text::TextLayout;
 use floem::reactive::SignalGet;
-use floem_editor_core::buffer::rope_text::RopeText;
 use crate::EditorViewKind;
+use crate::lines::buffer::Buffer;
+use crate::lines::buffer::rope_text::RopeText;
 use crate::lines::line::VisualLine;
 use crate::lines::screen_lines::{ScreenLines, VisualLineInfo};
 use crate::syntax::Syntax;

@@ -1,8 +1,8 @@
 use floem::reactive::{RwSignal, Scope};
 use floem::peniko::Color;
 use floem::kurbo::Rect;
-use floem_editor_core::buffer::Buffer;
 use floem::views::editor::EditorStyle;
+use crate::lines::buffer::Buffer;
 use crate::lines::fold::FoldingDisplayItem;
 use crate::lines::screen_lines::ScreenLines;
 

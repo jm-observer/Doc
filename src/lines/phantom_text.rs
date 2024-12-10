@@ -5,9 +5,9 @@ use floem::text::{Attrs, AttrsList};
 use lapce_xi_rope::Interval;
 use smallvec::SmallVec;
 
-use floem_editor_core::cursor::CursorAffinity;
 use log::{info, warn};
 use lsp_types::Position;
+use crate::lines::cursor::CursorAffinity;
 
 
 /// `PhantomText` is for text that is not in the actual document, but should be rendered with it.
@@ -888,6 +888,7 @@ mod test {
                     kind: PhantomTextKind::LineFoldedRang {
                         next_line: None,
                         len: 5,
+                        start_position: Default::default(),
                     },
                     line: 3,
                     final_col: 0,
@@ -899,7 +900,7 @@ mod test {
                 text.push(PhantomText {
                     kind: PhantomTextKind::LineFoldedRang {
                         next_line: Some(5),
-                        len: 3,
+                        len: 3,start_position: Default::default(),
                     },
                     line: 3,
                     final_col: 11,
@@ -914,7 +915,7 @@ mod test {
                 text.push(PhantomText {
                     kind: PhantomTextKind::LineFoldedRang {
                         next_line: None,
-                        len: 5,
+                        len: 5,start_position: Default::default(),
                     },
                     line: 5,
                     final_col: 0,
