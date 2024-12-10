@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
-use std::time::Duration;
 
 use floem::context::StyleCx;
 use floem::kurbo::{Point, Rect};
@@ -15,7 +14,7 @@ use floem::text::{
     Attrs, AttrsList, FamilyOwned, FONT_SYSTEM, LineHeightValue, TextLayout, Wrap,
 };
 use floem::views::editor::EditorStyle;
-use layout::{LineExtraStyle, TextLayoutLine};
+use layout::{TextLayoutLine};
 use floem::views::editor::listener::Listener;
 use phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
@@ -49,7 +48,7 @@ use crate::config::EditorConfig;
 use crate::lines::encoding::{offset_utf16_to_utf8, offset_utf8_to_utf16};
 use crate::lines::fold::{FoldingDisplayItem, FoldingRanges};
 use crate::lines::phantom_text::Text;
-use crate::lines::screen_lines::{ScreenLines, VisualLineInfo};
+use crate::lines::screen_lines::{ScreenLines};
 use crate::syntax::{BracketParser, Syntax};
 use crate::syntax::edit::SyntaxEdit;
 
@@ -94,7 +93,7 @@ impl DocLinesManager {
         parser: BracketParser,
         viewport: Rect,
         editor_style: EditorStyle,
-        config: ReadSignal<EditorConfig>,
+        config: EditorConfig,
         buffer: Buffer,
         kind: RwSignal<EditorViewKind>,
     ) -> Self {
@@ -176,7 +175,7 @@ pub struct DocLines {
     pub line_styles: HashMap<usize, Vec<NewLineStyle>>,
     pub editor_style: EditorStyle,
     viewport: Rect,
-    pub config: ReadSignal<EditorConfig>,
+    pub config: EditorConfig,
     pub buffer: Buffer,
     pub kind: RwSignal<EditorViewKind>,
     pub(crate) signals: Signals,
@@ -197,7 +196,7 @@ impl DocLines {
         parser: BracketParser,
         viewport: Rect,
         editor_style: EditorStyle,
-        config: ReadSignal<EditorConfig>,
+        config: EditorConfig,
         buffer: Buffer,
         kind: RwSignal<EditorViewKind>,
     ) -> Self {
@@ -278,12 +277,11 @@ impl DocLines {
         let mut current_line = 0;
         let mut origin_folded_line_index = 0;
         let mut visual_line_index = 0;
-        let config = self.config.get_untracked();
-        self.line_height = config.line_height;
+        self.line_height = self.config.line_height;
 
-        let font_size = config.font_size;
+        let font_size = self.config.font_size;
         let family = Cow::Owned(
-            FamilyOwned::parse_list(&config.font_family).collect(),
+            FamilyOwned::parse_list(&self.config.font_family).collect(),
         );
         let attrs = Attrs::new()
             .color(self.editor_style.ed_text_color())
@@ -300,7 +298,6 @@ impl DocLines {
                 current_line,
                 start_offset,
                 end_offset,
-                &config,
                 font_size,
                 attrs,
                 viewport,
@@ -771,7 +768,6 @@ impl DocLines {
     fn phantom_text(
         &self,
         line: usize,
-        config: &EditorConfig,
     ) -> PhantomTextLine {
         let (start_offset, end_offset) =
             (self.buffer.offset_of_line(line), self.buffer.offset_of_line(line + 1));
@@ -791,7 +787,7 @@ impl DocLines {
 
         // If hints are enabled, and the hints field is filled, then get the hints for this line
         // and convert them into PhantomText instances
-        let hints = config
+        let hints = self.config
             .enable_inlay_hints
             .then_some(())
             .and(self.inlay_hints.as_ref())
@@ -869,10 +865,10 @@ impl DocLines {
                     col,
                     text,
                     affinity,
-                    fg: Some(config.inlay_hint_fg),
-                    // font_family: Some(config.inlay_hint_font_family()),
-                    font_size: Some(config.inlay_hint_font_size()),
-                    bg: Some(config.inlay_hint_bg),
+                    fg: Some(self.config.inlay_hint_fg),
+                    // font_family: Some(self.config.inlay_hint_font_family()),
+                    font_size: Some(self.config.inlay_hint_font_size()),
+                    bg: Some(self.config.inlay_hint_bg),
                     under_line: None,
                     final_col: col,
                     line,
@@ -888,7 +884,7 @@ impl DocLines {
         // that end on this line which have a severity worse than HINT and convert them into
         // PhantomText instances
 
-        let mut diag_text: SmallVec<[PhantomText; 6]> = config
+        let mut diag_text: SmallVec<[PhantomText; 6]> = self.config
             .enable_error_lens
             .then_some(())
             .map(|_| self.diagnostics.diagnostics_span.get_untracked())
@@ -907,12 +903,12 @@ impl DocLines {
                                 let severity = diag
                                     .severity
                                     .unwrap_or(DiagnosticSeverity::WARNING);
-                                config.color_of_error_lens(severity)
+                                self.config.color_of_error_lens(severity)
                             };
 
-                            let text = if config.only_render_error_styling {
+                            let text = if self.config.only_render_error_styling {
                                 "".to_string()
-                            } else if config.error_lens_multiline {
+                            } else if self.config.error_lens_multiline {
                                 format!("    {}", diag.message)
                             } else {
                                 format!("    {}", diag.message.lines().join(" "))
@@ -924,7 +920,7 @@ impl DocLines {
                                 text,
                                 fg: Some(fg),
                                 font_size: Some(
-                                    config.error_lens_font_size(),
+                                    self.config.error_lens_font_size(),
                                 ),
                                 bg: None,
                                 under_line: None,
@@ -943,7 +939,7 @@ impl DocLines {
         text.append(&mut diag_text);
 
         let (completion_line, completion_col) = self.completion_pos;
-        let completion_text = config
+        let completion_text = self.config
             .enable_completion_lens
             .then_some(())
             .and(self.completion_lens.as_ref())
@@ -959,10 +955,10 @@ impl DocLines {
                 kind: PhantomTextKind::Completion,
                 col: completion_col,
                 text: completion.clone(),
-                fg: Some(config.completion_lens_foreground),
-                font_size: Some(config.completion_lens_font_size()),
+                fg: Some(self.config.completion_lens_foreground),
+                font_size: Some(self.config.completion_lens_font_size()),
                 affinity: Some(CursorAffinity::Backward),
-                // font_family: Some(config.editor.completion_lens_font_family()),
+                // font_family: Some(self.config.editor.completion_lens_font_family()),
                 bg: None,
                 under_line: None,
                 final_col: completion_col,
@@ -979,7 +975,7 @@ impl DocLines {
         // can
         // let (inline_completion_line, inline_completion_col) =
         //     self.inline_completion_pos;
-        let inline_completion_text = config
+        let inline_completion_text = self.config
             .enable_inline_completion
             .then_some(())
             .and(self.inline_completion.as_ref())
@@ -996,9 +992,9 @@ impl DocLines {
                     col: *inline_completion_col,
                     text: completion.clone(),
                     affinity: Some(CursorAffinity::Backward),
-                    fg: Some(config.completion_lens_foreground),
-                    font_size: Some(config.completion_lens_font_size()),
-                    // font_family: Some(config.completion_lens_font_family()),
+                    fg: Some(self.config.completion_lens_foreground),
+                    font_size: Some(self.config.completion_lens_font_size()),
+                    // font_family: Some(self.config.completion_lens_font_family()),
                     bg: None,
                     under_line: None,
                     final_col: *inline_completion_col,
@@ -1015,15 +1011,15 @@ impl DocLines {
         if let Some(preedit) = util::preedit_phantom(
             &self.preedit,
             &self.buffer,
-            Some(config.editor_foreground),
+            Some(self.config.editor_foreground),
             line,
         ) {
             text.push(preedit)
         }
 
-        let fg = config.inlay_hint_fg;
-        let font_size = config.inlay_hint_font_size();
-        let bg = config.inlay_hint_bg;
+        let fg = self.config.inlay_hint_fg;
+        let font_size = self.config.inlay_hint_font_size();
+        let bg = self.config.inlay_hint_bg;
         text.extend(
             folded_ranges.into_phantom_text(&self.buffer, line, font_size, fg, bg),
         );
@@ -1037,7 +1033,6 @@ impl DocLines {
         line: usize,
         start_offset: usize,
         end_offset: usize,
-        config: &EditorConfig,
         font_size: usize,
         attrs: Attrs,
         viewport: Rect,
@@ -1059,17 +1054,16 @@ impl DocLines {
         diagnostic_styles.extend(self.get_line_diagnostic_styles(
             start_offset,
             end_offset,
-            config,
             &mut max_severity,
             0,
         ));
 
-        let phantom_text = self.phantom_text(line, config);
+        let phantom_text = self.phantom_text(line);
         let mut collapsed_line_col = phantom_text.folded_line();
 
         let mut phantom_text = PhantomTextMultiLine::new(phantom_text);
         let mut attrs_list = AttrsList::new(attrs);
-        if let Some(styles) = self.line_styles(line, config) {
+        if let Some(styles) = self.line_styles(line) {
             for (start, end, color) in styles.into_iter() {
                 let (Some(start), Some(end)) =
                     (phantom_text.col_at(start), phantom_text.col_at(end))
@@ -1090,20 +1084,19 @@ impl DocLines {
 
             let offset_col = phantom_text.origin_text_len;
             let next_phantom_text =
-                self.phantom_text(collapsed_line, config);
+                self.phantom_text(collapsed_line);
             let start_offset = self.buffer.offset_of_line(collapsed_line);
             let end_offset = self.buffer.offset_of_line(collapsed_line + 1);
             collapsed_line_col = next_phantom_text.folded_line();
             diagnostic_styles.extend(self.get_line_diagnostic_styles(
                 start_offset,
                 end_offset,
-                config,
                 &mut max_severity,
                 offset_col,
             ));
 
             phantom_text.merge(next_phantom_text);
-            if let Some(styles) = self.line_styles(collapsed_line, config) {
+            if let Some(styles) = self.line_styles(collapsed_line) {
                 for (start, end, color) in styles.into_iter() {
                     let start = start + offset_col;
                     let end = end + offset_col;
@@ -1179,7 +1172,6 @@ impl DocLines {
         util::apply_layout_styles(&mut layout_line);
         self.apply_diagnostic_styles(
             &mut layout_line,
-            config,
             diagnostic_styles,
             max_severity,
         );
@@ -1298,16 +1290,15 @@ impl DocLines {
     fn line_styles(
         &mut self,
         line: usize,
-        config: &EditorConfig,
     ) -> Option<Vec<(usize, usize, Color)>> {
         let mut styles: Vec<(usize, usize, Color)> =
-            self.line_style(line, config)?;
+            self.line_style(line)?;
         if let Some(bracket_styles) = self.parser.bracket_pos.get(&line) {
             let mut bracket_styles = bracket_styles
                 .iter()
                 .filter_map(|bracket_style| {
                     if let Some(fg_color) = bracket_style.fg_color.as_ref() {
-                        if let Some(fg_color) = config.syntax_style_color(fg_color) {
+                        if let Some(fg_color) = self.config.syntax_style_color(fg_color) {
                             return Some((
                                 bracket_style.start,
                                 bracket_style.end,
@@ -1327,7 +1318,6 @@ impl DocLines {
     fn line_style(
         &mut self,
         line: usize,
-        config: &EditorConfig,
     ) -> Option<Vec<(usize, usize, Color)>> {
         // let styles = self.styles();
         let styles = self.line_styles.get(&line)?;
@@ -1336,7 +1326,7 @@ impl DocLines {
                 .iter()
                 .filter_map(|x| {
                     if let Some(fg) = &x.fg_color {
-                        if let Some(color) = config.syntax_style_color(fg) {
+                        if let Some(color) = self.config.syntax_style_color(fg) {
                             return Some((
                                 x.origin_line_offset_start,
                                 x.origin_line_offset_end,
@@ -1411,7 +1401,7 @@ impl DocLines {
             self.buffer.text().len()
         );
         warn!(
-            "{:?}",self.config.get_untracked()
+            "{:?}",self.config
         );
         for origin_folded_line in &self.origin_folded_lines {
             warn!("{:?}", origin_folded_line);
@@ -1436,7 +1426,6 @@ impl DocLines {
     fn apply_diagnostic_styles(
         &self,
         layout_line: &mut TextLayoutLine,
-        _config: &EditorConfig,
         line_styles: Vec<(usize, usize, Color)>,
         _max_severity: Option<DiagnosticSeverity>,
     ) {
@@ -1474,7 +1463,7 @@ impl DocLines {
         //         y: 0.0,
         //         width: x1,
         //         height: size.height,
-        //         bg_color: Some(config.color_of_error_lens(max_severity)),
+        //         bg_color: Some(self.config.color_of_error_lens(max_severity)),
         //         under_line: None,
         //         wave_line: None,
         //     });
@@ -1486,11 +1475,10 @@ impl DocLines {
         &self,
         start_offset: usize,
         end_offset: usize,
-        config: &EditorConfig,
         max_severity: &mut Option<DiagnosticSeverity>,
         line_offset: usize,
     ) -> Vec<(usize, usize, Color)> {
-        config
+        self.config
             .enable_error_lens
             .then_some(())
             .map(|_|self.diagnostics.diagnostics_span.with_untracked(|diags| {
@@ -1515,7 +1503,7 @@ impl DocLines {
                                 *max_severity = Some(severity);
                             }
                         }
-                        let color = config.color_of_diagnostic(severity)?;
+                        let color = self.config.color_of_diagnostic(severity)?;
                         Some((
                             start + line_offset - start_offset,
                             end + line_offset - start_offset,
@@ -1677,7 +1665,7 @@ impl UpdateLines {
         cursor: &mut Cursor,
         s: &str,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
-        let config = self.config.get_untracked();
+        let config = &self.config;
         let old_cursor = cursor.mode().clone();
         let syntax = &self.syntax;
         let deltas = Action::insert(
@@ -1722,6 +1710,13 @@ impl UpdateLines {
             self.viewport = viewport;
             self.trigger_screen_lines();
             self.trigger_folding_items();
+        }
+    }
+
+    pub fn update_config(&mut self, config: EditorConfig) {
+        if self.config != config {
+            self.config = config;
+            self.update();
         }
     }
 

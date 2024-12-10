@@ -119,9 +119,6 @@ impl OriginText {
 
     /// 视觉偏移的原始偏移
     pub fn origin_col_of_final_col(&self, final_col: usize) -> usize {
-        if self.final_col.contains(final_col) {
-
-        }
         final_col - self.final_col.start + self.col.start
     }
 }
