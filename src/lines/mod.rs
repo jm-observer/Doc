@@ -1215,12 +1215,13 @@ impl DocLines {
             // don't change the sort of statements
             self.trigger_screen_lines();
             self.trigger_folding_items();
-            self.trigger_buffer_rev(self.buffer.rev());
-            if trigger_buffer {
-                self.trigger_buffer(self.buffer.clone());
-            }
+            // self.trigger_buffer_rev(self.buffer.rev());
+            // if trigger_buffer {
+            //     self.trigger_buffer(self.buffer.clone());
+            // }
+            self.trigger_last_line(self.buffer.last_line() + 1);
         });
-        self.trigger_last_line(self.buffer.last_line() + 1);
+
     }
 
     // pub fn update_folding_ranges(&mut self, new: Vec<FoldingRange>) {
@@ -1964,12 +1965,12 @@ impl LinesSignals {
         self.signals.folding_items_signal.set(folding_items);
     }
 
-    pub fn trigger_buffer_rev(&mut self, buffer_rev: u64) {
-        self.signals.buffer_rev.set(buffer_rev);
-    }
-    pub fn trigger_buffer(&mut self, buffer: Buffer) {
-        self.signals.buffer.set(buffer);
-    }
+    // pub fn trigger_buffer_rev(&mut self, buffer_rev: u64) {
+    //     self.signals.buffer_rev.set(buffer_rev);
+    // }
+    // pub fn trigger_buffer(&mut self, buffer: Buffer) {
+    //     self.signals.buffer.set(buffer);
+    // }
 
     pub fn folding_items_signal(&self) -> ReadSignal<Vec<FoldingDisplayItem>> {
         self.signals.folding_items_signal.read_only()
