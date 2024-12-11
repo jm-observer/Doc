@@ -5,7 +5,7 @@ use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
 
 use floem::context::StyleCx;
-use floem::kurbo::{Point, Rect};
+use floem::kurbo::{Point, Rect, Size};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{
     batch, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
@@ -180,7 +180,7 @@ pub struct DocLines {
     pub parser: BracketParser,
     pub line_styles: HashMap<usize, Vec<NewLineStyle>>,
     pub editor_style: EditorStyle,
-    viewport: Rect,
+    viewport_size: Size,
     pub config: EditorConfig,
     pub buffer: Buffer,
     pub buffer_rev: u64,
@@ -218,7 +218,7 @@ impl DocLines {
             last_line,
             // font_size_cache_id: id,
             layout_event: Listener::new_empty(cx), // font_size_cache_id: id,
-            viewport,
+            viewport_size: viewport.size(),
             config,
             editor_style,
             origin_lines: vec![],
@@ -297,7 +297,6 @@ impl DocLines {
             .family(&family)
             .font_size(font_size as f32)
             .line_height(LineHeightValue::Px(self.line_height as f32));
-        let viewport = self.viewport;
         // let mut duration = Duration::from_secs(0);
         while current_line <= last_line {
             let start_offset = self.buffer.offset_of_line(current_line);
@@ -309,7 +308,6 @@ impl DocLines {
                 end_offset,
                 font_size,
                 attrs,
-                viewport,
             );
             // duration += time.elapsed().unwrap();
             let origin_line_start = text_layout.phantom_text.line;
@@ -1044,7 +1042,6 @@ impl DocLines {
         end_offset: usize,
         font_size: usize,
         attrs: Attrs,
-        viewport: Rect,
     ) -> Arc<TextLayoutLine> {
         // TODO: we could share text layouts between different editor views given some knowledge of
         let mut line_content = String::new();
@@ -1150,9 +1147,8 @@ impl DocLines {
         match self.editor_style.wrap_method() {
             WrapMethod::None => {}
             WrapMethod::EditorWidth => {
-                let width = viewport.width();
                 text_layout.set_wrap(Wrap::WordOrGlyph);
-                text_layout.set_size(width as f32, f32::MAX);
+                text_layout.set_size(self.viewport_size.width as f32, f32::MAX);
             }
             WrapMethod::WrapWidth { width } => {
                 text_layout.set_wrap(Wrap::WordOrGlyph);
@@ -1220,6 +1216,10 @@ impl DocLines {
 
     fn update_with_trigger_buffer(&mut self) {
         self.update_lines();
+        self.trigger_signals();
+    }
+
+    fn trigger_signals(&mut self) {
         batch(|| {
             // don't change the sort of statements
             self.trigger_screen_lines();
@@ -1227,7 +1227,6 @@ impl DocLines {
             self.trigger_buffer();
             self.trigger_last_line(self.buffer.last_line() + 1);
         });
-        self.buffer.set_pristine();
     }
 
     // pub fn update_folding_ranges(&mut self, new: Vec<FoldingRange>) {
@@ -1376,7 +1375,7 @@ impl DocLines {
         // TODO: this should probably be a get since we need to depend on line-height
         // let doc_lines = doc.doc_lines.get_untracked();
         let view_kind = self.kind.get_untracked();
-        let base = self.viewport;
+        let base = self.screen_lines.base;
 
         let line_height = self.line_height;
         let (y0, y1) = (base.y0, base.y1);
@@ -1386,7 +1385,7 @@ impl DocLines {
         let vline_infos = self.visual_lines(min_val, max_val);
         util::compute_screen_lines(
             view_kind,
-            self.viewport,
+            base,
             vline_infos,
             min_val,
             line_height,
@@ -1395,16 +1394,13 @@ impl DocLines {
     }
 
     pub fn viewport(&self) -> Rect {
-        self.viewport
-    }
-    pub fn screen_lines(&self) -> ScreenLines {
-        self.screen_lines.clone()
+        self.screen_lines.base
     }
 
     pub fn log(&self) {
         warn!(
             "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}]",
-            self.viewport, self.buffer.rev(),
+            self.viewport_size, self.buffer.rev(),
             self.buffer.text().len()
         );
         warn!(
@@ -1441,7 +1437,7 @@ impl DocLines {
 
         // 暂不考虑
         for (start, end, color) in line_styles {
-            warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
+            // warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
             // col_at(end)可以为空，因为end是不包含的
             let (Some(start), Some(end)) = (phantom_text.col_at(start), phantom_text.col_at(end - 1)) else {
                 warn!("line={} start={start}, end={end}, color={color:?} col_at empty", phantom_text.line);
@@ -1554,7 +1550,7 @@ impl ComputeLines {
         let screen_line = self.screen_lines.visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index).cloned();
 
         let point = if let Some(screen_line) = &screen_line {
-            point.y = self.viewport.y0 + screen_line.vline_y;
+            point.y = self.screen_lines.base.y0 + screen_line.vline_y;
             Some(point)
         } else {
             None
@@ -1696,7 +1692,6 @@ impl UpdateLines {
         deltas
     }
 
-
     pub fn update_semantic_styles(&mut self, semantic_styles: (Option<String>, Spans<String>), rev: u64) -> bool {
         if self.buffer.rev() != rev {
             return false;
@@ -1713,11 +1708,33 @@ impl UpdateLines {
         self.init_diagnostics_with_buffer();
         self.update();
     }
+
+    pub fn update_viewport_size(&mut self, viewport: Rect) {
+        let viewport_size  =viewport.size();
+        if self.viewport_size != viewport_size {
+            let should_update = matches!(self.editor_style.wrap_method(), WrapMethod::EditorWidth) && self.viewport_size.width != viewport_size.width;
+            self.viewport_size = viewport_size;
+            if should_update {
+                self.update_lines();
+            }
+            if self.screen_lines.base == Rect::ZERO {
+                self.update_viewport(viewport);
+            }
+            if should_update {
+            }
+        }
+    }
+
     pub fn update_viewport_by_scroll(&mut self, viewport: Rect) {
-        if self.viewport != viewport {
-            self.viewport = viewport;
+        self.update_viewport(viewport);
+    }
+
+    fn update_viewport(&mut self, viewport: Rect) {
+        if self.screen_lines.base != viewport {
+            self.screen_lines.base = viewport;
             self.trigger_screen_lines();
             self.trigger_folding_items();
+            self.trigger_viewport(viewport);
         }
     }
 
@@ -1962,7 +1979,7 @@ impl LinesSignals {
         self.screen_lines = screen_lines.clone();
         self.signals.screen_lines_signal.set(screen_lines);
     }
-    pub fn screen_lines_signal(&self) -> ReadSignal<ScreenLines> {
+    pub fn signal_screen_lines(&self) -> ReadSignal<ScreenLines> {
         self.signals.screen_lines_signal.read_only()
     }
 
@@ -1984,12 +2001,7 @@ impl LinesSignals {
     }
 
     fn trigger_viewport(&mut self, viewport: Rect) {
-        if self.viewport != viewport {
-            self.viewport = viewport;
-            self.signals.viewport.set(viewport);
-            self.update_lines();
-            // todo udpate screen_lines
-        }
+        self.signals.viewport.set(viewport);
     }
     pub fn signal_viewport(&self) -> ReadSignal<Rect> {
         self.signals.viewport.read_only()
