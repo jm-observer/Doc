@@ -12,7 +12,7 @@ pub struct Signals {
     pub(crate) viewport: SignalManager<Rect>,
     pub(crate) folding_items: SignalManager<Vec<FoldingDisplayItem>>,
     pub(crate) screen_lines: SignalManager<ScreenLines>,
-    pub(crate) buffer_rev: SignalManager<u64>,
+    buffer_rev: SignalManager<u64>,
     pub(crate) buffer: SignalManager<Buffer>,
     // start from 1
     pub(crate) last_line: SignalManager<usize>,
@@ -37,6 +37,14 @@ impl Signals {
         }
     }
 
+    pub fn update_buffer(&mut self, buffer: Buffer) {
+        self.buffer_rev.update_if_not_equal(buffer.rev());
+        self.buffer.update_force(buffer);
+    }
+
+    pub fn signal_buffer_rev(&self) -> ReadSignal<u64> {
+        self.buffer_rev.signal()
+    }
     pub fn trigger(&mut self) {
         batch(|| {
             self.show_indent_guide.trigger();
@@ -85,10 +93,13 @@ impl <V: Clone + 'static>SignalManager<V> {
 }
 
 impl<V: Clone + PartialEq + 'static> SignalManager<V> {
-    pub fn update_if_not_equal(&mut self, nv: V) {
+    pub fn update_if_not_equal(&mut self, nv: V) -> bool {
         if self.v != nv {
             self.v = nv;
             self.dirty = true;
+            true
+        } else {
+            false
         }
     }
 }

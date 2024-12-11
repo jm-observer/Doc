@@ -183,11 +183,11 @@ pub struct DocLines {
     viewport_size: Size,
     pub config: EditorConfig,
     pub buffer: Buffer,
-    pub buffer_rev: u64,
+    // pub buffer_rev: u64,
     pub kind: RwSignal<EditorViewKind>,
     pub(crate) signals: Signals,
     style_from_lsp: bool,
-    folding_items: Vec<FoldingDisplayItem>,
+    // folding_items: Vec<FoldingDisplayItem>,
     pub line_height: usize,
     // pub screen_lines: ScreenLines,
 
@@ -234,10 +234,9 @@ impl DocLines {
             parser,
             line_styles: Default::default(),
             buffer,
-            buffer_rev: 0,
             kind,
             style_from_lsp: false,
-            folding_items: Default::default(),
+            // folding_items: Default::default(),
             line_height: 0,
         };
         lines.update_lines();
@@ -273,9 +272,7 @@ impl DocLines {
         }
     }
 
-    fn on_update_lines(&mut self) {
-        self.signals.last_line.update_if_not_equal(self.buffer.last_line() + 1);
-    }
+
 
     fn update_lines(&mut self) {
         self.clear();
@@ -1208,14 +1205,6 @@ impl DocLines {
     //     self.update_lines();
     // }
 
-    fn update(&mut self) {
-        self.update_with_trigger_buffer()
-    }
-
-    fn update_with_trigger_buffer(&mut self) {
-        self.update_lines();
-        self.trigger_signals();
-    }
 
     fn trigger_signals(&mut self) {
         self.signals.trigger();
@@ -1409,7 +1398,7 @@ impl DocLines {
             warn!("{:?}", visual_line);
         }
         warn!("folding_items");
-        for item in &self.folding_items {
+        for item in self.signals.folding_items.val() {
             warn!("{:?}", item);
         }
         warn!("folding_ranges");
@@ -1517,6 +1506,16 @@ impl DocLines {
             hints.apply_shape(delta);
         }
     }
+
+    fn update_display_items(&mut self) {
+        let display_items = self.folding_ranges.to_display_items(self.screen_lines());
+        self.signals.folding_items.update_if_not_equal(display_items);
+    }
+
+    fn update_screen_lines(&mut self) {
+        let screen_lines = self._compute_screen_lines(*self.signals.viewport.val());
+        self.signals.screen_lines.update_force(screen_lines);
+    }
 }
 
 
@@ -1553,9 +1552,27 @@ impl ComputeLines {
     }
 }
 
-type UpdateLines = DocLines;
+type LinesOnUpdate = DocLines;
 
-impl UpdateLines {
+impl LinesOnUpdate {
+    fn on_update_buffer(&mut self) {
+        if self.syntax.styles.is_some() {
+            self.parser.update_code(&self.buffer, Some(&self.syntax));
+        } else {
+            self.parser.update_code(&self.buffer, None);
+        }
+        self.init_diagnostics_with_buffer();
+        self.signals.update_buffer(self.buffer.clone());
+    }
+
+    fn on_update_lines(&mut self) {
+        self.signals.last_line.update_if_not_equal(self.buffer.last_line() + 1);
+    }
+}
+
+type PubUpdateLines = DocLines;
+
+impl PubUpdateLines {
     pub fn init_buffer(&mut self, content: Rope) -> bool {
         self.buffer.init_content(content);
         self.buffer.detect_indent(|| {
@@ -1564,7 +1581,10 @@ impl UpdateLines {
         info!("line_ending {:?}", self.buffer.line_ending());
         // let time = std::time::SystemTime::now();
         self.on_update_buffer();
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
         // info!("update elapsed {:?}", time.elapsed().unwrap());
         true
     }
@@ -1572,7 +1592,10 @@ impl UpdateLines {
     pub fn set_line_ending(&mut self, line_ending: LineEnding) {
         self.buffer.set_line_ending(line_ending);
         self.on_update_buffer();
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
     }
 
     pub fn edit_buffer(
@@ -1583,14 +1606,20 @@ impl UpdateLines {
         let rs = self.buffer.edit(iter, edit_type);
         self.apply_delta(&rs.1);
         self.on_update_buffer();
-        self.update_with_trigger_buffer();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
         rs
     }
     pub fn reload_buffer(&mut self, content: Rope, set_pristine: bool) -> (Rope, RopeDelta, InvalLines) {
         let rs = self.buffer.reload(content, set_pristine);
         self.apply_delta(&rs.1);
         self.on_update_buffer();
-        self.update_with_trigger_buffer();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
         rs
     }
 
@@ -1614,7 +1643,10 @@ impl UpdateLines {
             self.apply_delta(&delta.1);
         }
         self.on_update_buffer();
-        self.update_with_trigger_buffer();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
         rs
     }
 
@@ -1652,7 +1684,10 @@ impl UpdateLines {
             }
         }
         self.on_update_buffer();
-        self.update_with_trigger_buffer();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
         deltas
     }
 
@@ -1680,7 +1715,11 @@ impl UpdateLines {
             self.apply_delta(&delta.1);
         }
         self.on_update_buffer();
-        self.update_with_trigger_buffer();
+
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
         deltas
     }
 
@@ -1689,16 +1728,25 @@ impl UpdateLines {
             return false;
         }
         self.semantic_styles = Some(semantic_styles);
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
         true
     }
     pub fn clear_completion_lens(&mut self) {
         self.completion_lens = None;
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
     }
     pub fn init_diagnostics(&mut self) {
         self.init_diagnostics_with_buffer();
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
     }
 
     pub fn update_viewport_size(&mut self, viewport: Rect) {
@@ -1708,45 +1756,40 @@ impl UpdateLines {
             self.viewport_size = viewport_size;
             if should_update {
                 self.update_lines();
+                self.on_update_lines();
             }
-            if self.screen_lines().base == Rect::ZERO {
-                self.update_viewport(viewport);
+            let should_update_viewport = *self.signals.viewport.val() == Rect::ZERO;
+            if should_update_viewport {
+                self.signals.viewport.update_force(viewport);
             }
-            if should_update {
+            if should_update_viewport || should_update {
+                self.update_screen_lines();
+                self.update_display_items();
             }
         }
-
         self.trigger_signals();
     }
 
     pub fn update_viewport_by_scroll(&mut self, viewport: Rect) {
-        self.update_viewport(viewport);
-        self.trigger_signals();
-    }
-
-    fn update_viewport(&mut self, viewport: Rect) {
-        if self.screen_lines().base != viewport {
-            let screen_lines = self._compute_screen_lines(viewport);
-            self.signals.screen_lines.update_force(screen_lines);
+        if self.signals.viewport.update_if_not_equal(viewport) {
+            self.update_screen_lines();
+            self.update_display_items();
+            self.trigger_signals();
         }
     }
 
     pub fn update_config(&mut self, config: EditorConfig) {
         if self.config != config {
             self.config = config;
-            self.update();
+            self.update_lines();
+            self.on_update_lines();
+            self.update_screen_lines();
+            self.update_display_items();
+            self.trigger_signals();
         }
     }
 
-    fn on_update_buffer(&mut self) {
-        if self.syntax.styles.is_some() {
-            self.parser.update_code(&self.buffer, Some(&self.syntax));
-        } else {
-            self.parser.update_code(&self.buffer, None);
-        }
-        self.init_diagnostics_with_buffer();
-        // self.update();
-    }
+
     pub fn update_folding_ranges(&mut self, action: UpdateFolding) {
         match action {
             UpdateFolding::UpdateByItem(item) => {
@@ -1759,7 +1802,11 @@ impl UpdateLines {
                 self.folding_ranges.update_by_phantom(position);
             }
         }
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
 
     pub fn update_inline_completion(&mut self, delta: &RopeDelta) {
@@ -1791,7 +1838,11 @@ impl UpdateLines {
         } else {
             self.inline_completion = Some((completion, new_pos.0, new_pos.1));
         }
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
 
     pub fn apply_delta(&mut self, delta: &RopeDelta) {
@@ -1806,8 +1857,11 @@ impl UpdateLines {
         self.update_diagnostics(delta);
         self.update_inlay_hints(delta);
         self.update_completion_lens(delta);
-        //
-        // self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
     pub fn trigger_syntax_change(
         &mut self,
@@ -1815,7 +1869,11 @@ impl UpdateLines {
     ) {
         self.syntax.cancel_flag.store(1, atomic::Ordering::Relaxed);
         self.syntax.cancel_flag = Arc::new(AtomicUsize::new(0));
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
     pub fn set_inline_completion(
         &mut self,
@@ -1824,12 +1882,20 @@ impl UpdateLines {
         col: usize,
     ) {
         self.inline_completion = Some((inline_completion, line, col));
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
 
     pub fn clear_inline_completion(&mut self) {
         self.inline_completion = None;
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
 
     pub fn set_syntax_with_rev(&mut self, syntax: Syntax, rev: u64) -> bool {
@@ -1862,13 +1928,21 @@ impl UpdateLines {
         };
         self.update_parser();
 
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
         true
     }
 
     pub fn set_inlay_hints(&mut self, inlay_hint: Spans<InlayHint>) {
         self.inlay_hints = Some(inlay_hint);
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
 
     pub fn set_completion_lens(
@@ -1879,7 +1953,11 @@ impl UpdateLines {
     ) {
         self.completion_lens = Some(completion_lens);
         self.completion_pos = (line, col);
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
 
     pub fn update_semantic_styles_from_lsp(
@@ -1902,7 +1980,11 @@ impl UpdateLines {
                     fg_color: Some(fg_color.clone()),
                 });
             });
-        self.update();
+        self.update_lines();
+        self.on_update_lines();
+        self.update_screen_lines();
+        self.update_display_items();
+        self.trigger_signals();
     }
 }
 
@@ -1980,7 +2062,7 @@ impl LinesSignals {
         self.signals.folding_items.signal()
     }
     pub fn signal_buffer_rev(&self) -> ReadSignal<u64> {
-        self.signals.buffer_rev.signal()
+        self.signals.signal_buffer_rev()
     }
     pub fn signal_buffer(&self) -> ReadSignal<Buffer> {
         self.signals.buffer.signal()
