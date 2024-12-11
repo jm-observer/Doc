@@ -189,9 +189,7 @@ pub struct DocLines {
     style_from_lsp: bool,
     folding_items: Vec<FoldingDisplayItem>,
     pub line_height: usize,
-    pub screen_lines: ScreenLines,
-    // start from 1
-    pub last_line: usize,
+    // pub screen_lines: ScreenLines,
 
 }
 
@@ -211,12 +209,9 @@ impl DocLines {
         let screen_lines = ScreenLines::new(cx, viewport, 0.0);
         let last_line = buffer.last_line() + 1;
         let signals =
-            Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone(), screen_lines.clone(), last_line);
+            Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone(), screen_lines, last_line);
         let mut lines = Self {
             signals,
-            screen_lines,
-            last_line,
-            // font_size_cache_id: id,
             layout_event: Listener::new_empty(cx), // font_size_cache_id: id,
             viewport_size: viewport.size(),
             config,
@@ -268,7 +263,6 @@ impl DocLines {
         self.visual_lines.clear();
         self.max_width = 0.0;
         self.line_height = 0;
-        self.last_line = 0;
     }
 
     fn update_parser(&mut self) {
@@ -277,6 +271,10 @@ impl DocLines {
         } else {
             self.parser.update_code(&self.buffer, None);
         }
+    }
+
+    fn on_update_lines(&mut self) {
+        self.signals.last_line.update_if_not_equal(self.buffer.last_line() + 1);
     }
 
     fn update_lines(&mut self) {
@@ -400,7 +398,7 @@ impl DocLines {
             current_line = origin_line_end + 1;
             origin_folded_line_index += 1;
         }
-        // info!("new_text_layout {:?}", duration);
+        self.on_update_lines();
     }
 
     // pub fn wrap(&self, viewport: Rect, es: &EditorStyle) -> ResolvedWrap {
@@ -543,7 +541,7 @@ impl DocLines {
         _mode: &CursorMode,
         point: Point,
     ) -> (usize, bool) {
-        let info = self.screen_lines.visual_line_of_y(point.y);
+        let info = self.signals.screen_lines.val().visual_line_of_y(point.y);
         // info.visual_line.origin_line
         let text_layout = &info.visual_line.text_layout;
         let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
@@ -563,7 +561,7 @@ impl DocLines {
         &mut self,
         point: Point,
     ) -> ClickResult {
-        let info = self.screen_lines.visual_line_of_y(point.y);
+        let info = self.screen_lines().visual_line_of_y(point.y);
         let text_layout = &info.visual_line.text_layout;
         let y = text_layout.get_layout_y(info.visual_line.origin_folded_line_sub_index).unwrap_or(0.0);
         let hit_point = text_layout.text.hit_point(Point::new(point.x, y as f64));
@@ -1220,13 +1218,7 @@ impl DocLines {
     }
 
     fn trigger_signals(&mut self) {
-        batch(|| {
-            // don't change the sort of statements
-            self.trigger_screen_lines();
-            self.trigger_folding_items();
-            self.trigger_buffer();
-            self.trigger_last_line(self.buffer.last_line() + 1);
-        });
+        self.signals.trigger();
     }
 
     // pub fn update_folding_ranges(&mut self, new: Vec<FoldingRange>) {
@@ -1371,11 +1363,11 @@ impl DocLines {
     //     line
     // }
 
-    fn _compute_screen_lines(&mut self) -> ScreenLines {
+    fn _compute_screen_lines(&mut self, base: Rect) -> ScreenLines {
         // TODO: this should probably be a get since we need to depend on line-height
         // let doc_lines = doc.doc_lines.get_untracked();
         let view_kind = self.kind.get_untracked();
-        let base = self.screen_lines.base;
+        // let base = self.screen_lines().base;
 
         let line_height = self.line_height;
         let (y0, y1) = (base.y0, base.y1);
@@ -1394,7 +1386,7 @@ impl DocLines {
     }
 
     pub fn viewport(&self) -> Rect {
-        self.screen_lines.base
+        self.screen_lines().base
     }
 
     pub fn log(&self) {
@@ -1413,7 +1405,7 @@ impl DocLines {
             warn!("{:?}", visual_line);
         }
         warn!("screen_lines");
-        for visual_line in &self.screen_lines.visual_lines {
+        for visual_line in &self.screen_lines().visual_lines {
             warn!("{:?}", visual_line);
         }
         warn!("folding_items");
@@ -1546,11 +1538,11 @@ impl ComputeLines {
             true,
         )
             .point;
-        let line_height = self.screen_lines.line_height;
-        let screen_line = self.screen_lines.visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index).cloned();
+        let line_height = self.screen_lines().line_height;
+        let screen_line = self.screen_lines().visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index).cloned();
 
         let point = if let Some(screen_line) = &screen_line {
-            point.y = self.screen_lines.base.y0 + screen_line.vline_y;
+            point.y = self.screen_lines().base.y0 + screen_line.vline_y;
             Some(point)
         } else {
             None
@@ -1717,24 +1709,25 @@ impl UpdateLines {
             if should_update {
                 self.update_lines();
             }
-            if self.screen_lines.base == Rect::ZERO {
+            if self.screen_lines().base == Rect::ZERO {
                 self.update_viewport(viewport);
             }
             if should_update {
             }
         }
+
+        self.trigger_signals();
     }
 
     pub fn update_viewport_by_scroll(&mut self, viewport: Rect) {
         self.update_viewport(viewport);
+        self.trigger_signals();
     }
 
     fn update_viewport(&mut self, viewport: Rect) {
-        if self.screen_lines.base != viewport {
-            self.screen_lines.base = viewport;
-            self.trigger_screen_lines();
-            self.trigger_folding_items();
-            self.trigger_viewport(viewport);
+        if self.screen_lines().base != viewport {
+            let screen_lines = self._compute_screen_lines(viewport);
+            self.signals.screen_lines.update_force(screen_lines);
         }
     }
 
@@ -1947,17 +1940,14 @@ impl LinesEditorStyle {
     }
 
     pub fn update_editor_style(&mut self, cx: &mut StyleCx<'_>) -> bool {
-        let old_show_indent_guide = self.show_indent_guide();
         // todo
         let updated = self.editor_style.read(cx);
-
         let new_show_indent_guide = self.show_indent_guide();
-        if old_show_indent_guide != new_show_indent_guide {
-            self.trigger_show_indent_guide(new_show_indent_guide)
-        }
+        self.signals.show_indent_guide.update_if_not_equal(new_show_indent_guide);
         if updated {
             self.update_lines();
         }
+        self.trigger_signals();
         updated
     }
 
@@ -1969,70 +1959,44 @@ impl LinesEditorStyle {
     }
 }
 
+#[allow(dead_code)]
+/// 以界面为单位，进行触发。
+
 type LinesSignals = DocLines;
 
 #[allow(dead_code)]
 /// 以界面为单位，进行触发。
 impl LinesSignals {
-    pub fn trigger_screen_lines(&mut self) {
-        let screen_lines = self._compute_screen_lines();
-        self.screen_lines = screen_lines.clone();
-        self.signals.screen_lines_signal.set(screen_lines);
-    }
-    pub fn signal_screen_lines(&self) -> ReadSignal<ScreenLines> {
-        self.signals.screen_lines_signal.read_only()
-    }
-
-    pub fn trigger_folding_items(&mut self) {
-        let folding_items = self.folding_ranges.to_display_items(&self.screen_lines);
-        self.folding_items = folding_items.clone();
-        self.signals.folding_items_signal.set(folding_items);
-    }
-
-    pub fn trigger_buffer(&mut self) {
-        if !self.buffer.rev() != self.buffer_rev {
-            self.signals.buffer.set(self.buffer.clone());
-            self.signals.buffer_rev.set(self.buffer_rev);
-        }
-    }
-
-    pub fn folding_items_signal(&self) -> ReadSignal<Vec<FoldingDisplayItem>> {
-        self.signals.folding_items_signal.read_only()
-    }
-
-    fn trigger_viewport(&mut self, viewport: Rect) {
-        self.signals.viewport.set(viewport);
-    }
     pub fn signal_viewport(&self) -> ReadSignal<Rect> {
-        self.signals.viewport.read_only()
-    }
-    fn trigger_show_indent_guide(&self, show_indent_guide: (bool, Color)) {
-        self.signals.show_indent_guide.set(show_indent_guide);
+        self.signals.viewport.signal()
     }
     pub fn signal_show_indent_guide(&self) -> ReadSignal<(bool, Color)> {
-        self.signals.show_indent_guide.read_only()
+        self.signals.show_indent_guide.signal()
     }
-
+    pub fn signal_screen_lines(&self) -> ReadSignal<ScreenLines> {
+        self.signals.screen_lines.signal()
+    }
+    pub fn signal_folding_items(&self) -> ReadSignal<Vec<FoldingDisplayItem>> {
+        self.signals.folding_items.signal()
+    }
     pub fn signal_buffer_rev(&self) -> ReadSignal<u64> {
-        self.signals.buffer_rev.read_only()
+        self.signals.buffer_rev.signal()
     }
-
     pub fn signal_buffer(&self) -> ReadSignal<Buffer> {
-        self.signals.buffer.read_only()
-    }
-
-
-    fn trigger_last_line(&mut self, last_line: usize) {
-        if self.last_line != last_line {
-            self.last_line = last_line;
-            self.signals.last_line.set(last_line);
-        }
+        self.signals.buffer.signal()
     }
     pub fn signal_last_line(&self) -> ReadSignal<usize> {
-        self.signals.last_line.read_only()
+        self.signals.last_line.signal()
     }
 }
 
+type LinesProperty = DocLines;
+
+impl LinesProperty {
+    pub fn screen_lines(&self) -> &ScreenLines {
+        self.signals.screen_lines.val()
+    }
+}
 
 pub trait RopeTextPosition: RopeText {
     /// Converts a UTF8 offset to a UTF16 LSP position
