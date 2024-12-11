@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use floem::kurbo::{Point, Rect};
-use floem_editor_core::cursor::{CursorAffinity, CursorMode};
+use doc::lines::cursor::{CursorAffinity, CursorMode};
 use crate::lines_util::{_init_code, _init_origin_code};
 
 mod lines_util;
@@ -21,6 +21,7 @@ fn test_buffer_offset_of_click() {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/main.rs".into();
     let (lines, _) = _init_origin_code(_init_code(file));
+    lines.log();
 
     //below end of buffer
     {

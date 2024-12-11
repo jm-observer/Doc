@@ -183,6 +183,7 @@ pub struct DocLines {
     viewport: Rect,
     pub config: EditorConfig,
     pub buffer: Buffer,
+    pub buffer_rev: u64,
     pub kind: RwSignal<EditorViewKind>,
     pub(crate) signals: Signals,
     style_from_lsp: bool,
@@ -191,6 +192,7 @@ pub struct DocLines {
     pub screen_lines: ScreenLines,
     // start from 1
     pub last_line: usize,
+
 }
 
 impl DocLines {
@@ -237,6 +239,7 @@ impl DocLines {
             parser,
             line_styles: Default::default(),
             buffer,
+            buffer_rev: 0,
             kind,
             style_from_lsp: false,
             folding_items: Default::default(),
@@ -1221,13 +1224,10 @@ impl DocLines {
             // don't change the sort of statements
             self.trigger_screen_lines();
             self.trigger_folding_items();
-            // self.trigger_buffer_rev(self.buffer.rev());
-            // if trigger_buffer {
-            //     self.trigger_buffer(self.buffer.clone());
-            // }
+            self.trigger_buffer();
             self.trigger_last_line(self.buffer.last_line() + 1);
         });
-
+        self.buffer.set_pristine();
     }
 
     // pub fn update_folding_ranges(&mut self, new: Vec<FoldingRange>) {
@@ -1403,8 +1403,8 @@ impl DocLines {
 
     pub fn log(&self) {
         warn!(
-            "DocLines viewport={:?} buffer.len()=[{}]",
-            self.viewport,
+            "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}]",
+            self.viewport, self.buffer.rev(),
             self.buffer.text().len()
         );
         warn!(
@@ -1441,6 +1441,7 @@ impl DocLines {
 
         // 暂不考虑
         for (start, end, color) in line_styles {
+            warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
             // col_at(end)可以为空，因为end是不包含的
             let (Some(start), Some(end)) = (phantom_text.col_at(start), phantom_text.col_at(end - 1)) else {
                 warn!("line={} start={start}, end={end}, color={color:?} col_at empty", phantom_text.line);
@@ -1971,12 +1972,12 @@ impl LinesSignals {
         self.signals.folding_items_signal.set(folding_items);
     }
 
-    // pub fn trigger_buffer_rev(&mut self, buffer_rev: u64) {
-    //     self.signals.buffer_rev.set(buffer_rev);
-    // }
-    // pub fn trigger_buffer(&mut self, buffer: Buffer) {
-    //     self.signals.buffer.set(buffer);
-    // }
+    pub fn trigger_buffer(&mut self) {
+        if !self.buffer.rev() != self.buffer_rev {
+            self.signals.buffer.set(self.buffer.clone());
+            self.signals.buffer_rev.set(self.buffer_rev);
+        }
+    }
 
     pub fn folding_items_signal(&self) -> ReadSignal<Vec<FoldingDisplayItem>> {
         self.signals.folding_items_signal.read_only()
