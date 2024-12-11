@@ -56,6 +56,18 @@ impl Signals {
             self.last_line.trigger();
         });
     }
+
+    pub fn trigger_force(&mut self) {
+        batch(|| {
+            self.show_indent_guide.trigger_force();
+            self.viewport.trigger_force();
+            self.folding_items.trigger_force();
+            self.screen_lines.trigger_force();
+            self.buffer_rev.trigger_force();
+            self.buffer.trigger_force();
+            self.last_line.trigger_force();
+        });
+    }
 }
 
 #[derive(Clone)]
@@ -82,6 +94,11 @@ impl <V: Clone + 'static>SignalManager<V> {
             self.signal.set(self.v.clone());
             self.dirty = false;
         }
+    }
+
+    pub fn trigger_force(&mut self) {
+            self.signal.set(self.v.clone());
+            self.dirty = false;
     }
 
     pub fn signal(&self) -> ReadSignal<V>{

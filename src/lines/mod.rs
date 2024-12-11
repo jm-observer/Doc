@@ -1210,6 +1210,10 @@ impl DocLines {
         self.signals.trigger();
     }
 
+    pub fn trigger_signals_force(&mut self) {
+        self.signals.trigger_force();
+    }
+
     // pub fn update_folding_ranges(&mut self, new: Vec<FoldingRange>) {
     //     self.folding_ranges.update_ranges(new);
     //     self.update_lines();
