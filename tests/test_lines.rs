@@ -1,7 +1,17 @@
+#![allow(unused_imports, dead_code)]
 use std::path::PathBuf;
+use std::sync::atomic;
 use floem::kurbo::{Point, Rect};
-use doc::lines::cursor::{CursorAffinity, CursorMode};
-use crate::lines_util::{_init_code, _init_origin_code};
+use floem::reactive::SignalUpdate;
+use floem_editor_core::command::EditCommand;
+use floem_editor_core::register::Register;
+use lapce_xi_rope::Interval;
+use lapce_xi_rope::spans::SpansBuilder;
+use log::info;
+use doc::lines::buffer::rope_text::RopeText;
+use doc::lines::cursor::{Cursor, CursorAffinity, CursorMode};
+use doc::lines::selection::Selection;
+use crate::lines_util::{_init_code, _init_origin_code, init_main_2, init_semantic_2};
 
 mod lines_util;
 
@@ -48,8 +58,7 @@ fn test_buffer_offset_of_click() {
 #[test]
 fn test_buffer_offset_of_click_2() {
     custom_utils::logger::logger_stdout_debug();
-    let file: PathBuf = "resources/test_code/main_2.rs".into();
-    let (mut lines, _) = _init_origin_code(_init_code(file));
+    let mut lines = init_main_2();
 
     // scroll 23 line { x0: 0.0, y0: 480.0, x1: 606.8886108398438, y1: 1018.1586303710938 }
     lines.update_viewport_by_scroll(Rect::new(0.0, 480.0, 606.8, 1018.1));
@@ -61,7 +70,36 @@ fn test_buffer_offset_of_click_2() {
         assert_eq!(offset_of_buffer, 456);
         assert_eq!(is_inside, false);
 
-        let (_, _, _, _, point, _) = lines.cursor_position_of_buffer_offset(offset_of_buffer, CursorAffinity::Forward);
+        let (_, _, _, _, point, _, _) = lines.cursor_position_of_buffer_offset(offset_of_buffer, CursorAffinity::Forward);
         assert_eq!(point.unwrap().y, 118.0 + lines.viewport().y0);
     }
+}
+
+#[test]
+fn test_buffer_edit() {
+    custom_utils::logger::logger_stdout_debug();
+    let mut lines = init_main_2();
+
+    info!("{:?} {:?} {:?} {:?}", lines.buffer.char_at_offset(181), lines.buffer.char_at_offset(182), lines.buffer.char_at_offset(183), lines.buffer.char_at_offset(184));
+    let mut cursor = cursor_insert();
+    let mut register = Register::default();
+    let deltas = lines.do_edit_buffer(&mut cursor, &EditCommand::InsertNewLine,false, &mut register, true,);
+
+    for (_, delta, inval) in &deltas {
+        info!("{:?}", delta);
+        info!("{:?}", inval);
+        info!("");
+    }
+
+}
+
+
+fn cursor_insert() -> Cursor {
+    let mode = CursorMode::Insert(Selection::region(139, 139));
+    Cursor::new(mode, None, None)
+}
+
+fn cursor_normal() -> Cursor {
+    let mode = CursorMode::Normal(183);
+    Cursor::new(mode, None, None)
 }

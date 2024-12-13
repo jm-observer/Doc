@@ -175,9 +175,10 @@ pub struct DocLines {
     pub preedit: PreeditData,
     // tree-sitter
     pub syntax: Syntax,
-    // lsp
+    // lsp 来自lsp的语义样式.string是指代码的类别，如macro、function
     pub semantic_styles: Option<(Option<String>, Spans<String>)>,
     pub parser: BracketParser,
+    // 用于存储每行的前景色样式。如keyword的颜色
     pub line_styles: HashMap<usize, Vec<NewLineStyle>>,
     pub editor_style: EditorStyle,
     viewport_size: Size,
@@ -1038,19 +1039,14 @@ impl DocLines {
         font_size: usize,
         attrs: Attrs,
     ) -> Arc<TextLayoutLine> {
-        // TODO: we could share text layouts between different editor views given some knowledge of
         let mut line_content = String::new();
-        // Get the line content with newline characters replaced with spaces
-        // and the content without the newline characters
-        // TODO: cache or add some way that text layout is created to auto insert the spaces instead
-        // though we immediately combine with phantom text so that's a thing.
-
         let mut font_system = FONT_SYSTEM.lock();
         {
             let line_content_original = self.buffer.line_content(line);
             util::push_strip_suffix(&line_content_original, &mut line_content);
         }
         let mut diagnostic_styles = Vec::new();
+        // 用于存储该行的最高诊断级别。最后决定该行的背景色
         let mut max_severity: Option<DiagnosticSeverity> = None;
         diagnostic_styles.extend(self.get_line_diagnostic_styles(
             start_offset,
@@ -1329,17 +1325,6 @@ impl DocLines {
                 })
                 .collect(),
         )
-        // .entry(line)
-        // .or_insert_with(|| {
-        //     let line_styles = styles
-        //         .map(|styles| {
-        //             let text = self.buffer.text();
-        //             line_styles(text, line, &styles)
-        //         })
-        //         .unwrap_or_default();
-        //     line_styles
-        // })
-        // .clone()
     }
 
     // fn indent_line(
@@ -1409,6 +1394,11 @@ impl DocLines {
         for range in &self.folding_ranges.0 {
             warn!("{:?}", range);
         }
+
+        for diag in self.diagnostics.diagnostics.get_untracked() {
+            let diag = serde_json::to_string(&diag).unwrap();
+            info!("{}", diag);
+        }
     }
 
     fn apply_diagnostic_styles(
@@ -1422,9 +1412,9 @@ impl DocLines {
 
         // 暂不考虑
         for (start, end, color) in line_styles {
-            // warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
+            warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
             // col_at(end)可以为空，因为end是不包含的
-            let (Some(start), Some(end)) = (phantom_text.col_at(start), phantom_text.col_at(end - 1)) else {
+            let (Some(start), Some(end)) = (phantom_text.col_at(start), phantom_text.col_at(end.max(1) - 1)) else {
                 warn!("line={} start={start}, end={end}, color={color:?} col_at empty", phantom_text.line);
                 continue;
             };
@@ -1550,7 +1540,7 @@ impl ComputeLines {
         } else {
             None
         };
-        let mut origin_point = viewpport_point.clone();
+        let mut origin_point = viewpport_point;
         origin_point.y = vl.line_index as f64 * line_height;
 
         (vl, offset_of_visual, offset_folded, last_char, point, line_height, origin_point)
@@ -1688,6 +1678,14 @@ impl PubUpdateLines {
                 self.apply_delta(&delta.1);
             }
         }
+
+        info!("do_edit_buffer {:?} [{:?}] smart_tab={smart_tab} modal={modal}", cursor, cmd);
+        for (rope, delta, inval) in &deltas {
+            info!("{:?}", rope);
+            info!("{:?}", delta);
+            info!("{:?}", inval);
+            info!("");
+        }
         self.on_update_buffer();
         self.update_lines();
         self.on_update_lines();
@@ -1725,6 +1723,13 @@ impl PubUpdateLines {
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
+        info!("do_edit_buffer {:?} [{:?}]", cursor, s);
+        for (rope, delta, inval) in &deltas {
+            info!("{:?}", rope);
+            info!("{:?}", delta);
+            info!("{:?}", inval);
+            info!("");
+        }
         deltas
     }
 

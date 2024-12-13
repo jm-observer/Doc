@@ -9,13 +9,15 @@ use itertools::Itertools;
 use lapce_xi_rope::Interval;
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use log::info;
-use lsp_types::{InlayHint, Position};
+use lsp_types::{Diagnostic, InlayHint, Position};
 use doc::config::EditorConfig;
 use doc::{DiagnosticData, EditorViewKind};
 use doc::language::LapceLanguage;
 use doc::lines::fold::{FoldingDisplayItem, FoldingDisplayType, FoldingRange};
 use doc::lines::{DocLines, RopeTextPosition};
 use doc::syntax::{BracketParser, Syntax};
+use crate::lines_util::init_semantic_2;
+use floem::reactive::SignalUpdate;
 
 pub fn _init_lsp_folding_range() -> Vec<FoldingRange> {
     let folding_range = r#"[{"startLine":0,"startCharacter":10,"endLine":7,"endCharacter":1},{"startLine":1,"startCharacter":12,"endLine":3,"endCharacter":5},{"startLine":3,"startCharacter":11,"endLine":5,"endCharacter":5}]"#;
@@ -134,4 +136,39 @@ fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String,
 
 fn load_code(file: &Path) -> String {
     std::fs::read_to_string(file).unwrap()
+}
+
+/// main_2.rs
+fn init_diag_2() -> im::Vector<Diagnostic>{
+    let mut diags = im::Vector::new();
+    diags.push_back(serde_json::from_str(r#"{"range":{"start":{"line":6,"character":8},"end":{"line":6,"character":9}},"severity":2,"code":"unused_variables","source":"rustc","message":"unused variable: `a`\n`#[warn(unused_variables)]` on by default","relatedInformation":[{"location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":6,"character":8},"end":{"line":6,"character":9}}},"message":"if this is intentional, prefix it with an underscore: `_a`"}],"tags":[1],"data":{"rendered":"warning: unused variable: `a`\n --> src/main.rs:7:9\n  |\n7 |     let a = A;\n  |         ^ help: if this is intentional, prefix it with an underscore: `_a`\n  |\n  = note: `#[warn(unused_variables)]` on by default\n\n"}}"#).unwrap());
+    diags.push_back(serde_json::from_str(r#"{"range":{"start":{"line":6,"character":8},"end":{"line":6,"character":9}},"severity":4,"code":"unused_variables","source":"rustc","message":"if this is intentional, prefix it with an underscore: `_a`","relatedInformation":[{"location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":6,"character":8},"end":{"line":6,"character":9}}},"message":"original diagnostic"}]}"#).unwrap());
+    diags.push_back(serde_json::from_str(r#"{"range":{"start":{"line":10,"character":3},"end":{"line":10,"character":7}},"severity":2,"code":"dead_code","source":"rustc","message":"function `test` is never used\n`#[warn(dead_code)]` on by default","tags":[1],"data":{"rendered":"warning: function `test` is never used\n  --> src/main.rs:11:4\n   |\n11 | fn test() {\n   |    ^^^^\n   |\n   = note: `#[warn(dead_code)]` on by default\n\n"}}"#).unwrap());
+    diags
+}
+
+pub fn init_main_2() -> DocLines {
+    custom_utils::logger::logger_stdout_debug();
+    let file: PathBuf = "resources/test_code/main_2.rs".into();
+    let (mut lines, _) = _init_origin_code(_init_code(file));
+    let diags = init_diag_2();
+    let semantic = init_semantic_2();
+
+    lines.diagnostics.diagnostics.update(|x| *x = diags);
+    lines.init_diagnostics();
+
+    let mut styles_span = SpansBuilder::new(lines.buffer.len());
+    for style in semantic.styles {
+        if let Some(fg) = style.style.fg_color {
+            styles_span.add_span(
+                Interval::new(style.start, style.end),
+                fg,
+            );
+        }
+    }
+    let styles = styles_span.build();
+
+    lines.update_semantic_styles_from_lsp((None, styles));
+
+    lines
 }
