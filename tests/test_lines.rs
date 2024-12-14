@@ -1,11 +1,11 @@
-#![allow(unused_imports, dead_code)]
+#![allow(unused_imports, dead_code, unused_mut)]
 use std::path::PathBuf;
 use std::sync::atomic;
 use floem::kurbo::{Point, Rect};
 use floem::reactive::SignalUpdate;
 use floem_editor_core::command::EditCommand;
 use floem_editor_core::register::Register;
-use lapce_xi_rope::Interval;
+use lapce_xi_rope::{DeltaElement, Interval, RopeInfo};
 use lapce_xi_rope::spans::SpansBuilder;
 use log::info;
 use doc::lines::buffer::rope_text::RopeText;
@@ -23,6 +23,7 @@ fn test_performance() {
     let editor: PathBuf = "resources/test_code/editor.rs".into();
     let editor_code = std::fs::read_to_string(editor).unwrap();
     let (mut lines, _) = _init_origin_code(_init_code(file));
+
     lines.init_buffer(editor_code.into());
 }
 
@@ -80,15 +81,49 @@ fn test_buffer_edit() {
     custom_utils::logger::logger_stdout_debug();
     let mut lines = init_main_2();
 
+    // info!("enable_error_lens {}", lines.config.enable_error_lens);
+    // let start_offset = lines.buffer.offset_of_line(10);
+    // let end_offset = lines.buffer.offset_of_line(11);
+    // let styles = lines.get_line_diagnostic_styles(start_offset, end_offset, &mut None, 0);
+    // info!("{:?}", styles);
+    // lines.log();
+
     info!("{:?} {:?} {:?} {:?}", lines.buffer.char_at_offset(181), lines.buffer.char_at_offset(182), lines.buffer.char_at_offset(183), lines.buffer.char_at_offset(184));
     let mut cursor = cursor_insert();
     let mut register = Register::default();
     let deltas = lines.do_edit_buffer(&mut cursor, &EditCommand::InsertNewLine,false, &mut register, true,);
 
-    for (_, delta, inval) in &deltas {
-        info!("{:?}", delta);
-        info!("{:?}", inval);
-        info!("");
+    let mut change_start = usize::MAX;
+    let mut change_end = 0;
+    for (rope, delta, inval) in &deltas {
+        let mut single_change_start = 0;
+        let mut single_change_end = rope.len();
+        if let Some(first) = delta.els.first() {
+            match first {
+                DeltaElement::Copy(start, end) => {
+                    if *start == 0 {
+                        single_change_start = *end;
+                    }
+                }
+                DeltaElement::Insert(_) => {}
+            }
+        }
+        if let Some(last) = delta.els.last() {
+            match last {
+                DeltaElement::Copy(start, end) => {
+                    if *end == single_change_end {
+                        single_change_end = *start;
+                    }
+                }
+                DeltaElement::Insert(_) => {}
+            }
+        }
+        if single_change_start < change_start {
+            change_start = single_change_start
+        }
+        if single_change_end > change_end {
+            change_end = single_change_end
+        }
     }
 
 }

@@ -27,7 +27,7 @@ use floem_editor_core::line_ending::LineEnding;
 use floem_editor_core::mode::MotionMode;
 use floem_editor_core::register::Register;
 use itertools::Itertools;
-use lapce_xi_rope::{Interval, Rope, RopeDelta, Transformer};
+use lapce_xi_rope::{DeltaElement, Interval, Rope, RopeDelta, Transformer};
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Location, Position};
 use smallvec::SmallVec;
@@ -1399,6 +1399,8 @@ impl DocLines {
             let diag = serde_json::to_string(&diag).unwrap();
             info!("{}", diag);
         }
+        let diag_spans= self.diagnostics.diagnostics_span.get_untracked();
+        info!("{:?}", diag_spans);
     }
 
     fn apply_diagnostic_styles(
@@ -1412,7 +1414,7 @@ impl DocLines {
 
         // 暂不考虑
         for (start, end, color) in line_styles {
-            warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
+            // warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
             // col_at(end)可以为空，因为end是不包含的
             let (Some(start), Some(end)) = (phantom_text.col_at(start), phantom_text.col_at(end.max(1) - 1)) else {
                 warn!("line={} start={start}, end={end}, color={color:?} col_at empty", phantom_text.line);
@@ -1450,7 +1452,7 @@ impl DocLines {
     }
 
     /// return (line,start, end, color)
-    fn get_line_diagnostic_styles(
+    pub fn get_line_diagnostic_styles(
         &self,
         start_offset: usize,
         end_offset: usize,
@@ -1509,6 +1511,91 @@ impl DocLines {
     fn update_screen_lines(&mut self) {
         let screen_lines = self._compute_screen_lines(*self.signals.viewport.val());
         self.signals.screen_lines.update_force(screen_lines);
+    }
+
+    /// return [start...end), (start...end]
+    fn compute_change_lines(&self, deltas: &Vec<(Rope, RopeDelta, InvalLines)>) -> (Option<(usize, usize)>, Option<(usize, usize)>) {
+        let mut change_start = usize::MAX;
+        let mut change_end = 0;
+        if deltas.len() == 1 {
+            if let Some((rope, delta, inval)) = deltas.first() {
+                let single_change_end = rope.len();
+                if delta.els.len() == 1 {
+                    if let Some(first) = delta.els.first() {
+                        match first {
+                            DeltaElement::Copy(start, end) => {
+                                if *start == 0 {
+                                    let mut end_line = rope.line_of_offset(*end);
+                                    return (Some((0, end_line)), None)
+                                } else if *end == single_change_end {
+                                    let start_line = rope.line_of_offset(*start);
+                                    let end_line = rope.line_of_offset(single_change_end);
+                                    return (None, Some((start_line, end_line)))
+                                }
+                            }
+                            DeltaElement::Insert(_) => {}
+                        }
+                    }
+                } else if delta.els.len() > 1 {
+                    let single_change_end = rope.len();
+                    if let (Some(first), Some(last)) = (delta.els.first(), delta.els.last()) {
+                        match (first, last) {
+                            (DeltaElement::Copy(start, end), DeltaElement::Copy(last_start, last_end)) => {
+                                let mut first = None;
+                                let mut last = None;
+                                if *start == 0 {
+                                    let end_line = rope.line_of_offset(*end);
+                                    first = Some((0, end_line));
+                                }
+                                if *last_end == single_change_end {
+                                    let start_line = rope.line_of_offset(*last_start);
+                                    let end_line = rope.line_of_offset(single_change_end);
+                                    last = Some((start_line, end_line));
+                                }
+                                return (first, last);
+                            }
+                            (DeltaElement::Copy(start, end), _) => {
+                                if *start == 0 {
+                                    let end_line = rope.line_of_offset(*end);
+                                    return (Some((0, end_line)), None);
+                                }
+                            }
+                            (_, DeltaElement::Copy(last_start, last_end)) => {
+                                if *last_end == single_change_end {
+                                    let start_line = rope.line_of_offset(*last_start);
+                                    let end_line = rope.line_of_offset(single_change_end);
+                                    return (None, Some((start_line, end_line)));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                let mut single_change_start = 0;
+                let mut single_change_end = rope.len();
+
+                if let Some(last) = delta.els.last() {
+                    match last {
+                        DeltaElement::Copy(start, end) => {
+                            if *end == single_change_end {
+                                single_change_end = *start;
+                            }
+                        }
+                        DeltaElement::Insert(_) => {}
+                    }
+                }
+                if single_change_start < change_start {
+                    change_start = single_change_start
+                }
+                if single_change_end > change_end {
+                    change_end = single_change_end
+                }
+                (self.buffer.line_of_offset(change_start), self.buffer.line_of_offset(change_end));
+            }
+        } else {
+        }
+        (None, None)
     }
 }
 

@@ -139,4 +139,8 @@ impl TextLayoutLine {
     pub fn last_line(&self) -> usize {
         self.phantom_text.last_line
     }
+
+    pub fn adjust(&mut self, line_delta: fn(&mut usize), offset_delta: fn(&mut usize)) {
+        self.phantom_text.addjust(line_delta, offset_delta);
+    }
 }

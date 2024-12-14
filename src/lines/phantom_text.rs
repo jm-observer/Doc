@@ -142,6 +142,20 @@ pub enum Text {
 }
 
 impl Text {
+
+    pub fn adjust(&mut self, line_delta: fn(&mut usize), offset_delta: fn(&mut usize) ) {
+        match &mut self {
+            Text::Phantom { text } => {
+                text.kind.adjust(line_delta);
+                line_delta(&mut text.line);
+            }
+            Text::OriginText { text } => {
+                line_delta(&mut text.line);
+            }
+            _ => {}
+        }
+    }
+
     fn merge_to(mut self, origin_text_len: usize, final_text_len: usize) -> Self {
         match &mut self {
             Text::Phantom { text } => {
@@ -194,18 +208,20 @@ pub enum PhantomTextKind {
         len: usize,
         start_position: Position
     },
-    // 折叠的起始位置。折叠是否跨行、结束位置的行、列位置
-    // CrossLineFoldedRangStart {
-    //     // 用于是否衔接下一行
-    //     end_line: usize,
-    //     // 行末字符
-    //     end_character: usize,
-    // },
-    // 折叠的结束位置。结束位置的行
-    // CrossLineFoldedRangEnd {
-    //     end_line: usize,
-    //     start_character: usize,
-    // },
+}
+
+impl PhantomTextKind {
+    pub fn adjust(&mut self, line_delta: fn(&mut usize)) {
+        if let Self::LineFoldedRang {
+            next_line, len, start_position
+        } = self {
+            let mut position_line =  start_position.line as usize;
+            line_delta(&mut position_line);
+            start_position.line = position_line as u32;
+            line_delta(len);
+            next_line.as_mut().and_then(|x| Some(line_delta(x)));
+        }
+    }
 }
 
 /// Information about the phantom text on a specific line.
@@ -737,29 +753,18 @@ impl PhantomTextMultiLine {
         combine_with_text(&self.text, origin)
     }
 
-    // fn log(&self) {
-    //     info!(
-    //         "PhantomTextMultiLine line={} origin_text_len={} final_text_len={} len_of_line={:?}",
-    //         self.line, self.origin_text_len, self.final_text_len, self.len_of_line
-    //     );
-    //     for text in &self.text {
-    //         match text {
-    //             Text::Phantom { text } => {
-    //                 info!("Phantom {:?} line={} col={} merge_col={} final_col={} text={} text.len()={}", text.kind, text.line, text.col, text.merge_col, text.final_col, text.text, text.text.len());
-    //             }
-    //             Text::OriginText { text } => {
-    //                 info!(
-    //                     "OriginText line={} col={:?} merge_col={:?} final_col={:?}",
-    //                     text.line, text.col, text.merge_col, text.final_col
-    //                 );
-    //             }
-    //             Text::EmptyLine{text} => {
-    //                 info!("{:?}", text);
-    //             }
-    //         }
-    //     }
-    //     info!("");
-    // }
+    pub fn adjust(&mut self, line_delta: fn(&mut usize), offset_delta: fn(&mut usize) ) {
+        line_delta(&mut self.line);
+        line_delta(&mut self.last_line);
+
+        offset_delta(&mut self.offset_of_line);
+        for (line, _, _) in &mut self.len_of_line {
+            line_delta(line);
+        }
+        for text in &mut self.text {
+            text.adjust(line_delta, offset_delta);
+        }
+    }
 }
 
 fn usize_offset(val: usize, offset: i32) -> usize {
