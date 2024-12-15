@@ -144,7 +144,12 @@ impl EditorConfig {
     }
 
     pub fn syntax_style_color(&self, name: &str) -> Option<Color> {
-        self.syntax.get(name).copied()
+        match name {
+            "boolean" => self.syntax.get("constant").copied(),
+            // "macro" => ?
+            // "operator" => ?,
+            _ => self.syntax.get(name).copied()
+        }
     }
 }
 

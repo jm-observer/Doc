@@ -11,7 +11,7 @@ use log::info;
 use doc::lines::buffer::rope_text::RopeText;
 use doc::lines::cursor::{Cursor, CursorAffinity, CursorMode};
 use doc::lines::selection::Selection;
-use crate::lines_util::{init_empty, init_main, init_main_2, init_semantic_2};
+use crate::lines_util::{folded_v1, folded_v2, init_empty, init_main, init_main_2, init_semantic_2};
 
 mod lines_util;
 
@@ -30,8 +30,47 @@ fn test_performance() {
 #[test]
 fn test_semantic_2() {
     custom_utils::logger::logger_stdout_debug();
-    let lines = init_main_2();
+    let mut lines = init_main_2();
 
+    { // let grammars_dir: PathBuf = "C:\\Users\\36225\\AppData\\Local\\lapce\\Lapce-Debug\\data\\grammars".into();
+        // let queries_directory: PathBuf = "C:\\Users\\36225\\AppData\\Roaming\\lapce\\Lapce-Debug\\config\\queries".into();
+        // lines.syntax.parse(lines.buffer.rev(), lines.buffer.text().clone(), None, &grammars_dir, &queries_directory);
+        //
+        // for style in lines.syntax.styles.as_ref() {
+        //     info!("{:?}", style);
+        // }
+    }
+    {
+        let line = &lines.origin_lines2[1];
+        assert!(line.diagnostic_styles.is_empty());
+        assert_eq!(line.semantic_styles.len(), 2);
+        let line = &lines.origin_lines2[6];
+        assert_eq!(line.diagnostic_styles.len(), 1);
+        // for style in &line.semantic_styles {
+        //     info!("{:?}", style);
+        // }
+        assert_eq!(line.semantic_styles[0].origin_line_offset_start, 4);
+        assert_eq!(line.semantic_styles[1].origin_line_offset_start, 8);
+        assert_eq!(line.semantic_styles[2].origin_line_offset_start, 12);
+
+        assert_eq!(line.semantic_styles.len(), 3);
+    }
+    {
+        ///  2|   if true {...} else {\r\n
+        for folded in folded_v1() {
+            lines.update_folding_ranges(folded.into());
+        }
+        let line = &lines.origin_folded_lines[1];
+        for style in &line.semantic_styles {
+            info!("{:?}", style);
+        }
+    }
+    // {
+    //     ///  2|   if true {...} else {...}\r\n
+    //     for folded in folded_v2() {
+    //         lines.update_folding_ranges(folded.into());
+    //     }
+    // }
 }
 
 #[test]

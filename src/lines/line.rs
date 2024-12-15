@@ -6,6 +6,7 @@ use std::fmt::{Debug, Formatter};
 use floem::peniko::Color;
 use floem_editor_core::line_ending::LineEnding;
 use crate::lines::phantom_text::PhantomTextLine;
+use crate::lines::style::NewLineStyle;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -14,6 +15,38 @@ pub struct OriginLine {
     pub start_offset: usize,
     pub phantom: PhantomTextLine,
     pub fg_styles: Vec<(usize, usize, Color)>
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub struct OriginLine2 {
+    pub line_index: usize,
+    /// [start_offset...end_offset)
+    pub start_offset: usize,
+    pub end_offset: usize,
+    pub phantom: PhantomTextLine,
+    pub semantic_styles: Vec<NewLineStyle>,
+    pub diagnostic_styles: Vec<NewLineStyle>
+}
+
+impl OriginLine2 {
+    pub fn semantic_styles(&self, delta: usize) -> Vec<NewLineStyle> {
+        self.semantic_styles.iter().map(|x| {
+            let mut x = x.clone();
+            x.origin_line_offset_start += delta;
+            x.origin_line_offset_end += delta;
+            x
+        }).collect()
+    }
+
+    pub fn diagnostic_styles(&self, delta: usize) -> Vec<NewLineStyle> {
+        self.diagnostic_styles.iter().map(|x| {
+            let mut x = x.clone();
+            x.origin_line_offset_start += delta;
+            x.origin_line_offset_end += delta;
+            x
+        }).collect()
+    }
 }
 
 #[allow(dead_code)]

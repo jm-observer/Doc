@@ -61,34 +61,27 @@ fn _init_origin_code((code, buffer): (String, Buffer)) -> (DocLines, EditorConfi
 }
 
 ///  2|   if true {...} else {\r\n
-fn _init_folded_code_v1((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
-    _init_lines(Some(vec![FoldingDisplayItem {
+pub fn folded_v1() -> Vec<FoldingDisplayItem> {
+    vec![FoldingDisplayItem {
         position: Position {
             line: 1,
             character: 12,
         },
         y: 0,
         ty: FoldingDisplayType::UnfoldStart,
-    }]), (code, buffer))
+    }]
 }
 
 ///  2|   if true {...} else {...}\r\n
-fn _init_folded_code_v2((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
-    _init_lines(Some(vec![FoldingDisplayItem {
-        position: Position {
-            line: 1,
-            character: 12,
-        },
-        y: 0,
-        ty: FoldingDisplayType::UnfoldStart,
-    }, FoldingDisplayItem {
+pub fn folded_v2() -> Vec<FoldingDisplayItem> {
+    vec![FoldingDisplayItem {
         position: Position {
             line: 5,
             character: 5,
         },
         y: 0,
         ty: FoldingDisplayType::UnfoldEnd,
-    }]), (code, buffer))
+    }]
 }
 
 fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
@@ -168,7 +161,7 @@ pub fn init_main_2() -> DocLines {
     }
     let styles = styles_span.build();
 
-    lines.update_semantic_styles_from_lsp((None, styles));
+    lines.update_semantic_styles_from_lsp((None, styles), lines.buffer.rev());
 
     lines
 }
