@@ -11,7 +11,7 @@ use log::info;
 use doc::lines::buffer::rope_text::RopeText;
 use doc::lines::cursor::{Cursor, CursorAffinity, CursorMode};
 use doc::lines::selection::Selection;
-use crate::lines_util::{_init_code, _init_origin_code, init_main_2, init_semantic_2};
+use crate::lines_util::{init_empty, init_main, init_main_2, init_semantic_2};
 
 mod lines_util;
 
@@ -22,16 +22,23 @@ fn test_performance() {
     let file: PathBuf = "resources/test_code/empty.rs".into();
     let editor: PathBuf = "resources/test_code/editor.rs".into();
     let editor_code = std::fs::read_to_string(editor).unwrap();
-    let (mut lines, _) = _init_origin_code(_init_code(file));
+    let mut lines = init_empty();
 
     lines.init_buffer(editor_code.into());
 }
 
 #[test]
+fn test_semantic_2() {
+    custom_utils::logger::logger_stdout_debug();
+    let lines = init_main_2();
+
+}
+
+#[test]
 fn test_buffer_offset_of_click() {
     custom_utils::logger::logger_stdout_debug();
-    let file: PathBuf = "resources/test_code/main.rs".into();
-    let (lines, _) = _init_origin_code(_init_code(file));
+    // let file: PathBuf = "resources/test_code/main.rs".into();
+    let lines = init_main();
     lines.log();
 
     //below end of buffer

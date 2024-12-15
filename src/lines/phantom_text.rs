@@ -143,8 +143,8 @@ pub enum Text {
 
 impl Text {
 
-    pub fn adjust(&mut self, line_delta: fn(&mut usize), offset_delta: fn(&mut usize) ) {
-        match &mut self {
+    pub fn adjust(&mut self, line_delta: fn(&mut usize), _offset_delta: fn(&mut usize) ) {
+        match self {
             Text::Phantom { text } => {
                 text.kind.adjust(line_delta);
                 line_delta(&mut text.line);
@@ -219,7 +219,7 @@ impl PhantomTextKind {
             line_delta(&mut position_line);
             start_position.line = position_line as u32;
             line_delta(len);
-            next_line.as_mut().and_then(|x| Some(line_delta(x)));
+            next_line.as_mut().map(|x| line_delta(x));
         }
     }
 }

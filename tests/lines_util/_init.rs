@@ -19,7 +19,7 @@ use doc::syntax::{BracketParser, Syntax};
 use crate::lines_util::init_semantic_2;
 use floem::reactive::SignalUpdate;
 
-pub fn _init_lsp_folding_range() -> Vec<FoldingRange> {
+fn _init_lsp_folding_range() -> Vec<FoldingRange> {
     let folding_range = r#"[{"startLine":0,"startCharacter":10,"endLine":7,"endCharacter":1},{"startLine":1,"startCharacter":12,"endLine":3,"endCharacter":5},{"startLine":3,"startCharacter":11,"endLine":5,"endCharacter":5}]"#;
     let folding_range: Vec<lsp_types::FoldingRange> = serde_json::from_str(folding_range).unwrap();
 
@@ -30,7 +30,7 @@ pub fn _init_lsp_folding_range() -> Vec<FoldingRange> {
         .collect()
 }
 
-pub fn _init_inlay_hint(buffer: &Buffer) -> Spans<InlayHint> {
+fn _init_inlay_hint(buffer: &Buffer) -> Spans<InlayHint> {
     let hints = r#"[{"position":{"line":6,"character":9},"label":[{"value":": "},{"value":"A","location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":8,"character":7},"end":{"line":8,"character":8}}}}],"kind":1,"textEdits":[{"range":{"start":{"line":6,"character":9},"end":{"line":6,"character":9}},"newText":": A"}],"paddingLeft":false,"paddingRight":false}]"#;
     let mut hints: Vec<InlayHint> = serde_json::from_str(hints).unwrap();
     let len = buffer.len();
@@ -46,7 +46,7 @@ pub fn _init_inlay_hint(buffer: &Buffer) -> Spans<InlayHint> {
     hints_span.build()
 }
 
-pub fn _init_code(file: PathBuf) -> (String, Buffer) {
+fn _init_code(file: PathBuf) -> (String, Buffer) {
     // let code = "pub fn main() {\r\n    if true {\r\n        println!(\"startss\");\r\n    } else {\r\n        println!(\"startss\");\r\n    }\r\n    let a = A;\r\n}\r\nstruct A;\r\n";
     let code = load_code(&file);
     let buffer = Buffer::new(
@@ -56,12 +56,12 @@ pub fn _init_code(file: PathBuf) -> (String, Buffer) {
     (code, buffer)
 }
 
-pub fn _init_origin_code((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
+fn _init_origin_code((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
     _init_lines(None, (code, buffer))
 }
 
 ///  2|   if true {...} else {\r\n
-pub fn _init_folded_code_v1((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
+fn _init_folded_code_v1((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
     _init_lines(Some(vec![FoldingDisplayItem {
         position: Position {
             line: 1,
@@ -73,7 +73,7 @@ pub fn _init_folded_code_v1((code, buffer): (String, Buffer)) -> (DocLines, Edit
 }
 
 ///  2|   if true {...} else {...}\r\n
-pub fn _init_folded_code_v2((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
+fn _init_folded_code_v2((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
     _init_lines(Some(vec![FoldingDisplayItem {
         position: Position {
             line: 1,
@@ -170,5 +170,19 @@ pub fn init_main_2() -> DocLines {
 
     lines.update_semantic_styles_from_lsp((None, styles));
 
+    lines
+}
+
+pub fn init_main() -> DocLines {
+    custom_utils::logger::logger_stdout_debug();
+    let file: PathBuf = "resources/test_code/main.rs".into();
+    let (mut lines, _) = _init_origin_code(_init_code(file));
+    lines
+}
+
+pub fn init_empty() -> DocLines {
+    custom_utils::logger::logger_stdout_debug();
+    let file: PathBuf = "resources/test_code/empty.rs".into();
+    let (mut lines, _) = _init_origin_code(_init_code(file));
     lines
 }

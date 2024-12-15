@@ -253,7 +253,7 @@ fn get_offset(buffer: &Buffer, positon: Position) -> usize {
 }
 
 #[derive(Debug, Clone)]
-pub struct FoldedRange {
+pub struct  FoldedRange {
     pub start: Position,
     pub end: Position,
     pub collapsed_text: Option<String>,

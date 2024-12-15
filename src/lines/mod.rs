@@ -178,7 +178,7 @@ pub struct DocLines {
     // lsp 来自lsp的语义样式.string是指代码的类别，如macro、function
     pub semantic_styles: Option<(Option<String>, Spans<String>)>,
     pub parser: BracketParser,
-    // 用于存储每行的前景色样式。如keyword的颜色
+    /// 用于存储每行的前景色样式。如keyword的颜色
     pub line_styles: HashMap<usize, Vec<NewLineStyle>>,
     pub editor_style: EditorStyle,
     viewport_size: Size,
@@ -277,6 +277,7 @@ impl DocLines {
 
     fn update_lines(&mut self) {
         self.clear();
+
         let last_line = self.buffer.last_line();
         // self.update_parser(buffer);
         let mut current_line = 0;
@@ -318,6 +319,8 @@ impl DocLines {
                 self.origin_lines.push(OriginLine {
                     line_index: origin_line,
                     start_offset,
+                    phantom: Default::default(),
+                    fg_styles: vec![],
                 });
             }
 
@@ -397,6 +400,159 @@ impl DocLines {
             origin_folded_line_index += 1;
         }
         self.on_update_lines();
+
+        for (line, styles) in &self.line_styles {
+        }
+    }
+
+
+    fn update_lines_v2(&mut self) {
+        self.clear();
+        let last_line = self.buffer.last_line();
+        // self.update_parser(buffer);
+        let mut current_line = 0;
+        let mut origin_folded_line_index = 0;
+        let mut visual_line_index = 0;
+        self.line_height = self.config.line_height;
+
+        let font_size = self.config.font_size;
+        let family = Cow::Owned(
+            FamilyOwned::parse_list(&self.config.font_family).collect(),
+        );
+        let attrs = Attrs::new()
+            .color(self.editor_style.ed_text_color())
+            .family(&family)
+            .font_size(font_size as f32)
+            .line_height(LineHeightValue::Px(self.line_height as f32));
+        // let mut duration = Duration::from_secs(0);
+
+        let all_origin_lines = self.init_all_origin_line();
+        while current_line <= last_line {
+            let Some(text_layout) = self.new_text_layout_2(
+                current_line,
+                &all_origin_lines,
+                font_size,
+                attrs,
+            ) else {
+                // todo
+                break;
+            };
+            // duration += time.elapsed().unwrap();
+            let origin_line_start = text_layout.phantom_text.line;
+            let origin_line_end = text_layout.phantom_text.last_line;
+
+            let width = text_layout.text.size().width;
+            if width > self.max_width {
+                self.max_width = width;
+            }
+
+            let origin_interval = Interval {
+                start: self.buffer.offset_of_line(origin_line_start),
+                end: self.buffer.offset_of_line(origin_line_end + 1),
+            };
+
+            let mut visual_offset_start = 0;
+            let mut visual_offset_end;
+
+            // [visual_offset_start..visual_offset_end)
+            for (origin_folded_line_sub_index, layout) in
+                text_layout.text.line_layout().iter().enumerate()
+            {
+                if layout.glyphs.is_empty() {
+                    self.visual_lines.push(VisualLine {
+                        line_index: visual_line_index,
+                        origin_interval: Interval::new(
+                            origin_interval.end,
+                            origin_interval.end,
+                        ),
+                        visual_interval: Interval::new(
+                            visual_offset_start,
+                            visual_offset_start,
+                        ),
+                        origin_line: origin_line_start,
+                        origin_folded_line: origin_folded_line_index,
+                        origin_folded_line_sub_index: 0,
+                        text_layout: text_layout.clone(),
+                    });
+                    continue;
+                }
+                visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
+                let offset_info = text_layout
+                    .phantom_text
+                    .cursor_position_of_final_col(visual_offset_start);
+                let origin_interval_start =
+                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                let offset_info = text_layout
+                    .phantom_text
+                    .cursor_position_of_final_col(visual_offset_end);
+
+                let origin_interval_end =
+                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                let origin_interval = Interval {
+                    start: origin_interval_start,
+                    end: origin_interval_end + 1,
+                };
+
+                self.visual_lines.push(VisualLine {
+                    line_index: visual_line_index,
+                    origin_interval,
+                    origin_line: origin_line_start,
+                    origin_folded_line: origin_folded_line_index,
+                    origin_folded_line_sub_index,
+                    text_layout: text_layout.clone(),
+                    visual_interval: Interval::new(
+                        visual_offset_start,
+                        visual_offset_end + 1,
+                    ),
+                });
+
+                visual_offset_start = visual_offset_end;
+                visual_line_index += 1;
+            }
+
+            self.origin_folded_lines.push(OriginFoldedLine {
+                line_index: origin_folded_line_index,
+                origin_line_start,
+                origin_line_end,
+                origin_interval,
+                text_layout,
+            });
+
+            current_line = origin_line_end + 1;
+            origin_folded_line_index += 1;
+        }
+        self.on_update_lines();
+    }
+
+    fn init_all_origin_line(&self) -> Vec<OriginLine> {
+        // for i in 0..=self.buffer.last_line() {
+        //     self.init_origin_line(i)
+        // }
+        (0..=self.buffer.last_line()).into_iter().map(|x| self.init_origin_line(x)).collect()
+    }
+    fn init_origin_line(&self, current_line: usize) -> OriginLine {
+        let start_offset = self.buffer.offset_of_line(current_line);
+        let end_offset = self.buffer.offset_of_line(current_line + 1);
+        let mut fg_styles = Vec::new();
+        // 用于存储该行的最高诊断级别。最后决定该行的背景色
+        let mut max_severity: Option<DiagnosticSeverity> = None;
+        fg_styles.extend(self.get_line_diagnostic_styles(
+            start_offset,
+            end_offset,
+            &mut max_severity,
+            0,
+        ));
+
+        let phantom_text = self.phantom_text(current_line);
+        if let Some(styles) = self.line_semantic_styles(current_line) {
+            fg_styles.extend(styles)
+        }
+        OriginLine {
+            line_index: current_line,
+            start_offset,
+            phantom: phantom_text,
+            fg_styles,
+        }
     }
 
     // pub fn wrap(&self, viewport: Rect, es: &EditorStyle) -> ResolvedWrap {
@@ -612,7 +768,7 @@ impl DocLines {
         let origin_line = self
             .buffer
             .line_of_offset(origin_offset);
-        let origin_line = self.origin_lines[origin_line];
+        let origin_line = self.origin_lines[origin_line].clone();
         let offset = origin_offset - origin_line.start_offset;
         let folded_line = self.folded_line_of_origin_line(origin_line.line_index);
         let origin_folded_line_offest = folded_line
@@ -1060,7 +1216,7 @@ impl DocLines {
 
         let mut phantom_text = PhantomTextMultiLine::new(phantom_text);
         let mut attrs_list = AttrsList::new(attrs);
-        if let Some(styles) = self.line_styles(line) {
+        if let Some(styles) = self.line_semantic_styles(line) {
             for (start, end, color) in styles.into_iter() {
                 let (Some(start), Some(end)) =
                     (phantom_text.col_at(start), phantom_text.col_at(end))
@@ -1093,7 +1249,7 @@ impl DocLines {
             ));
 
             phantom_text.merge(next_phantom_text);
-            if let Some(styles) = self.line_styles(collapsed_line) {
+            if let Some(styles) = self.line_semantic_styles(collapsed_line) {
                 for (start, end, color) in styles.into_iter() {
                     let start = start + offset_col;
                     let end = end + offset_col;
@@ -1114,17 +1270,12 @@ impl DocLines {
             phantom_color,
         );
 
-        // if line == 1 {
-        //     tracing::info!("\nstart");
-        //     for (range, attr) in attrs_list.spans() {
-        //         tracing::info!("{range:?} {attr:?}");
-        //     }
-        //     tracing::info!("");
-        // }
+
 
         // tracing::info!("{line} {line_content}");
         // TODO: we could move tab width setting to be done by the document
         let final_line_content = phantom_text.final_line_content(&line_content);
+
         let mut text_layout = TextLayout::new_with_font_system(
             line,
             &final_line_content,
@@ -1169,10 +1320,114 @@ impl DocLines {
         self.apply_diagnostic_styles(
             &mut layout_line,
             diagnostic_styles,
-            max_severity,
+            // max_severity,
         );
 
+        // if line == 6 || line == 1 {
+            info!("\nstart {line}");
+            for (range, attr) in layout_line.text.line().attrs_list().spans() {
+                info!("{range:?} {:?}", attr.color_opt);
+            }
+
+            for style in &layout_line.extra_style {
+                info!("{:?}", style);
+            }
+            info!("");
+        // }
+
+
         Arc::new(layout_line)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_text_layout_2(
+        &mut self,
+        line: usize,
+        origins: &Vec<OriginLine>,
+        font_size: usize,
+        attrs: Attrs,
+    ) -> Option<Arc<TextLayoutLine>> {
+        let origin_line = origins.get(line)?;
+
+        let mut line_content = String::new();
+
+        {
+            let line_content_original = self.buffer.line_content(line);
+            util::push_strip_suffix(&line_content_original, &mut line_content);
+        }
+
+        let mut collapsed_line_col = origin_line.phantom.folded_line();
+        let mut phantom_text = PhantomTextMultiLine::new(origin_line.phantom.clone());
+
+
+        let mut attrs_list = AttrsList::new(attrs);
+        let mut font_system = FONT_SYSTEM.lock();
+        let mut fg_styles = origin_line.fg_styles.clone();
+
+        while let Some(collapsed_line) = collapsed_line_col.take() {
+            {
+                util::push_strip_suffix(
+                    self.buffer.line_content(collapsed_line).as_ref(),
+                    &mut line_content,
+                );
+            }
+            let offset_col = phantom_text.origin_text_len;
+            let next_origin_line = origins.get(collapsed_line)?;
+            let next_phantom_text = next_origin_line.phantom.clone();
+            collapsed_line_col = next_phantom_text.folded_line();
+            fg_styles.extend(next_origin_line.fg_styles.iter().map(|x| {
+                let mut x = x.clone();
+                x.0 += offset_col;
+                x.1 += offset_col;
+                x
+            }));
+            phantom_text.merge(next_phantom_text);
+        }
+
+        let phantom_color = self.editor_style.phantom_color();
+        phantom_text.add_phantom_style(
+            &mut attrs_list,
+            attrs,
+            font_size,
+            phantom_color,
+        );
+        let final_line_content = phantom_text.final_line_content(&line_content);
+        let mut text_layout = TextLayout::new_with_font_system(
+            line,
+            &final_line_content,
+            attrs_list,
+            &mut font_system,
+        );
+        drop(font_system);
+        match self.editor_style.wrap_method() {
+            WrapMethod::None => {}
+            WrapMethod::EditorWidth => {
+                text_layout.set_wrap(Wrap::WordOrGlyph);
+                text_layout.set_size(self.viewport_size.width as f32, f32::MAX);
+            }
+            WrapMethod::WrapWidth { width } => {
+                text_layout.set_wrap(Wrap::WordOrGlyph);
+                text_layout.set_size(width, f32::MAX);
+            }
+            // TODO:
+            WrapMethod::WrapColumn { .. } => {}
+        }
+        let indent = 0.0;
+        let mut layout_line = TextLayoutLine {
+            text: text_layout,
+            extra_style: Vec::new(),
+            whitespaces: None,
+            indent,
+            phantom_text,
+        };
+        // 下划线？背景色？
+        util::apply_layout_styles(&mut layout_line);
+        self.apply_diagnostic_styles(
+            &mut layout_line,
+            fg_styles,
+        );
+
+        Some(Arc::new(layout_line))
     }
 
     // pub fn update_folding_item(&mut self, item: FoldingDisplayItem) {
@@ -1274,8 +1529,9 @@ impl DocLines {
     }
 
 
-    fn line_styles(
-        &mut self,
+    /// 语义的样式和方括号的样式
+    fn line_semantic_styles(
+        &self,
         line: usize,
     ) -> Option<Vec<(usize, usize, Color)>> {
         let mut styles: Vec<(usize, usize, Color)> =
@@ -1303,7 +1559,7 @@ impl DocLines {
 
     // 文本样式，前景色
     fn line_style(
-        &mut self,
+        &self,
         line: usize,
     ) -> Option<Vec<(usize, usize, Color)>> {
         // let styles = self.styles();
@@ -1369,9 +1625,9 @@ impl DocLines {
 
     pub fn log(&self) {
         warn!(
-            "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}]",
+            "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}] style_from_lsp={}",
             self.viewport_size, self.buffer.rev(),
-            self.buffer.text().len()
+            self.buffer.text().len(), self.style_from_lsp
         );
         warn!(
             "{:?}",self.config
@@ -1407,9 +1663,9 @@ impl DocLines {
         &self,
         layout_line: &mut TextLayoutLine,
         line_styles: Vec<(usize, usize, Color)>,
-        _max_severity: Option<DiagnosticSeverity>,
+        // _max_severity: Option<DiagnosticSeverity>,
     ) {
-        let layout = &mut layout_line.text;
+        let layout = &layout_line.text;
         let phantom_text = &layout_line.phantom_text;
 
         // 暂不考虑
@@ -1515,17 +1771,15 @@ impl DocLines {
 
     /// return [start...end), (start...end]
     fn compute_change_lines(&self, deltas: &Vec<(Rope, RopeDelta, InvalLines)>) -> (Option<(usize, usize)>, Option<(usize, usize)>) {
-        let mut change_start = usize::MAX;
-        let mut change_end = 0;
         if deltas.len() == 1 {
-            if let Some((rope, delta, inval)) = deltas.first() {
+            if let Some((rope, delta, _inval)) = deltas.first() {
                 let single_change_end = rope.len();
                 if delta.els.len() == 1 {
                     if let Some(first) = delta.els.first() {
                         match first {
                             DeltaElement::Copy(start, end) => {
                                 if *start == 0 {
-                                    let mut end_line = rope.line_of_offset(*end);
+                                    let end_line = rope.line_of_offset(*end);
                                     return (Some((0, end_line)), None)
                                 } else if *end == single_change_end {
                                     let start_line = rope.line_of_offset(*start);
@@ -1571,29 +1825,7 @@ impl DocLines {
                         }
                     }
                 }
-
-                let mut single_change_start = 0;
-                let mut single_change_end = rope.len();
-
-                if let Some(last) = delta.els.last() {
-                    match last {
-                        DeltaElement::Copy(start, end) => {
-                            if *end == single_change_end {
-                                single_change_end = *start;
-                            }
-                        }
-                        DeltaElement::Insert(_) => {}
-                    }
-                }
-                if single_change_start < change_start {
-                    change_start = single_change_start
-                }
-                if single_change_end > change_end {
-                    change_end = single_change_end
-                }
-                (self.buffer.line_of_offset(change_start), self.buffer.line_of_offset(change_end));
             }
-        } else {
         }
         (None, None)
     }

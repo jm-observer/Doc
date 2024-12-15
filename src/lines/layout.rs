@@ -141,6 +141,6 @@ impl TextLayoutLine {
     }
 
     pub fn adjust(&mut self, line_delta: fn(&mut usize), offset_delta: fn(&mut usize)) {
-        self.phantom_text.addjust(line_delta, offset_delta);
+        self.phantom_text.adjust(line_delta, offset_delta);
     }
 }
