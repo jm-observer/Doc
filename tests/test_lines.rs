@@ -1,4 +1,5 @@
 #![allow(unused_imports, dead_code, unused_mut)]
+
 use std::path::PathBuf;
 use std::sync::atomic;
 use floem::kurbo::{Point, Rect};
@@ -8,8 +9,10 @@ use floem_editor_core::register::Register;
 use lapce_xi_rope::{DeltaElement, Interval, RopeInfo};
 use lapce_xi_rope::spans::SpansBuilder;
 use log::info;
+use lsp_types::Position;
 use doc::lines::buffer::rope_text::RopeText;
 use doc::lines::cursor::{Cursor, CursorAffinity, CursorMode};
+use doc::lines::fold::{FoldingDisplayItem, FoldingDisplayType};
 use doc::lines::selection::Selection;
 use crate::lines_util::{folded_v1, folded_v2, init_empty, init_main, init_main_2, init_semantic_2};
 
@@ -25,6 +28,24 @@ fn test_performance() {
     let mut lines = init_empty();
 
     lines.init_buffer(editor_code.into());
+}
+
+#[test]
+fn test_debug() {
+    custom_utils::logger::logger_stdout_debug();
+    let mut lines = init_main_2();
+    let item =
+        FoldingDisplayItem {
+            position: Position {
+                line: 10,
+                character: 10,
+            },
+            y: 230,
+            ty: FoldingDisplayType::UnfoldStart,
+        };
+
+    lines.update_folding_ranges(item.into());
+    lines.log();
 }
 
 #[test]
@@ -145,7 +166,7 @@ fn test_buffer_edit() {
     info!("{:?} {:?} {:?} {:?}", lines.buffer.char_at_offset(181), lines.buffer.char_at_offset(182), lines.buffer.char_at_offset(183), lines.buffer.char_at_offset(184));
     let mut cursor = cursor_insert();
     let mut register = Register::default();
-    let deltas = lines.do_edit_buffer(&mut cursor, &EditCommand::InsertNewLine,false, &mut register, true,);
+    let deltas = lines.do_edit_buffer(&mut cursor, &EditCommand::InsertNewLine, false, &mut register, true);
 
     let mut change_start = usize::MAX;
     let mut change_end = 0;
@@ -179,7 +200,6 @@ fn test_buffer_edit() {
             change_end = single_change_end
         }
     }
-
 }
 
 

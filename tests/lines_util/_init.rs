@@ -30,6 +30,17 @@ fn _init_lsp_folding_range() -> Vec<FoldingRange> {
         .collect()
 }
 
+fn _init_lsp_folding_range_2() -> Vec<FoldingRange> {
+    let folding_range = r#"[{"startLine":0,"startCharacter":10,"endLine":7,"endCharacter":1},{"startLine":1,"startCharacter":12,"endLine":3,"endCharacter":5},{"startLine":3,"startCharacter":11,"endLine":5,"endCharacter":5},{"startLine":10,"startCharacter":10,"endLine":27,"endCharacter":1}]"#;
+    let folding_range: Vec<lsp_types::FoldingRange> = serde_json::from_str(folding_range).unwrap();
+
+    folding_range
+        .into_iter()
+        .map(FoldingRange::from_lsp)
+        .sorted_by(|x, y| x.start.line.cmp(&y.start.line))
+        .collect()
+}
+
 fn _init_inlay_hint(buffer: &Buffer) -> Spans<InlayHint> {
     let hints = r#"[{"position":{"line":6,"character":9},"label":[{"value":": "},{"value":"A","location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":8,"character":7},"end":{"line":8,"character":8}}}}],"kind":1,"textEdits":[{"range":{"start":{"line":6,"character":9},"end":{"line":6,"character":9}},"newText":": A"}],"paddingLeft":false,"paddingRight":false}]"#;
     let mut hints: Vec<InlayHint> = serde_json::from_str(hints).unwrap();
@@ -56,9 +67,6 @@ fn _init_code(file: PathBuf) -> (String, Buffer) {
     (code, buffer)
 }
 
-fn _init_origin_code((code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
-    _init_lines(None, (code, buffer))
-}
 
 ///  2|   if true {...} else {\r\n
 pub fn folded_v1() -> Vec<FoldingDisplayItem> {
@@ -84,8 +92,8 @@ pub fn folded_v2() -> Vec<FoldingDisplayItem> {
     }]
 }
 
-fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String, Buffer)) -> (DocLines, EditorConfig) {
-    let folding = _init_lsp_folding_range();
+fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String, Buffer), folding: Vec<FoldingRange>) -> (DocLines, EditorConfig) {
+    // let folding = _init_lsp_folding_range();
     let hints = _init_inlay_hint(&buffer);
 
     let config_str = r##"{"auto_closing_matching_pairs":true, "auto_surround":true,"font_family":"JetBrains Mono","font_size":13,"line_height":23,"enable_inlay_hints":true,"inlay_hint_font_size":0,"enable_error_lens":true,"error_lens_end_of_line":true,"error_lens_multiline":false,"error_lens_font_size":0,"enable_completion_lens":false,"enable_inline_completion":true,"completion_lens_font_size":0,"only_render_error_styling":false,"diagnostic_error":{"r":229,"g":20,"b":0,"a":255},"diagnostic_warn":{"r":233,"g":167,"b":0,"a":255},"inlay_hint_fg":{"r":108,"g":118,"b":128,"a":255},"inlay_hint_bg":{"r":245,"g":245,"b":245,"a":255},"error_lens_error_foreground":{"r":228,"g":86,"b":73,"a":255},"error_lens_warning_foreground":{"r":193,"g":132,"b":1,"a":255},"error_lens_other_foreground":{"r":160,"g":161,"b":167,"a":255},"completion_lens_foreground":{"r":160,"g":161,"b":167,"a":255},"editor_foreground":{"r":56,"g":58,"b":66,"a":255},"syntax":{"punctuation.delimiter":{"r":193,"g":132,"b":1,"a":255},"attribute":{"r":193,"g":132,"b":1,"a":255},"method":{"r":64,"g":120,"b":242,"a":255},"bracket.color.3":{"r":166,"g":38,"b":164,"a":255},"builtinType":{"r":18,"g":63,"b":184,"a":255},"enumMember":{"r":146,"g":17,"b":167,"a":255},"bracket.color.2":{"r":193,"g":132,"b":1,"a":255},"markup.heading":{"r":228,"g":86,"b":73,"a":255},"markup.link.url":{"r":64,"g":120,"b":242,"a":255},"string.escape":{"r":1,"g":132,"b":188,"a":255},"structure":{"r":193,"g":132,"b":1,"a":255},"text.reference":{"r":193,"g":132,"b":1,"a":255},"comment":{"r":160,"g":161,"b":167,"a":255},"markup.list":{"r":209,"g":154,"b":102,"a":255},"variable.other.member":{"r":228,"g":86,"b":73,"a":255},"type":{"r":56,"g":58,"b":66,"a":255},"keyword":{"r":7,"g":60,"b":183,"a":255},"text.uri":{"r":1,"g":132,"b":188,"a":255},"enum":{"r":56,"g":58,"b":66,"a":255},"constructor":{"r":193,"g":132,"b":1,"a":255},"interface":{"r":56,"g":58,"b":66,"a":255},"selfKeyword":{"r":166,"g":38,"b":164,"a":255},"type.builtin":{"r":1,"g":132,"b":188,"a":255},"escape":{"r":1,"g":132,"b":188,"a":255},"field":{"r":228,"g":86,"b":73,"a":255},"function.method":{"r":64,"g":120,"b":242,"a":255},"markup.link.text":{"r":166,"g":38,"b":164,"a":255},"property":{"r":136,"g":22,"b":150,"a":255},"struct":{"r":56,"g":58,"b":66,"a":255},"bracket.color.1":{"r":64,"g":120,"b":242,"a":255},"enum-member":{"r":228,"g":86,"b":73,"a":255},"string":{"r":80,"g":161,"b":79,"a":255},"text.title":{"r":209,"g":154,"b":102,"a":255},"bracket.unpaired":{"r":228,"g":86,"b":73,"a":255},"constant":{"r":193,"g":132,"b":1,"a":255},"typeAlias":{"r":56,"g":58,"b":66,"a":255},"function":{"r":61,"g":108,"b":126,"a":255},"markup.link.label":{"r":166,"g":38,"b":164,"a":255},"markup.bold":{"r":209,"g":154,"b":102,"a":255},"markup.italic":{"r":209,"g":154,"b":102,"a":255},"number":{"r":193,"g":132,"b":1,"a":255},"tag":{"r":64,"g":120,"b":242,"a":255},"variable":{"r":56,"g":58,"b":66,"a":255},"embedded":{"r":1,"g":132,"b":188,"a":255}}}"##;
@@ -143,7 +151,9 @@ fn init_diag_2() -> im::Vector<Diagnostic>{
 pub fn init_main_2() -> DocLines {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/main_2.rs".into();
-    let (mut lines, _) = _init_origin_code(_init_code(file));
+
+    let folding = _init_lsp_folding_range_2();
+    let (mut lines, _) = _init_lines(None, _init_code(file), folding);
     let diags = init_diag_2();
     let semantic = init_semantic_2();
 
@@ -169,13 +179,14 @@ pub fn init_main_2() -> DocLines {
 pub fn init_main() -> DocLines {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/main.rs".into();
-    let (mut lines, _) = _init_origin_code(_init_code(file));
+    let (mut lines, _) = _init_lines(None, _init_code(file), vec![]);
     lines
 }
 
 pub fn init_empty() -> DocLines {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/empty.rs".into();
-    let (mut lines, _) = _init_origin_code(_init_code(file));
+
+    let (mut lines, _) = _init_lines(None, _init_code(file), _init_lsp_folding_range());
     lines
 }

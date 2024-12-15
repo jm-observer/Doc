@@ -1018,8 +1018,8 @@ impl DocLines {
         // if origin_text_len >= line_ending {
         //     origin_text_len -= line_ending;
         // }
-        // if line == 8 {
-        //     tracing::info!("start_offset={start_offset} end_offset={end_offset} line_ending={line_ending} origin_text_len={origin_text_len}");
+        // if line == 10 {
+        //     info!("start_offset={start_offset} end_offset={end_offset} origin_text_len={origin_text_len}");
         // }
 
         let folded_ranges =
@@ -1124,59 +1124,60 @@ impl DocLines {
         // that end on this line which have a severity worse than HINT and convert them into
         // PhantomText instances
 
-        let mut diag_text: SmallVec<[PhantomText; 6]> = self.config
-            .enable_error_lens
-            .then_some(())
-            .map(|_| self.diagnostics.diagnostics_span.get_untracked())
-            .map(|diags| {
-                diags
-                    .iter_chunks(start_offset..end_offset)
-                    .filter_map(|(iv, diag)| {
-                        let end = iv.end();
-                        let end_line = self.buffer.line_of_offset(end);
-                        if end_line == line
-                            && diag.severity < Some(DiagnosticSeverity::HINT)
-                            && !folded_ranges.contain_position(diag.range.start)
-                            && !folded_ranges.contain_position(diag.range.end)
-                        {
-                            let fg = {
-                                let severity = diag
-                                    .severity
-                                    .unwrap_or(DiagnosticSeverity::WARNING);
-                                self.config.color_of_error_lens(severity)
-                            };
-
-                            let text = if self.config.only_render_error_styling {
-                                "".to_string()
-                            } else if self.config.error_lens_multiline {
-                                format!("    {}", diag.message)
-                            } else {
-                                format!("    {}", diag.message.lines().join(" "))
-                            };
-                            Some(PhantomText {
-                                kind: PhantomTextKind::Diagnostic,
-                                col: end_offset - start_offset,
-                                affinity: Some(CursorAffinity::Backward),
-                                text,
-                                fg: Some(fg),
-                                font_size: Some(
-                                    self.config.error_lens_font_size(),
-                                ),
-                                bg: None,
-                                under_line: None,
-                                final_col: end_offset - start_offset,
-                                line,
-                                merge_col: end_offset - start_offset,
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<SmallVec<[PhantomText; 6]>>()
-            })
-            .unwrap_or_default();
-
-        text.append(&mut diag_text);
+        // 会与折叠冲突，因此暂时去掉
+        // let mut diag_text: SmallVec<[PhantomText; 6]> = self.config
+        //     .enable_error_lens
+        //     .then_some(())
+        //     .map(|_| self.diagnostics.diagnostics_span.get_untracked())
+        //     .map(|diags| {
+        //         diags
+        //             .iter_chunks(start_offset..end_offset)
+        //             .filter_map(|(iv, diag)| {
+        //                 let end = iv.end();
+        //                 let end_line = self.buffer.line_of_offset(end);
+        //                 if end_line == line
+        //                     && diag.severity < Some(DiagnosticSeverity::HINT)
+        //                     && !folded_ranges.contain_position(diag.range.start)
+        //                     && !folded_ranges.contain_position(diag.range.end)
+        //                 {
+        //                     let fg = {
+        //                         let severity = diag
+        //                             .severity
+        //                             .unwrap_or(DiagnosticSeverity::WARNING);
+        //                         self.config.color_of_error_lens(severity)
+        //                     };
+        //
+        //                     let text = if self.config.only_render_error_styling {
+        //                         "".to_string()
+        //                     } else if self.config.error_lens_multiline {
+        //                         format!("    {}", diag.message)
+        //                     } else {
+        //                         format!("    {}", diag.message.lines().join(" "))
+        //                     };
+        //                     Some(PhantomText {
+        //                         kind: PhantomTextKind::Diagnostic,
+        //                         col: end_offset - start_offset,
+        //                         affinity: Some(CursorAffinity::Backward),
+        //                         text,
+        //                         fg: Some(fg),
+        //                         font_size: Some(
+        //                             self.config.error_lens_font_size(),
+        //                         ),
+        //                         bg: None,
+        //                         under_line: None,
+        //                         final_col: end_offset - start_offset,
+        //                         line,
+        //                         merge_col: end_offset - start_offset,
+        //                     })
+        //                 } else {
+        //                     None
+        //                 }
+        //             })
+        //             .collect::<SmallVec<[PhantomText; 6]>>()
+        //     })
+        //     .unwrap_or_default();
+        //
+        // text.append(&mut diag_text);
 
         let (completion_line, completion_col) = self.completion_pos;
         let completion_text = self.config
