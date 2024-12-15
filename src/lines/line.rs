@@ -58,6 +58,8 @@ pub struct OriginFoldedLine {
     pub origin_line_end: usize,
     pub origin_interval: Interval,
     pub text_layout: Arc<TextLayoutLine>,
+    pub semantic_styles: Vec<NewLineStyle>,
+    pub diagnostic_styles: Vec<NewLineStyle>
 }
 
 #[allow(dead_code)]

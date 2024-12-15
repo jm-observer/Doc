@@ -19,7 +19,7 @@ mod lines_util;
 #[test]
 fn test_performance() {
     custom_utils::logger::logger_stdout_debug();
-    let file: PathBuf = "resources/test_code/empty.rs".into();
+    let _file: PathBuf = "resources/test_code/empty.rs".into();
     let editor: PathBuf = "resources/test_code/editor.rs".into();
     let editor_code = std::fs::read_to_string(editor).unwrap();
     let mut lines = init_empty();
@@ -44,6 +44,10 @@ fn test_semantic_2() {
         let line = &lines.origin_lines2[1];
         assert!(line.diagnostic_styles.is_empty());
         assert_eq!(line.semantic_styles.len(), 2);
+
+        let line = &lines.origin_lines2[3];
+        assert_eq!(line.semantic_styles.len(), 1);
+
         let line = &lines.origin_lines2[6];
         assert_eq!(line.diagnostic_styles.len(), 1);
         // for style in &line.semantic_styles {
@@ -56,21 +60,25 @@ fn test_semantic_2() {
         assert_eq!(line.semantic_styles.len(), 3);
     }
     {
-        ///  2|   if true {...} else {\r\n
+        //  2|   if true {...} else {\r\n
         for folded in folded_v1() {
             lines.update_folding_ranges(folded.into());
         }
         let line = &lines.origin_folded_lines[1];
-        for style in &line.semantic_styles {
-            info!("{:?}", style);
-        }
+        assert_eq!(line.semantic_styles[0].origin_line_offset_start, 4);
+        assert_eq!(line.semantic_styles[1].origin_line_offset_start, 7);
+        assert_eq!(line.semantic_styles[2].origin_line_offset_start, 21);
     }
-    // {
-    //     ///  2|   if true {...} else {...}\r\n
-    //     for folded in folded_v2() {
-    //         lines.update_folding_ranges(folded.into());
-    //     }
-    // }
+    {
+        //  2|   if true {...} else {...}\r\n
+        for folded in folded_v2() {
+            lines.update_folding_ranges(folded.into());
+        }
+        let line = &lines.origin_folded_lines[1];
+        assert_eq!(line.semantic_styles[0].origin_line_offset_start, 4);
+        assert_eq!(line.semantic_styles[1].origin_line_offset_start, 7);
+        assert_eq!(line.semantic_styles[2].origin_line_offset_start, 21);
+    }
 }
 
 #[test]
@@ -141,7 +149,7 @@ fn test_buffer_edit() {
 
     let mut change_start = usize::MAX;
     let mut change_end = 0;
-    for (rope, delta, inval) in &deltas {
+    for (rope, delta, _inval) in &deltas {
         let mut single_change_start = 0;
         let mut single_change_end = rope.len();
         if let Some(first) = delta.els.first() {

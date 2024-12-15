@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
@@ -31,7 +31,7 @@ use lapce_xi_rope::{DeltaElement, Interval, Rope, RopeDelta, Transformer};
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Location, Position};
 use smallvec::SmallVec;
-use log::{debug, info, warn};
+use log::{info, warn};
 use line::{OriginFoldedLine, OriginLine, VisualLine};
 use signal::Signals;
 use style::NewLineStyle;
@@ -154,7 +154,7 @@ impl DocLinesManager {
 pub struct DocLines {
     pub origin_lines: Vec<OriginLine>,
     pub origin_lines2: Vec<OriginLine2>,
-    origin_folded_lines: Vec<OriginFoldedLine>,
+    pub origin_folded_lines: Vec<OriginFoldedLine>,
     pub visual_lines: Vec<VisualLine>,
     // pub font_sizes: Rc<EditorFontSizes>,
     // font_size_cache_id: FontSizeCacheId,
@@ -275,133 +275,133 @@ impl DocLines {
         }
     }
 
-    fn update_lines_old(&mut self) {
-        self.clear();
-
-        let last_line = self.buffer.last_line();
-        let semantic_styles = self.init_semantic_styes();
-        // self.update_parser(buffer);
-        let mut current_line = 0;
-        let mut origin_folded_line_index = 0;
-        let mut visual_line_index = 0;
-        self.line_height = self.config.line_height;
-
-        let font_size = self.config.font_size;
-        let family = Cow::Owned(
-            FamilyOwned::parse_list(&self.config.font_family).collect(),
-        );
-        let attrs = Attrs::new()
-            .color(self.editor_style.ed_text_color())
-            .family(&family)
-            .font_size(font_size as f32)
-            .line_height(LineHeightValue::Px(self.line_height as f32));
-        // let mut duration = Duration::from_secs(0);
-        while current_line <= last_line {
-            let start_offset = self.buffer.offset_of_line(current_line);
-            let end_offset = self.buffer.offset_of_line(current_line + 1);
-            // let time = std::time::SystemTime::now();
-            let text_layout = self.new_text_layout(
-                current_line,
-                start_offset,
-                end_offset,
-                font_size,
-                attrs, &semantic_styles,
-            );
-            // duration += time.elapsed().unwrap();
-            let origin_line_start = text_layout.phantom_text.line;
-            let origin_line_end = text_layout.phantom_text.last_line;
-
-            let width = text_layout.text.size().width;
-            if width > self.max_width {
-                self.max_width = width;
-            }
-
-            for origin_line in origin_line_start..=origin_line_end {
-                self.origin_lines.push(OriginLine {
-                    line_index: origin_line,
-                    start_offset,
-                    phantom: Default::default(),
-                    fg_styles: vec![],
-                });
-            }
-
-            let origin_interval = Interval {
-                start: self.buffer.offset_of_line(origin_line_start),
-                end: self.buffer.offset_of_line(origin_line_end + 1),
-            };
-
-            let mut visual_offset_start = 0;
-            let mut visual_offset_end;
-
-            // [visual_offset_start..visual_offset_end)
-            for (origin_folded_line_sub_index, layout) in
-                text_layout.text.line_layout().iter().enumerate()
-            {
-                if layout.glyphs.is_empty() {
-                    self.visual_lines.push(VisualLine {
-                        line_index: visual_line_index,
-                        origin_interval: Interval::new(
-                            origin_interval.end,
-                            origin_interval.end,
-                        ),
-                        visual_interval: Interval::new(
-                            visual_offset_start,
-                            visual_offset_start,
-                        ),
-                        origin_line: origin_line_start,
-                        origin_folded_line: origin_folded_line_index,
-                        origin_folded_line_sub_index: 0,
-                        text_layout: text_layout.clone(),
-                    });
-                    continue;
-                }
-                visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
-                let offset_info = text_layout
-                    .phantom_text
-                    .cursor_position_of_final_col(visual_offset_start);
-                let origin_interval_start =
-                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
-                let offset_info = text_layout
-                    .phantom_text
-                    .cursor_position_of_final_col(visual_offset_end);
-
-                let origin_interval_end =
-                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
-                let origin_interval = Interval {
-                    start: origin_interval_start,
-                    end: origin_interval_end + 1,
-                };
-
-                self.visual_lines.push(VisualLine {
-                    line_index: visual_line_index,
-                    origin_interval,
-                    origin_line: origin_line_start,
-                    origin_folded_line: origin_folded_line_index,
-                    origin_folded_line_sub_index,
-                    text_layout: text_layout.clone(),
-                    visual_interval: Interval::new(
-                        visual_offset_start,
-                        visual_offset_end + 1,
-                    ),
-                });
-
-                visual_offset_start = visual_offset_end;
-                visual_line_index += 1;
-            }
-
-            self.origin_folded_lines.push(OriginFoldedLine {
-                line_index: origin_folded_line_index,
-                origin_line_start,
-                origin_line_end,
-                origin_interval,
-                text_layout,
-            });
-
-            current_line = origin_line_end + 1;
-            origin_folded_line_index += 1;
-        }
-        self.on_update_lines();
-    }
+    // fn update_lines_old(&mut self) {
+    //     self.clear();
+    //
+    //     let last_line = self.buffer.last_line();
+    //     let semantic_styles = self.init_semantic_styes();
+    //     // self.update_parser(buffer);
+    //     let mut current_line = 0;
+    //     let mut origin_folded_line_index = 0;
+    //     let mut visual_line_index = 0;
+    //     self.line_height = self.config.line_height;
+    //
+    //     let font_size = self.config.font_size;
+    //     let family = Cow::Owned(
+    //         FamilyOwned::parse_list(&self.config.font_family).collect(),
+    //     );
+    //     let attrs = Attrs::new()
+    //         .color(self.editor_style.ed_text_color())
+    //         .family(&family)
+    //         .font_size(font_size as f32)
+    //         .line_height(LineHeightValue::Px(self.line_height as f32));
+    //     // let mut duration = Duration::from_secs(0);
+    //     while current_line <= last_line {
+    //         let start_offset = self.buffer.offset_of_line(current_line);
+    //         let end_offset = self.buffer.offset_of_line(current_line + 1);
+    //         // let time = std::time::SystemTime::now();
+    //         let text_layout = self.new_text_layout(
+    //             current_line,
+    //             start_offset,
+    //             end_offset,
+    //             font_size,
+    //             attrs, &semantic_styles,
+    //         );
+    //         // duration += time.elapsed().unwrap();
+    //         let origin_line_start = text_layout.phantom_text.line;
+    //         let origin_line_end = text_layout.phantom_text.last_line;
+    //
+    //         let width = text_layout.text.size().width;
+    //         if width > self.max_width {
+    //             self.max_width = width;
+    //         }
+    //
+    //         for origin_line in origin_line_start..=origin_line_end {
+    //             self.origin_lines.push(OriginLine {
+    //                 line_index: origin_line,
+    //                 start_offset,
+    //                 phantom: Default::default(),
+    //                 fg_styles: vec![],
+    //             });
+    //         }
+    //
+    //         let origin_interval = Interval {
+    //             start: self.buffer.offset_of_line(origin_line_start),
+    //             end: self.buffer.offset_of_line(origin_line_end + 1),
+    //         };
+    //
+    //         let mut visual_offset_start = 0;
+    //         let mut visual_offset_end;
+    //
+    //         // [visual_offset_start..visual_offset_end)
+    //         for (origin_folded_line_sub_index, layout) in
+    //             text_layout.text.line_layout().iter().enumerate()
+    //         {
+    //             if layout.glyphs.is_empty() {
+    //                 self.visual_lines.push(VisualLine {
+    //                     line_index: visual_line_index,
+    //                     origin_interval: Interval::new(
+    //                         origin_interval.end,
+    //                         origin_interval.end,
+    //                     ),
+    //                     visual_interval: Interval::new(
+    //                         visual_offset_start,
+    //                         visual_offset_start,
+    //                     ),
+    //                     origin_line: origin_line_start,
+    //                     origin_folded_line: origin_folded_line_index,
+    //                     origin_folded_line_sub_index: 0,
+    //                     text_layout: text_layout.clone(),
+    //                 });
+    //                 continue;
+    //             }
+    //             visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
+    //             let offset_info = text_layout
+    //                 .phantom_text
+    //                 .cursor_position_of_final_col(visual_offset_start);
+    //             let origin_interval_start =
+    //                 self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+    //             let offset_info = text_layout
+    //                 .phantom_text
+    //                 .cursor_position_of_final_col(visual_offset_end);
+    //
+    //             let origin_interval_end =
+    //                 self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+    //             let origin_interval = Interval {
+    //                 start: origin_interval_start,
+    //                 end: origin_interval_end + 1,
+    //             };
+    //
+    //             self.visual_lines.push(VisualLine {
+    //                 line_index: visual_line_index,
+    //                 origin_interval,
+    //                 origin_line: origin_line_start,
+    //                 origin_folded_line: origin_folded_line_index,
+    //                 origin_folded_line_sub_index,
+    //                 text_layout: text_layout.clone(),
+    //                 visual_interval: Interval::new(
+    //                     visual_offset_start,
+    //                     visual_offset_end + 1,
+    //                 ),
+    //             });
+    //
+    //             visual_offset_start = visual_offset_end;
+    //             visual_line_index += 1;
+    //         }
+    //
+    //         self.origin_folded_lines.push(OriginFoldedLine {
+    //             line_index: origin_folded_line_index,
+    //             origin_line_start,
+    //             origin_line_end,
+    //             origin_interval,
+    //             text_layout,
+    //         });
+    //
+    //         current_line = origin_line_end + 1;
+    //         origin_folded_line_index += 1;
+    //     }
+    //     self.on_update_lines();
+    // }
 
 
     fn update_lines(&mut self) {
@@ -424,7 +424,7 @@ impl DocLines {
 
         let all_origin_lines = self.init_all_origin_line();
         while current_line <= last_line {
-            let Some(text_layout) = self.new_text_layout_2(
+            let Some((text_layout, semantic_styles, diagnostic_styles)) = self.new_text_layout_2(
                 current_line,
                 &all_origin_lines,
                 font_size,
@@ -511,7 +511,7 @@ impl DocLines {
                 origin_line_start,
                 origin_line_end,
                 origin_interval,
-                text_layout,
+                text_layout, semantic_styles, diagnostic_styles
             });
 
             current_line = origin_line_end + 1;
@@ -521,53 +521,53 @@ impl DocLines {
         self.on_update_lines();
     }
 
-    fn init_semantic_styes(&self) -> HashMap<usize, Vec<NewLineStyle>> {
-        let mut line_styles = HashMap::new();
-
-        if self.style_from_lsp {
-            self.semantic_styles.as_ref().map(|styles| styles
-                .1
-                .iter()
-                .for_each(|(Interval { start, end }, fg_color)| {
-                    let origin_line = self.buffer.line_of_offset(start);
-                    let origin_line_offset = self.buffer.offset_of_line(origin_line);
-                    let entry: &mut Vec<NewLineStyle> = line_styles.entry(origin_line).or_default();
-                    let Some(color) = self.config.syntax_style_color(fg_color) else {
-                        return;
-                    };
-                    entry.push(NewLineStyle {
-                        origin_line,
-                        origin_line_offset_start: start - origin_line_offset,
-                        origin_line_offset_end: end - origin_line_offset,
-                        start_of_buffer: start,
-                        end_of_buffer: end,
-                        fg_color: color,
-                        folded_line_offset_start: start - origin_line_offset,
-                        folded_line_offset_end:  end - origin_line_offset,
-                    });
-                }));
-        } else if let Some(x) = self.syntax.styles.as_ref() {
-            x.iter().for_each(|(Interval { start, end }, style)| {
-                let origin_line = self.buffer.line_of_offset(start);
-                let origin_line_offset = self.buffer.offset_of_line(origin_line);
-                let entry = line_styles.entry(origin_line).or_default();
-                let Some(color) = self.config.syntax_style_color(style) else {
-                    return;
-                };
-                entry.push(NewLineStyle {
-                    origin_line,
-                    origin_line_offset_start: start - origin_line_offset,
-                    origin_line_offset_end: end - origin_line_offset,
-                    fg_color: color,
-                    folded_line_offset_start: start - origin_line_offset,
-                    start_of_buffer: start,
-                    end_of_buffer: end,
-                    folded_line_offset_end: end - origin_line_offset,
-                });
-            });
-        }
-        line_styles
-    }
+    // fn init_semantic_styes(&self) -> HashMap<usize, Vec<NewLineStyle>> {
+    //     let mut line_styles = HashMap::new();
+    //
+    //     if self.style_from_lsp {
+    //         self.semantic_styles.as_ref().map(|styles| styles
+    //             .1
+    //             .iter()
+    //             .for_each(|(Interval { start, end }, fg_color)| {
+    //                 let origin_line = self.buffer.line_of_offset(start);
+    //                 let origin_line_offset = self.buffer.offset_of_line(origin_line);
+    //                 let entry: &mut Vec<NewLineStyle> = line_styles.entry(origin_line).or_default();
+    //                 let Some(color) = self.config.syntax_style_color(fg_color) else {
+    //                     return;
+    //                 };
+    //                 entry.push(NewLineStyle {
+    //                     origin_line,
+    //                     origin_line_offset_start: start - origin_line_offset,
+    //                     origin_line_offset_end: end - origin_line_offset,
+    //                     start_of_buffer: start,
+    //                     end_of_buffer: end,
+    //                     fg_color: color,
+    //                     folded_line_offset_start: start - origin_line_offset,
+    //                     folded_line_offset_end:  end - origin_line_offset,
+    //                 });
+    //             }));
+    //     } else if let Some(x) = self.syntax.styles.as_ref() {
+    //         x.iter().for_each(|(Interval { start, end }, style)| {
+    //             let origin_line = self.buffer.line_of_offset(start);
+    //             let origin_line_offset = self.buffer.offset_of_line(origin_line);
+    //             let entry = line_styles.entry(origin_line).or_default();
+    //             let Some(color) = self.config.syntax_style_color(style) else {
+    //                 return;
+    //             };
+    //             entry.push(NewLineStyle {
+    //                 origin_line,
+    //                 origin_line_offset_start: start - origin_line_offset,
+    //                 origin_line_offset_end: end - origin_line_offset,
+    //                 fg_color: color,
+    //                 folded_line_offset_start: start - origin_line_offset,
+    //                 start_of_buffer: start,
+    //                 end_of_buffer: end,
+    //                 folded_line_offset_end: end - origin_line_offset,
+    //             });
+    //         });
+    //     }
+    //     line_styles
+    // }
 
     fn get_line_semantic_styes(&self, origin_line: usize, line_start: usize, line_end: usize) -> Vec<NewLineStyle> {
         if let Some(rs) = self._get_line_semantic_styes(origin_line, line_start, line_end) {
@@ -1267,162 +1267,162 @@ impl DocLines {
         PhantomTextLine::new(line, origin_text_len, start_offset, text)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn new_text_layout(
-        &mut self,
-        line: usize,
-        start_offset: usize,
-        end_offset: usize,
-        font_size: usize,
-        attrs: Attrs, all_fg_styles: &HashMap<usize, Vec<NewLineStyle>>,
-    ) -> Arc<TextLayoutLine> {
-        let mut line_content = String::new();
-        let mut font_system = FONT_SYSTEM.lock();
-        {
-            let line_content_original = self.buffer.line_content(line);
-            util::push_strip_suffix(&line_content_original, &mut line_content);
-        }
-        let mut diagnostic_styles = Vec::new();
-        // 用于存储该行的最高诊断级别。最后决定该行的背景色
-        let mut max_severity: Option<DiagnosticSeverity> = None;
-        diagnostic_styles.extend(self.get_line_diagnostic_styles(
-            start_offset,
-            end_offset,
-            &mut max_severity,
-            0,
-        ));
-
-        let phantom_text = self.phantom_text(line);
-        let mut collapsed_line_col = phantom_text.folded_line();
-
-        let mut phantom_text = PhantomTextMultiLine::new(phantom_text);
-        let mut attrs_list = AttrsList::new(attrs);
-        if let Some(styles) = all_fg_styles.get(&line) {
-            for NewLineStyle {
-                origin_line_offset_start, origin_line_offset_end, fg_color, ..
-            } in styles.into_iter() {
-                // for (start, end, color) in styles.into_iter() {
-                let (Some(start), Some(end)) =
-                    (phantom_text.col_at(*origin_line_offset_start), phantom_text.col_at(*origin_line_offset_end))
-                else {
-                    continue;
-                };
-                attrs_list.add_span(start..end, attrs.color(*fg_color));
-            }
-        }
-
-        while let Some(collapsed_line) = collapsed_line_col.take() {
-            {
-                util::push_strip_suffix(
-                    self.buffer.line_content(collapsed_line).as_ref(),
-                    &mut line_content,
-                );
-            }
-
-            let offset_col = phantom_text.origin_text_len;
-            let next_phantom_text =
-                self.phantom_text(collapsed_line);
-            let start_offset = self.buffer.offset_of_line(collapsed_line);
-            let end_offset = self.buffer.offset_of_line(collapsed_line + 1);
-            collapsed_line_col = next_phantom_text.folded_line();
-            diagnostic_styles.extend(self.get_line_diagnostic_styles(
-                start_offset,
-                end_offset,
-                &mut max_severity,
-                offset_col,
-            ));
-
-            phantom_text.merge(next_phantom_text);
-            if let Some(styles) = all_fg_styles.get(&collapsed_line) {
-                for NewLineStyle {
-                    origin_line_offset_start, origin_line_offset_end, fg_color, ..
-                } in styles.into_iter() {
-                    let start = *origin_line_offset_start + offset_col;
-                    let end = *origin_line_offset_end + offset_col;
-                    let (Some(start), Some(end)) =
-                        (phantom_text.col_at(start), phantom_text.col_at(end))
-                    else {
-                        continue;
-                    };
-                    attrs_list.add_span(start..end, attrs.color(*fg_color));
-                }
-            }
-        }
-        let phantom_color = self.editor_style.phantom_color();
-        phantom_text.add_phantom_style(
-            &mut attrs_list,
-            attrs,
-            font_size,
-            phantom_color,
-        );
-
-
-        // tracing::info!("{line} {line_content}");
-        // TODO: we could move tab width setting to be done by the document
-        let final_line_content = phantom_text.final_line_content(&line_content);
-
-        let mut text_layout = TextLayout::new_with_font_system(
-            line,
-            &final_line_content,
-            attrs_list,
-            &mut font_system,
-        );
-        drop(font_system);
-        // text_layout.set_tab_width(style.tab_width(edid, line));
-
-        // dbg!(self.editor_style.with(|s| s.wrap_method()));
-        match self.editor_style.wrap_method() {
-            WrapMethod::None => {}
-            WrapMethod::EditorWidth => {
-                text_layout.set_wrap(Wrap::WordOrGlyph);
-                text_layout.set_size(self.viewport_size.width as f32, f32::MAX);
-            }
-            WrapMethod::WrapWidth { width } => {
-                text_layout.set_wrap(Wrap::WordOrGlyph);
-                text_layout.set_size(width, f32::MAX);
-            }
-            // TODO:
-            WrapMethod::WrapColumn { .. } => {}
-        }
-
-        // ?
-        // let indent_line = self.indent_line(line, &line_content_original);
-        // ? comment for performance
-        // let offset = self.buffer.first_non_blank_character_on_line(line);
-        // let (_, col) = self.buffer.offset_to_line_col(offset);
-        // let indent = text_layout.hit_position(col).point.x;
-        let indent = 0.0;
-
-        let mut layout_line = TextLayoutLine {
-            text: text_layout,
-            extra_style: Vec::new(),
-            whitespaces: None,
-            indent,
-            phantom_text,
-        };
-        // 下划线？背景色？
-        util::apply_layout_styles(&mut layout_line);
-        self.apply_diagnostic_styles(
-            &mut layout_line,
-            diagnostic_styles,
-            // max_severity,
-        );
-
-        // if line == 6 || line == 1 {
-        //     info!("\nstart {line}");
-        //     for (range, attr) in layout_line.text.line().attrs_list().spans() {
-        //         info!("{range:?} {:?}", attr.color_opt);
-        //     }
-        //
-        //     for style in &layout_line.extra_style {
-        //         info!("{:?}", style);
-        //     }
-        //     info!("");
-        // }
-
-
-        Arc::new(layout_line)
-    }
+    // #[allow(clippy::too_many_arguments)]
+    // fn new_text_layout(
+    //     &mut self,
+    //     line: usize,
+    //     start_offset: usize,
+    //     end_offset: usize,
+    //     font_size: usize,
+    //     attrs: Attrs, all_fg_styles: &HashMap<usize, Vec<NewLineStyle>>,
+    // ) -> Arc<TextLayoutLine> {
+    //     let mut line_content = String::new();
+    //     let mut font_system = FONT_SYSTEM.lock();
+    //     {
+    //         let line_content_original = self.buffer.line_content(line);
+    //         util::push_strip_suffix(&line_content_original, &mut line_content);
+    //     }
+    //     let mut diagnostic_styles = Vec::new();
+    //     // 用于存储该行的最高诊断级别。最后决定该行的背景色
+    //     let mut max_severity: Option<DiagnosticSeverity> = None;
+    //     diagnostic_styles.extend(self.get_line_diagnostic_styles(
+    //         start_offset,
+    //         end_offset,
+    //         &mut max_severity,
+    //         0,
+    //     ));
+    //
+    //     let phantom_text = self.phantom_text(line);
+    //     let mut collapsed_line_col = phantom_text.folded_line();
+    //
+    //     let mut phantom_text = PhantomTextMultiLine::new(phantom_text);
+    //     let mut attrs_list = AttrsList::new(attrs);
+    //     if let Some(styles) = all_fg_styles.get(&line) {
+    //         for NewLineStyle {
+    //             origin_line_offset_start, origin_line_offset_end, fg_color, ..
+    //         } in styles.into_iter() {
+    //             // for (start, end, color) in styles.into_iter() {
+    //             let (Some(start), Some(end)) =
+    //                 (phantom_text.col_at(*origin_line_offset_start), phantom_text.col_at(*origin_line_offset_end))
+    //             else {
+    //                 continue;
+    //             };
+    //             attrs_list.add_span(start..end, attrs.color(*fg_color));
+    //         }
+    //     }
+    //
+    //     while let Some(collapsed_line) = collapsed_line_col.take() {
+    //         {
+    //             util::push_strip_suffix(
+    //                 self.buffer.line_content(collapsed_line).as_ref(),
+    //                 &mut line_content,
+    //             );
+    //         }
+    //
+    //         let offset_col = phantom_text.origin_text_len;
+    //         let next_phantom_text =
+    //             self.phantom_text(collapsed_line);
+    //         let start_offset = self.buffer.offset_of_line(collapsed_line);
+    //         let end_offset = self.buffer.offset_of_line(collapsed_line + 1);
+    //         collapsed_line_col = next_phantom_text.folded_line();
+    //         diagnostic_styles.extend(self.get_line_diagnostic_styles(
+    //             start_offset,
+    //             end_offset,
+    //             &mut max_severity,
+    //             offset_col,
+    //         ));
+    //
+    //         phantom_text.merge(next_phantom_text);
+    //         if let Some(styles) = all_fg_styles.get(&collapsed_line) {
+    //             for NewLineStyle {
+    //                 origin_line_offset_start, origin_line_offset_end, fg_color, ..
+    //             } in styles.into_iter() {
+    //                 let start = *origin_line_offset_start + offset_col;
+    //                 let end = *origin_line_offset_end + offset_col;
+    //                 let (Some(start), Some(end)) =
+    //                     (phantom_text.col_at(start), phantom_text.col_at(end))
+    //                 else {
+    //                     continue;
+    //                 };
+    //                 attrs_list.add_span(start..end, attrs.color(*fg_color));
+    //             }
+    //         }
+    //     }
+    //     let phantom_color = self.editor_style.phantom_color();
+    //     phantom_text.add_phantom_style(
+    //         &mut attrs_list,
+    //         attrs,
+    //         font_size,
+    //         phantom_color,
+    //     );
+    //
+    //
+    //     // tracing::info!("{line} {line_content}");
+    //     // TODO: we could move tab width setting to be done by the document
+    //     let final_line_content = phantom_text.final_line_content(&line_content);
+    //
+    //     let mut text_layout = TextLayout::new_with_font_system(
+    //         line,
+    //         &final_line_content,
+    //         attrs_list,
+    //         &mut font_system,
+    //     );
+    //     drop(font_system);
+    //     // text_layout.set_tab_width(style.tab_width(edid, line));
+    //
+    //     // dbg!(self.editor_style.with(|s| s.wrap_method()));
+    //     match self.editor_style.wrap_method() {
+    //         WrapMethod::None => {}
+    //         WrapMethod::EditorWidth => {
+    //             text_layout.set_wrap(Wrap::WordOrGlyph);
+    //             text_layout.set_size(self.viewport_size.width as f32, f32::MAX);
+    //         }
+    //         WrapMethod::WrapWidth { width } => {
+    //             text_layout.set_wrap(Wrap::WordOrGlyph);
+    //             text_layout.set_size(width, f32::MAX);
+    //         }
+    //         // TODO:
+    //         WrapMethod::WrapColumn { .. } => {}
+    //     }
+    //
+    //     // ?
+    //     // let indent_line = self.indent_line(line, &line_content_original);
+    //     // ? comment for performance
+    //     // let offset = self.buffer.first_non_blank_character_on_line(line);
+    //     // let (_, col) = self.buffer.offset_to_line_col(offset);
+    //     // let indent = text_layout.hit_position(col).point.x;
+    //     let indent = 0.0;
+    //
+    //     let mut layout_line = TextLayoutLine {
+    //         text: text_layout,
+    //         extra_style: Vec::new(),
+    //         whitespaces: None,
+    //         indent,
+    //         phantom_text,
+    //     };
+    //     // 下划线？背景色？
+    //     util::apply_layout_styles(&mut layout_line);
+    //     self.apply_diagnostic_styles(
+    //         &mut layout_line,
+    //         diagnostic_styles,
+    //         // max_severity,
+    //     );
+    //
+    //     // if line == 6 || line == 1 {
+    //     //     info!("\nstart {line}");
+    //     //     for (range, attr) in layout_line.text.line().attrs_list().spans() {
+    //     //         info!("{range:?} {:?}", attr.color_opt);
+    //     //     }
+    //     //
+    //     //     for style in &layout_line.extra_style {
+    //     //         info!("{:?}", style);
+    //     //     }
+    //     //     info!("");
+    //     // }
+    //
+    //
+    //     Arc::new(layout_line)
+    // }
 
     #[allow(clippy::too_many_arguments)]
     fn new_text_layout_2(
@@ -1431,7 +1431,7 @@ impl DocLines {
         origins: &Vec<OriginLine2>,
         font_size: usize,
         attrs: Attrs,
-    ) -> Option<Arc<TextLayoutLine>> {
+    ) -> Option<(Arc<TextLayoutLine>, Vec<NewLineStyle>, Vec<NewLineStyle>)> {
         let origin_line = origins.get(line)?;
 
         let mut line_content = String::new();
@@ -1510,7 +1510,7 @@ impl DocLines {
             &diagnostic_styles,
         );
 
-        Some(Arc::new(layout_line))
+        Some((Arc::new(layout_line), semantic_styles, diagnostic_styles))
     }
 
     // pub fn update_folding_item(&mut self, item: FoldingDisplayItem) {
@@ -1785,53 +1785,53 @@ impl DocLines {
         }
     }
 
-    fn apply_diagnostic_styles(
-        &self,
-        layout_line: &mut TextLayoutLine,
-        line_styles: Vec<(usize, usize, Color)>,
-        // _max_severity: Option<DiagnosticSeverity>,
-    ) {
-        let layout = &layout_line.text;
-        let phantom_text = &layout_line.phantom_text;
-
-        // 暂不考虑
-        for (start, end, color) in line_styles {
-            // warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
-            // col_at(end)可以为空，因为end是不包含的
-            let (Some(start), Some(end)) = (phantom_text.col_at(start), phantom_text.col_at(end.max(1) - 1)) else {
-                warn!("line={} start={start}, end={end}, color={color:?} col_at empty", phantom_text.line);
-                continue;
-            };
-            let styles =
-                util::extra_styles_for_range(layout, start, end + 1, None, None, Some(color));
-            layout_line.extra_style.extend(styles);
-        }
-
-        // 不要背景色，因此暂时comment
-        // Add the styling for the diagnostic severity, if applicable
-        // if let Some(max_severity) = max_severity {
-        //     let size = layout_line.text.size();
-        //     let x1 = if !config.error_lens_end_of_line {
-        //         let error_end_x = size.width;
-        //         Some(error_end_x.max(size.width))
-        //     } else {
-        //         None
-        //     };
-        //
-        //     // TODO(minor): Should we show the background only on wrapped lines that have the
-        //     // diagnostic actually on that line?
-        //     // That would make it more obvious where it is from and matches other editors.
-        //     layout_line.extra_style.push(LineExtraStyle {
-        //         x: 0.0,
-        //         y: 0.0,
-        //         width: x1,
-        //         height: size.height,
-        //         bg_color: Some(self.config.color_of_error_lens(max_severity)),
-        //         under_line: None,
-        //         wave_line: None,
-        //     });
-        // }
-    }
+    // fn apply_diagnostic_styles(
+    //     &self,
+    //     layout_line: &mut TextLayoutLine,
+    //     line_styles: Vec<(usize, usize, Color)>,
+    //     // _max_severity: Option<DiagnosticSeverity>,
+    // ) {
+    //     let layout = &layout_line.text;
+    //     let phantom_text = &layout_line.phantom_text;
+    //
+    //     // 暂不考虑
+    //     for (start, end, color) in line_styles {
+    //         // warn!("line={} start={start}, end={end}, color={color:?}", phantom_text.line);
+    //         // col_at(end)可以为空，因为end是不包含的
+    //         let (Some(start), Some(end)) = (phantom_text.col_at(start), phantom_text.col_at(end.max(1) - 1)) else {
+    //             warn!("line={} start={start}, end={end}, color={color:?} col_at empty", phantom_text.line);
+    //             continue;
+    //         };
+    //         let styles =
+    //             util::extra_styles_for_range(layout, start, end + 1, None, None, Some(color));
+    //         layout_line.extra_style.extend(styles);
+    //     }
+    //
+    //     // 不要背景色，因此暂时comment
+    //     // Add the styling for the diagnostic severity, if applicable
+    //     // if let Some(max_severity) = max_severity {
+    //     //     let size = layout_line.text.size();
+    //     //     let x1 = if !config.error_lens_end_of_line {
+    //     //         let error_end_x = size.width;
+    //     //         Some(error_end_x.max(size.width))
+    //     //     } else {
+    //     //         None
+    //     //     };
+    //     //
+    //     //     // TODO(minor): Should we show the background only on wrapped lines that have the
+    //     //     // diagnostic actually on that line?
+    //     //     // That would make it more obvious where it is from and matches other editors.
+    //     //     layout_line.extra_style.push(LineExtraStyle {
+    //     //         x: 0.0,
+    //     //         y: 0.0,
+    //     //         width: x1,
+    //     //         height: size.height,
+    //     //         bg_color: Some(self.config.color_of_error_lens(max_severity)),
+    //     //         under_line: None,
+    //     //         wave_line: None,
+    //     //     });
+    //     // }
+    // }
 
     /// return (line,start, end, color)
     pub fn get_line_diagnostic_styles(
@@ -1948,7 +1948,7 @@ impl DocLines {
     }
 
     /// return [start...end), (start...end]
-    fn compute_change_lines(&self, deltas: &Vec<(Rope, RopeDelta, InvalLines)>) -> (Option<(usize, usize)>, Option<(usize, usize)>) {
+    fn _compute_change_lines(&self, deltas: &Vec<(Rope, RopeDelta, InvalLines)>) -> (Option<(usize, usize)>, Option<(usize, usize)>) {
         if deltas.len() == 1 {
             if let Some((rope, delta, _inval)) = deltas.first() {
                 let single_change_end = rope.len();
