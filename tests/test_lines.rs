@@ -62,14 +62,14 @@ fn test_semantic_2() {
         // }
     }
     {
-        let line = &lines.origin_lines2[1];
+        let line = &lines.origin_lines[1];
         assert!(line.diagnostic_styles.is_empty());
         assert_eq!(line.semantic_styles.len(), 2);
 
-        let line = &lines.origin_lines2[3];
+        let line = &lines.origin_lines[3];
         assert_eq!(line.semantic_styles.len(), 1);
 
-        let line = &lines.origin_lines2[6];
+        let line = &lines.origin_lines[6];
         assert_eq!(line.diagnostic_styles.len(), 1);
         // for style in &line.semantic_styles {
         //     info!("{:?}", style);
@@ -82,9 +82,7 @@ fn test_semantic_2() {
     }
     {
         //  2|   if true {...} else {\r\n
-        for folded in folded_v1() {
-            lines.update_folding_ranges(folded.into());
-        }
+        lines.update_folding_ranges(folded_v1().into());
         let line = &lines.origin_folded_lines[1];
         assert_eq!(line.semantic_styles[0].origin_line_offset_start, 4);
         assert_eq!(line.semantic_styles[1].origin_line_offset_start, 7);
@@ -92,9 +90,7 @@ fn test_semantic_2() {
     }
     {
         //  2|   if true {...} else {...}\r\n
-        for folded in folded_v2() {
-            lines.update_folding_ranges(folded.into());
-        }
+        lines.update_folding_ranges(folded_v2().into());
         let line = &lines.origin_folded_lines[1];
         assert_eq!(line.semantic_styles[0].origin_line_offset_start, 4);
         assert_eq!(line.semantic_styles[1].origin_line_offset_start, 7);

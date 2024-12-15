@@ -32,7 +32,7 @@ use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Location, Position};
 use smallvec::SmallVec;
 use log::{info, warn};
-use line::{OriginFoldedLine, OriginLine, VisualLine};
+use line::{OriginFoldedLine, VisualLine};
 use signal::Signals;
 use style::NewLineStyle;
 
@@ -45,7 +45,7 @@ use crate::lines::cursor::{Cursor, CursorAffinity, CursorMode};
 use crate::lines::edit::{Action, EditConf, EditType};
 use crate::lines::encoding::{offset_utf16_to_utf8, offset_utf8_to_utf16};
 use crate::lines::fold::{FoldingDisplayItem, FoldingRanges};
-use crate::lines::line::OriginLine2;
+use crate::lines::line::OriginLine;
 use crate::lines::phantom_text::Text;
 use crate::lines::screen_lines::{ScreenLines};
 use crate::lines::selection::Selection;
@@ -152,8 +152,8 @@ impl DocLinesManager {
 
 #[derive(Clone)]
 pub struct DocLines {
+    // pub origin_lines: Vec<OriginLine>,
     pub origin_lines: Vec<OriginLine>,
-    pub origin_lines2: Vec<OriginLine2>,
     pub origin_folded_lines: Vec<OriginFoldedLine>,
     pub visual_lines: Vec<VisualLine>,
     // pub font_sizes: Rc<EditorFontSizes>,
@@ -219,7 +219,6 @@ impl DocLines {
             config,
             editor_style,
             origin_lines: vec![],
-            origin_lines2: vec![],
             origin_folded_lines: vec![],
             visual_lines: vec![],
             max_width: 0.0,
@@ -517,7 +516,7 @@ impl DocLines {
             current_line = origin_line_end + 1;
             origin_folded_line_index += 1;
         }
-        self.origin_lines2 = all_origin_lines;
+        self.origin_lines = all_origin_lines;
         self.on_update_lines();
     }
 
@@ -570,11 +569,7 @@ impl DocLines {
     // }
 
     fn get_line_semantic_styes(&self, origin_line: usize, line_start: usize, line_end: usize) -> Vec<NewLineStyle> {
-        if let Some(rs) = self._get_line_semantic_styes(origin_line, line_start, line_end) {
-            rs
-        } else {
-            Vec::new()
-        }
+        self._get_line_semantic_styes(origin_line, line_start, line_end).unwrap_or_default()
     }
     fn _get_line_semantic_styes(&self, origin_line: usize, line_start: usize, line_end: usize) -> Option<Vec<NewLineStyle>> {
         Some(if self.style_from_lsp {
@@ -604,13 +599,13 @@ impl DocLines {
     }
 
 
-    fn init_all_origin_line(&self) -> Vec<OriginLine2> {
+    fn init_all_origin_line(&self) -> Vec<OriginLine> {
         // for i in 0..=self.buffer.last_line() {
         //     self.init_origin_line(i)
         // }
-        (0..=self.buffer.last_line()).into_iter().map(|x| self.init_origin_line(x)).collect()
+        (0..=self.buffer.last_line()).map(|x| self.init_origin_line(x)).collect()
     }
-    fn init_origin_line(&self, current_line: usize) -> OriginLine2 {
+    fn init_origin_line(&self, current_line: usize) -> OriginLine {
         let start_offset = self.buffer.offset_of_line(current_line);
         let end_offset = self.buffer.offset_of_line(current_line + 1);
         // let mut fg_styles = Vec::new();
@@ -626,7 +621,7 @@ impl DocLines {
         let phantom_text = self.phantom_text(current_line);
         let semantic_styles = self.get_line_semantic_styes(current_line, start_offset, end_offset);
         let diagnostic_styles = self.get_line_diagnostic_styles_2(current_line, start_offset, end_offset);
-        OriginLine2 {
+        OriginLine {
             line_index: current_line,
             start_offset,
             end_offset,
@@ -1429,7 +1424,7 @@ impl DocLines {
     fn new_text_layout_2(
         &mut self,
         line: usize,
-        origins: &Vec<OriginLine2>,
+        origins: &[OriginLine],
         font_size: usize,
         attrs: Attrs,
     ) -> Option<(Arc<TextLayoutLine>, Vec<NewLineStyle>, Vec<NewLineStyle>)> {
@@ -1746,13 +1741,13 @@ impl DocLines {
     fn apply_semantic_styles_2(
         &self,
         phantom_text: &PhantomTextMultiLine,
-        semantic_styles: &Vec<NewLineStyle>,
+        semantic_styles: &[NewLineStyle],
         attrs_list: &mut AttrsList,
         attrs: Attrs,
     ) {
         for NewLineStyle {
             origin_line_offset_start, origin_line_offset_end, fg_color, ..
-        } in semantic_styles.into_iter() {
+        } in semantic_styles.iter() {
             // for (start, end, color) in styles.into_iter() {
             let (Some(start), Some(end)) =
                 (phantom_text.col_at(*origin_line_offset_start), phantom_text.col_at(*origin_line_offset_end))
@@ -1949,58 +1944,62 @@ impl DocLines {
     }
 
     /// return [start...end), (start...end]
-    fn _compute_change_lines(&self, deltas: &Vec<(Rope, RopeDelta, InvalLines)>) -> (Option<(usize, usize)>, Option<(usize, usize)>) {
+    #[allow(clippy::type_complexity)]
+    fn _compute_change_lines(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) -> (Option<(usize, usize)>, Option<(usize, usize)>) {
         if deltas.len() == 1 {
             if let Some((rope, delta, _inval)) = deltas.first() {
                 let single_change_end = rope.len();
-                if delta.els.len() == 1 {
-                    if let Some(first) = delta.els.first() {
-                        match first {
-                            DeltaElement::Copy(start, end) => {
-                                if *start == 0 {
-                                    let end_line = rope.line_of_offset(*end);
-                                    return (Some((0, end_line)), None);
-                                } else if *end == single_change_end {
-                                    let start_line = rope.line_of_offset(*start);
-                                    let end_line = rope.line_of_offset(single_change_end);
-                                    return (None, Some((start_line, end_line)));
+                match delta.els.len() {
+                    1 => {
+                        if let Some(first) = delta.els.first() {
+                            match first {
+                                DeltaElement::Copy(start, end) => {
+                                    if *start == 0 {
+                                        let end_line = rope.line_of_offset(*end);
+                                        return (Some((0, end_line)), None);
+                                    } else if *end == single_change_end {
+                                        let start_line = rope.line_of_offset(*start);
+                                        let end_line = rope.line_of_offset(single_change_end);
+                                        return (None, Some((start_line, end_line)));
+                                    }
                                 }
+                                DeltaElement::Insert(_) => {}
                             }
-                            DeltaElement::Insert(_) => {}
                         }
                     }
-                } else if delta.els.len() > 1 {
-                    let single_change_end = rope.len();
-                    if let (Some(first), Some(last)) = (delta.els.first(), delta.els.last()) {
-                        match (first, last) {
-                            (DeltaElement::Copy(start, end), DeltaElement::Copy(last_start, last_end)) => {
-                                let mut first = None;
-                                let mut last = None;
-                                if *start == 0 {
-                                    let end_line = rope.line_of_offset(*end);
-                                    first = Some((0, end_line));
+                    _ => {
+                        let single_change_end = rope.len();
+                        if let (Some(first), Some(last)) = (delta.els.first(), delta.els.last()) {
+                            match (first, last) {
+                                (DeltaElement::Copy(start, end), DeltaElement::Copy(last_start, last_end)) => {
+                                    let mut first = None;
+                                    let mut last = None;
+                                    if *start == 0 {
+                                        let end_line = rope.line_of_offset(*end);
+                                        first = Some((0, end_line));
+                                    }
+                                    if *last_end == single_change_end {
+                                        let start_line = rope.line_of_offset(*last_start);
+                                        let end_line = rope.line_of_offset(single_change_end);
+                                        last = Some((start_line, end_line));
+                                    }
+                                    return (first, last);
                                 }
-                                if *last_end == single_change_end {
-                                    let start_line = rope.line_of_offset(*last_start);
-                                    let end_line = rope.line_of_offset(single_change_end);
-                                    last = Some((start_line, end_line));
+                                (DeltaElement::Copy(start, end), _) => {
+                                    if *start == 0 {
+                                        let end_line = rope.line_of_offset(*end);
+                                        return (Some((0, end_line)), None);
+                                    }
                                 }
-                                return (first, last);
+                                (_, DeltaElement::Copy(last_start, last_end)) => {
+                                    if *last_end == single_change_end {
+                                        let start_line = rope.line_of_offset(*last_start);
+                                        let end_line = rope.line_of_offset(single_change_end);
+                                        return (None, Some((start_line, end_line)));
+                                    }
+                                }
+                                _ => {}
                             }
-                            (DeltaElement::Copy(start, end), _) => {
-                                if *start == 0 {
-                                    let end_line = rope.line_of_offset(*end);
-                                    return (Some((0, end_line)), None);
-                                }
-                            }
-                            (_, DeltaElement::Copy(last_start, last_end)) => {
-                                if *last_end == single_change_end {
-                                    let start_line = rope.line_of_offset(*last_start);
-                                    let end_line = rope.line_of_offset(single_change_end);
-                                    return (None, Some((start_line, end_line)));
-                                }
-                            }
-                            _ => {}
                         }
                     }
                 }

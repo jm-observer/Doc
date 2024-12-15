@@ -219,7 +219,7 @@ impl PhantomTextKind {
             line_delta(&mut position_line);
             start_position.line = position_line as u32;
             line_delta(len);
-            next_line.as_mut().map(|x| line_delta(x));
+            next_line.as_mut().map(line_delta);
         }
     }
 }

@@ -1,16 +1,12 @@
-use floem::kurbo::Point;
-use floem_editor_core::cursor::{CursorAffinity, CursorMode};
 use log::debug;
-use lsp_types::Position;
-use doc::lines::fold::{FoldingDisplayItem, FoldingDisplayType};
-use crate::lines_util::{_init_folded_code_v1, _init_folded_code_v2, _init_origin_code, check_line_final_col, check_lines_col};
+use crate::lines_util::{check_line_final_col, check_lines_col, folded_v1, folded_v2, init_main, init_main_2};
 
 mod lines_util;
 
 #[test]
 fn test_folded_line_1() {
     custom_utils::logger::logger_stdout_debug();
-    let (_lines, _) = _init_folded_code_v1();
+    let _lines = init_main();
     {
         let line2 = &_lines.visual_lines[1];
         check_lines_col(
@@ -38,7 +34,9 @@ fn test_folded_line_1() {
 
 #[test]
 fn test_folded_line_1_5() {
-    let (_lines, _) = _init_folded_code_v2();
+    let mut _lines = init_main_2();
+    _lines.update_folding_ranges(folded_v1().into());
+    _lines.update_folding_ranges(folded_v2().into());
     {
         let line2 = &_lines.visual_lines[1];
         check_lines_col(

@@ -69,27 +69,27 @@ fn _init_code(file: PathBuf) -> (String, Buffer) {
 
 
 ///  2|   if true {...} else {\r\n
-pub fn folded_v1() -> Vec<FoldingDisplayItem> {
-    vec![FoldingDisplayItem {
+pub fn folded_v1() -> FoldingDisplayItem {
+    FoldingDisplayItem {
         position: Position {
             line: 1,
             character: 12,
         },
         y: 0,
         ty: FoldingDisplayType::UnfoldStart,
-    }]
+    }
 }
 
 ///  2|   if true {...} else {...}\r\n
-pub fn folded_v2() -> Vec<FoldingDisplayItem> {
-    vec![FoldingDisplayItem {
+pub fn folded_v2() -> FoldingDisplayItem {
+    FoldingDisplayItem {
         position: Position {
             line: 5,
             character: 5,
         },
         y: 0,
         ty: FoldingDisplayType::UnfoldEnd,
-    }]
+    }
 }
 
 fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String, Buffer), folding: Vec<FoldingRange>) -> (DocLines, EditorConfig) {
@@ -179,7 +179,7 @@ pub fn init_main_2() -> DocLines {
 pub fn init_main() -> DocLines {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/main.rs".into();
-    let (mut lines, _) = _init_lines(None, _init_code(file), vec![]);
+    let (lines, _) = _init_lines(None, _init_code(file), vec![]);
     lines
 }
 
@@ -187,6 +187,6 @@ pub fn init_empty() -> DocLines {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/empty.rs".into();
 
-    let (mut lines, _) = _init_lines(None, _init_code(file), _init_lsp_folding_range());
+    let (lines, _) = _init_lines(None, _init_code(file), _init_lsp_folding_range());
     lines
 }

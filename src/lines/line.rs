@@ -3,23 +3,22 @@ use std::sync::Arc;
 use super::layout::TextLayoutLine;
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
 use std::fmt::{Debug, Formatter};
-use floem::peniko::Color;
 use floem_editor_core::line_ending::LineEnding;
 use crate::lines::phantom_text::PhantomTextLine;
 use crate::lines::style::NewLineStyle;
 
-#[allow(dead_code)]
-#[derive(Clone, Debug)]
-pub struct OriginLine {
-    pub line_index: usize,
-    pub start_offset: usize,
-    pub phantom: PhantomTextLine,
-    pub fg_styles: Vec<(usize, usize, Color)>
-}
+// #[allow(dead_code)]
+// #[derive(Clone, Debug)]
+// pub struct OriginLine {
+//     pub line_index: usize,
+//     pub start_offset: usize,
+//     pub phantom: PhantomTextLine,
+//     pub fg_styles: Vec<(usize, usize, Color)>
+// }
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct OriginLine2 {
+pub struct OriginLine {
     pub line_index: usize,
     /// [start_offset...end_offset)
     pub start_offset: usize,
@@ -29,7 +28,7 @@ pub struct OriginLine2 {
     pub diagnostic_styles: Vec<NewLineStyle>
 }
 
-impl OriginLine2 {
+impl OriginLine {
     pub fn semantic_styles(&self, delta: usize) -> Vec<NewLineStyle> {
         self.semantic_styles.iter().map(|x| {
             let mut x = x.clone();
