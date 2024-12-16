@@ -15,7 +15,6 @@ use crate::lines::line::VisualLine;
 // we don't really have support for diffs in floem-editor! Is there a better design for this?
 // Possibly we should just move that out to a separate field on Lapce's editor.
 // 不允许滚到到窗口没有文本！！！因此lines等不会为空
-// 从第2行开始
 #[derive(Clone)]
 pub struct ScreenLines {
     pub lines: Vec<RVLine>,

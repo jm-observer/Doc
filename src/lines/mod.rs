@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 // use std::collections::HashMap;
-use std::ops::Range;
+use std::ops::{Range};
 use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
 
@@ -241,7 +241,7 @@ impl DocLines {
             // folding_items: Default::default(),
             line_height: 0,
         };
-        lines.update_lines();
+        lines.update_lines((None, None));
         lines
     }
 
@@ -259,9 +259,6 @@ impl DocLines {
     // }
 
     fn clear(&mut self) {
-        self.origin_lines.clear();
-        self.origin_folded_lines.clear();
-        self.visual_lines.clear();
         self.max_width = 0.0;
         self.line_height = 0;
     }
@@ -403,8 +400,11 @@ impl DocLines {
     // }
 
 
-    fn update_lines(&mut self) {
+    fn update_lines(&mut self, (_start_delta, _end_delta): (Option<LineDelta>, Option<LineDelta>)) {
         self.clear();
+        self.origin_lines.clear();
+        self.origin_folded_lines.clear();
+        self.visual_lines.clear();
         let last_line = self.buffer.last_line();
         let mut current_line = 0;
         let mut origin_folded_line_index = 0;
@@ -421,7 +421,7 @@ impl DocLines {
             .line_height(LineHeightValue::Px(self.line_height as f32));
         // let mut duration = Duration::from_secs(0);
 
-        let all_origin_lines = self.init_all_origin_line();
+        let all_origin_lines = self.init_all_origin_line((&None, &None));
         while current_line <= last_line {
             let Some((text_layout, semantic_styles, diagnostic_styles)) = self.new_text_layout_2(
                 current_line,
@@ -510,13 +510,166 @@ impl DocLines {
                 origin_line_start,
                 origin_line_end,
                 origin_interval,
-                text_layout, semantic_styles, diagnostic_styles
+                text_layout,
+                semantic_styles,
+                diagnostic_styles,
             });
 
             current_line = origin_line_end + 1;
             origin_folded_line_index += 1;
         }
         self.origin_lines = all_origin_lines;
+        self.on_update_lines();
+    }
+
+    fn update_lines_2(&mut self, (start_delta, end_delta): (Option<LineDelta>, Option<LineDelta>)) {
+        self.clear();
+        self.visual_lines.clear();
+
+        let last_line = self.buffer.last_line();
+        let mut origin_folded_line_index = 0;
+        let mut visual_line_index = 0;
+        self.line_height = self.config.line_height;
+        let font_size = self.config.font_size;
+        let family = Cow::Owned(
+            FamilyOwned::parse_list(&self.config.font_family).collect(),
+        );
+        let attrs = Attrs::new()
+            .color(self.editor_style.ed_text_color())
+            .family(&family)
+            .font_size(font_size as f32)
+            .line_height(LineHeightValue::Px(self.line_height as f32));
+        // let mut duration = Duration::from_secs(0);
+
+        let all_origin_lines = self.init_all_origin_line((&start_delta, &end_delta));
+
+        let mut origin_folded_lines = if let Some(LineDelta {
+                                                      start_line, end_line, ..
+                                                  }) = start_delta {
+            self.origin_folded_lines.iter().filter_map(|folded| if start_line <= folded.origin_line_start && folded.origin_line_end < end_line {
+                Some(folded.clone())
+            } else {
+                None
+            }).collect()
+        } else {
+            Vec::new()
+        };
+        let mut current_line = if let Some(line) = origin_folded_lines.last() {
+            line.origin_line_end + 1
+        } else {
+            0
+        };
+        while current_line <= last_line {
+            let Some((text_layout, semantic_styles, diagnostic_styles)) = self.new_text_layout_2(
+                current_line,
+                &all_origin_lines,
+                font_size,
+                attrs,
+            ) else {
+                // todo
+                break;
+            };
+            // duration += time.elapsed().unwrap();
+            let origin_line_start = text_layout.phantom_text.line;
+            let origin_line_end = text_layout.phantom_text.last_line;
+
+            let width = text_layout.text.size().width;
+            if width > self.max_width {
+                self.max_width = width;
+            }
+
+            let origin_interval = Interval {
+                start: self.buffer.offset_of_line(origin_line_start),
+                end: self.buffer.offset_of_line(origin_line_end + 1),
+            };
+
+            origin_folded_lines.push(OriginFoldedLine {
+                line_index: origin_folded_line_index,
+                origin_line_start,
+                origin_line_end,
+                origin_interval,
+                text_layout,
+                semantic_styles,
+                diagnostic_styles,
+            });
+
+            current_line = origin_line_end + 1;
+            origin_folded_line_index += 1;
+        }
+
+        while let Some(line) = origin_folded_lines.iter().next() {
+            // duration += time.elapsed().unwrap();
+            let text_layout = &line.text_layout;
+            let origin_line_start = text_layout.phantom_text.line;
+            let origin_line_end = text_layout.phantom_text.last_line;
+
+            let origin_interval = Interval {
+                start: self.buffer.offset_of_line(origin_line_start),
+                end: self.buffer.offset_of_line(origin_line_end + 1),
+            };
+
+            let mut visual_offset_start = 0;
+            let mut visual_offset_end;
+
+            // [visual_offset_start..visual_offset_end)
+            for (origin_folded_line_sub_index, layout) in
+                text_layout.text.line_layout().iter().enumerate()
+            {
+                if layout.glyphs.is_empty() {
+                    self.visual_lines.push(VisualLine {
+                        line_index: visual_line_index,
+                        origin_interval: Interval::new(
+                            origin_interval.end,
+                            origin_interval.end,
+                        ),
+                        visual_interval: Interval::new(
+                            visual_offset_start,
+                            visual_offset_start,
+                        ),
+                        origin_line: origin_line_start,
+                        origin_folded_line: origin_folded_line_index,
+                        origin_folded_line_sub_index: 0,
+                        // text_layout: text_layout.clone(),
+                    });
+                    continue;
+                }
+                visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
+                let offset_info = text_layout
+                    .phantom_text
+                    .cursor_position_of_final_col(visual_offset_start);
+                let origin_interval_start =
+                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                let offset_info = text_layout
+                    .phantom_text
+                    .cursor_position_of_final_col(visual_offset_end);
+
+                let origin_interval_end =
+                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                let origin_interval = Interval {
+                    start: origin_interval_start,
+                    end: origin_interval_end + 1,
+                };
+
+                self.visual_lines.push(VisualLine {
+                    line_index: visual_line_index,
+                    origin_interval,
+                    origin_line: origin_line_start,
+                    origin_folded_line: origin_folded_line_index,
+                    origin_folded_line_sub_index,
+                    // text_layout: text_layout.clone(),
+                    visual_interval: Interval::new(
+                        visual_offset_start,
+                        visual_offset_end + 1,
+                    ),
+                });
+
+                visual_offset_start = visual_offset_end;
+                visual_line_index += 1;
+            }
+        }
+
+        self.origin_lines = all_origin_lines;
+        self.origin_folded_lines = origin_folded_lines;
         self.on_update_lines();
     }
 
@@ -566,45 +719,6 @@ impl DocLines {
     //         });
     //     }
     //     line_styles
-    // }
-
-    fn get_line_semantic_styes(&self, origin_line: usize, line_start: usize, line_end: usize) -> Vec<NewLineStyle> {
-        self._get_line_semantic_styes(origin_line, line_start, line_end).unwrap_or_default()
-    }
-    fn _get_line_semantic_styes(&self, origin_line: usize, line_start: usize, line_end: usize) -> Option<Vec<NewLineStyle>> {
-        Some(if self.style_from_lsp {
-            &self.semantic_styles.as_ref()?.1
-        } else {
-            self.syntax.styles.as_ref()?
-        }.iter().filter_map(|(Interval { start, end }, fg_color)| {
-            if line_start <= start && end < line_end {
-                let Some(color) = self.config.syntax_style_color(fg_color) else {
-                    // debug!("{fg_color} color is emply");
-                    return None;
-                };
-                Some(NewLineStyle {
-                    origin_line,
-                    origin_line_offset_start: start - line_start,
-                    origin_line_offset_end: end - line_start,
-                    start_of_buffer: start,
-                    end_of_buffer: end,
-                    fg_color: color,
-                    folded_line_offset_start:start - line_start,
-                    folded_line_offset_end: end - line_start,
-                })
-            } else {
-                None
-            }
-        }).collect())
-    }
-
-
-    fn init_all_origin_line(&self) -> Vec<OriginLine> {
-        // for i in 0..=self.buffer.last_line() {
-        //     self.init_origin_line(i)
-        // }
-        (0..=self.buffer.last_line()).map(|x| self.init_origin_line(x)).collect()
-    }
     fn init_origin_line(&self, current_line: usize) -> OriginLine {
         let start_offset = self.buffer.offset_of_line(current_line);
         let end_offset = self.buffer.offset_of_line(current_line + 1);
@@ -629,6 +743,63 @@ impl DocLines {
             semantic_styles,
             diagnostic_styles,
         }
+    }
+
+    // }
+    fn get_line_semantic_styes(&self, origin_line: usize, line_start: usize, line_end: usize) -> Vec<NewLineStyle> {
+        self._get_line_semantic_styes(origin_line, line_start, line_end).unwrap_or_default()
+    }
+
+
+    fn _get_line_semantic_styes(&self, origin_line: usize, line_start: usize, line_end: usize) -> Option<Vec<NewLineStyle>> {
+        Some(if self.style_from_lsp {
+            &self.semantic_styles.as_ref()?.1
+        } else {
+            self.syntax.styles.as_ref()?
+        }.iter().filter_map(|(Interval { start, end }, fg_color)| {
+            if line_start <= start && end < line_end {
+                let Some(color) = self.config.syntax_style_color(fg_color) else {
+                    // debug!("{fg_color} color is emply");
+                    return None;
+                };
+                Some(NewLineStyle {
+                    origin_line,
+                    origin_line_offset_start: start - line_start,
+                    origin_line_offset_end: end - line_start,
+                    start_of_buffer: start,
+                    end_of_buffer: end,
+                    fg_color: color,
+                    folded_line_offset_start: start - line_start,
+                    folded_line_offset_end: end - line_start,
+                })
+            } else {
+                None
+            }
+        }).collect())
+    }
+
+    fn init_all_origin_line(&self, (start_delta, _end_delta): (&Option<LineDelta>, &Option<LineDelta>)) -> Vec<OriginLine> {
+        let mut start_init_line = 0;
+        let last_line = self.buffer.last_line();
+        let end_init_line = last_line;
+        let mut origin_liens = if let Some(LineDelta {
+                                               start_line, end_line, buffer_offset_start_line
+                                           }) = start_delta {
+            start_init_line = *end_line;
+            (&self.origin_lines[*start_line..*end_line]).iter().map(|x| x.clone()).collect()
+        } else {
+            Vec::with_capacity(end_init_line)
+        };
+        // if let Some(LineDelta {
+        //                 start_line, end_line, buffer_offset_start_line
+        //             }) = end_delta {
+        //     origin_liens.extend((*start_init_line..  ).map(|x| self.init_origin_line(x)).collect());
+        //     origin_liens.extend((&self.origin_lines[*start_line..=last_line]).iter().map(|x| x.clone()).collect());
+        // } else {
+        //
+        // };
+        origin_liens.extend((start_init_line..=last_line).map(|x| self.init_origin_line(x)));
+        origin_liens
     }
 
     // pub fn wrap(&self, viewport: Rect, es: &EditorStyle) -> ResolvedWrap {
@@ -1739,7 +1910,6 @@ impl DocLines {
         // info!("{:?}", diag_spans);
 
         info!("{:?}", self.origin_folded_lines[0].text_layout.phantom_text.text);
-
     }
 
     fn apply_semantic_styles_2(
@@ -2062,69 +2232,104 @@ impl DocLines {
         self.signals.screen_lines.update_force(screen_lines);
     }
 
-    /// return [start...end), (start...end]
-    #[allow(clippy::type_complexity)]
-    fn _compute_change_lines(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) -> (Option<(usize, usize)>, Option<(usize, usize)>) {
+    fn _compute_change_lines(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) -> (Option<LineDelta>, Option<LineDelta>) {
         if deltas.len() == 1 {
-            if let Some((rope, delta, _inval)) = deltas.first() {
-                let single_change_end = rope.len();
-                match delta.els.len() {
-                    1 => {
-                        if let Some(first) = delta.els.first() {
-                            match first {
-                                DeltaElement::Copy(start, end) => {
-                                    if *start == 0 {
-                                        let end_line = rope.line_of_offset(*end);
-                                        return (Some((0, end_line)), None);
-                                    } else if *end == single_change_end {
-                                        let start_line = rope.line_of_offset(*start);
-                                        let end_line = rope.line_of_offset(single_change_end);
-                                        return (None, Some((start_line, end_line)));
-                                    }
-                                }
-                                DeltaElement::Insert(_) => {}
+            if let Some(delta) = deltas.first() {
+                return self._compute_change_lines_one(delta);
+            }
+        }
+        (None, None)
+    }
+
+    fn _compute_change_lines_one(&self, (rope, delta, _inval): &(Rope, RopeDelta, InvalLines)) -> (Option<LineDelta>, Option<LineDelta>) {
+        let single_change_end = rope.len();
+        match delta.els.len() {
+            1 => {
+                if let Some(first) = delta.els.first() {
+                    match first {
+                        DeltaElement::Copy(start, end) => {
+                            if *start == 0 {
+                                let end_line = rope.line_of_offset(*end);
+                                return (Some(LineDelta {
+                                    start_line: 0,
+                                    end_line,
+                                    buffer_offset_start_line: 0,
+                                }), None);
+                            } else if *end == single_change_end {
+                                let start_line = rope.line_of_offset(*start);
+                                let end_line = rope.line_of_offset(single_change_end);
+                                return (None, Some(LineDelta {
+                                    start_line,
+                                    end_line,
+                                    buffer_offset_start_line: rope.offset_of_line(start_line),
+                                }));
                             }
                         }
+                        DeltaElement::Insert(_) => {}
                     }
-                    _ => {
-                        let single_change_end = rope.len();
-                        if let (Some(first), Some(last)) = (delta.els.first(), delta.els.last()) {
-                            match (first, last) {
-                                (DeltaElement::Copy(start, end), DeltaElement::Copy(last_start, last_end)) => {
-                                    let mut first = None;
-                                    let mut last = None;
-                                    if *start == 0 {
-                                        let end_line = rope.line_of_offset(*end);
-                                        first = Some((0, end_line));
-                                    }
-                                    if *last_end == single_change_end {
-                                        let start_line = rope.line_of_offset(*last_start);
-                                        let end_line = rope.line_of_offset(single_change_end);
-                                        last = Some((start_line, end_line));
-                                    }
-                                    return (first, last);
-                                }
-                                (DeltaElement::Copy(start, end), _) => {
-                                    if *start == 0 {
-                                        let end_line = rope.line_of_offset(*end);
-                                        return (Some((0, end_line)), None);
-                                    }
-                                }
-                                (_, DeltaElement::Copy(last_start, last_end)) => {
-                                    if *last_end == single_change_end {
-                                        let start_line = rope.line_of_offset(*last_start);
-                                        let end_line = rope.line_of_offset(single_change_end);
-                                        return (None, Some((start_line, end_line)));
-                                    }
-                                }
-                                _ => {}
+                }
+            }
+            _ => {
+                let single_change_end = rope.len();
+                if let (Some(first), Some(last)) = (delta.els.first(), delta.els.last()) {
+                    match (first, last) {
+                        (DeltaElement::Copy(start, end), DeltaElement::Copy(last_start, last_end)) => {
+                            let mut first = None;
+                            let mut last = None;
+                            if *start == 0 {
+                                let end_line = rope.line_of_offset(*end);
+                                first = Some(LineDelta {
+                                    start_line: 0,
+                                    end_line,
+                                    buffer_offset_start_line: 0,
+                                });
+                            }
+                            if *last_end == single_change_end {
+                                let start_line = rope.line_of_offset(*last_start);
+                                let end_line = rope.line_of_offset(single_change_end);
+                                last = Some(LineDelta {
+                                    start_line,
+                                    end_line,
+                                    buffer_offset_start_line: rope.offset_of_line(start_line),
+                                });
+                            }
+                            return (first, last);
+                        }
+                        (DeltaElement::Copy(start, end), _) => {
+                            if *start == 0 {
+                                let end_line = rope.line_of_offset(*end);
+                                return (Some(LineDelta {
+                                    start_line: 0,
+                                    end_line,
+                                    buffer_offset_start_line: 0,
+                                }), None);
                             }
                         }
+                        (_, DeltaElement::Copy(last_start, last_end)) => {
+                            if *last_end == single_change_end {
+                                let start_line = rope.line_of_offset(*last_start);
+                                let end_line = rope.line_of_offset(single_change_end);
+                                return (None, Some(LineDelta {
+                                    start_line,
+                                    end_line,
+                                    buffer_offset_start_line: rope.offset_of_line(start_line),
+                                }));
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
         }
         (None, None)
+    }
+
+    /// return [start...end), (start...end]
+    #[allow(clippy::type_complexity)]
+    fn compute_change_lines(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) -> (Option<LineDelta>, Option<LineDelta>) {
+        let rs = self._compute_change_lines(deltas);
+        info!("{:?}", rs);
+        rs
     }
 }
 
@@ -2132,7 +2337,6 @@ impl DocLines {
 type ComputeLines = DocLines;
 
 impl ComputeLines {
-
     pub fn line_point_of_visual_line_col(
         &self,
         visual_line: usize,
@@ -2210,7 +2414,7 @@ impl PubUpdateLines {
         info!("line_ending {:?}", self.buffer.line_ending());
         // let time = std::time::SystemTime::now();
         self.on_update_buffer();
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2221,7 +2425,7 @@ impl PubUpdateLines {
     pub fn set_line_ending(&mut self, line_ending: LineEnding) {
         self.buffer.set_line_ending(line_ending);
         self.on_update_buffer();
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2235,7 +2439,8 @@ impl PubUpdateLines {
         let rs = self.buffer.edit(iter, edit_type);
         self.apply_delta(&rs.1);
         self.on_update_buffer();
-        self.update_lines();
+        let line_delta = self._compute_change_lines_one(&rs);
+        self.update_lines(line_delta);
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2245,7 +2450,7 @@ impl PubUpdateLines {
         let rs = self.buffer.reload(content, set_pristine);
         self.apply_delta(&rs.1);
         self.on_update_buffer();
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2272,7 +2477,8 @@ impl PubUpdateLines {
             self.apply_delta(&delta.1);
         }
         self.on_update_buffer();
-        self.update_lines();
+        let line_delta = self.compute_change_lines(&rs);
+        self.update_lines(line_delta);
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2287,6 +2493,7 @@ impl PubUpdateLines {
         register: &mut Register,
         smart_tab: bool,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        info!("do_edit_buffer cursor={cursor:?} cmd={cmd:?} modal={modal} smart_tab={smart_tab}");
         let syntax = &self.syntax;
         let mut clipboard = SystemClipboard::new();
         let old_cursor = cursor.mode().clone();
@@ -2312,16 +2519,9 @@ impl PubUpdateLines {
                 self.apply_delta(&delta.1);
             }
         }
-
-        info!("do_edit_buffer {:?} [{:?}] smart_tab={smart_tab} modal={modal}", cursor, cmd);
-        for (rope, delta, inval) in &deltas {
-            info!("{:?}", rope);
-            info!("{:?}", delta);
-            info!("{:?}", inval);
-            info!("");
-        }
         self.on_update_buffer();
-        self.update_lines();
+        let line_delta = self.compute_change_lines(&deltas);
+        self.update_lines(line_delta);
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2333,6 +2533,8 @@ impl PubUpdateLines {
         cursor: &mut Cursor,
         s: &str,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        info!("do_insert_buffer s={s}");
+
         let config = &self.config;
         let old_cursor = cursor.mode().clone();
         let syntax = &self.syntax;
@@ -2352,8 +2554,8 @@ impl PubUpdateLines {
             self.apply_delta(&delta.1);
         }
         self.on_update_buffer();
-
-        self.update_lines();
+        let line_delta = self.compute_change_lines(&deltas);
+        self.update_lines(line_delta);
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2369,14 +2571,14 @@ impl PubUpdateLines {
 
     pub fn clear_completion_lens(&mut self) {
         self.completion_lens = None;
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
     }
     pub fn init_diagnostics(&mut self) {
         self.init_diagnostics_with_buffer();
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2388,7 +2590,7 @@ impl PubUpdateLines {
             let should_update = matches!(self.editor_style.wrap_method(), WrapMethod::EditorWidth) && self.viewport_size.width != viewport_size.width;
             self.viewport_size = viewport_size;
             if should_update {
-                self.update_lines();
+                self.update_lines((None, None));
                 self.on_update_lines();
             }
             let should_update_viewport = *self.signals.viewport.val() == Rect::ZERO;
@@ -2414,7 +2616,7 @@ impl PubUpdateLines {
     pub fn update_config(&mut self, config: EditorConfig) {
         if self.config != config {
             self.config = config;
-            self.update_lines();
+            self.update_lines((None, None));
             self.on_update_lines();
             self.update_screen_lines();
             self.update_display_items();
@@ -2435,7 +2637,7 @@ impl PubUpdateLines {
                 self.folding_ranges.update_by_phantom(position);
             }
         }
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2471,7 +2673,8 @@ impl PubUpdateLines {
         } else {
             self.inline_completion = Some((completion, new_pos.0, new_pos.1));
         }
-        self.update_lines();
+        self.update_lines((None, None
+        ));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2490,7 +2693,7 @@ impl PubUpdateLines {
         self.update_diagnostics(delta);
         self.update_inlay_hints(delta);
         self.update_completion_lens(delta);
-        self.update_lines();
+        // self.update_lines();
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2502,7 +2705,7 @@ impl PubUpdateLines {
     ) {
         self.syntax.cancel_flag.store(1, atomic::Ordering::Relaxed);
         self.syntax.cancel_flag = Arc::new(AtomicUsize::new(0));
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2515,7 +2718,7 @@ impl PubUpdateLines {
         col: usize,
     ) {
         self.inline_completion = Some((inline_completion, line, col));
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2524,7 +2727,7 @@ impl PubUpdateLines {
 
     pub fn clear_inline_completion(&mut self) {
         self.inline_completion = None;
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2561,7 +2764,7 @@ impl PubUpdateLines {
         // };
         self.update_parser();
 
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2571,7 +2774,7 @@ impl PubUpdateLines {
 
     pub fn set_inlay_hints(&mut self, inlay_hint: Spans<InlayHint>) {
         self.inlay_hints = Some(inlay_hint);
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2586,7 +2789,7 @@ impl PubUpdateLines {
     ) {
         self.completion_lens = Some(completion_lens);
         self.completion_pos = (line, col);
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2602,7 +2805,7 @@ impl PubUpdateLines {
         }
         self.style_from_lsp = true;
         self.semantic_styles = Some(styles);
-        self.update_lines();
+        self.update_lines((None, None));
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
@@ -2650,7 +2853,7 @@ impl LinesEditorStyle {
         let new_show_indent_guide = self.show_indent_guide();
         self.signals.show_indent_guide.update_if_not_equal(new_show_indent_guide);
         if updated {
-            self.update_lines();
+            self.update_lines((None, None));
         }
         self.trigger_signals();
         updated
@@ -2745,4 +2948,11 @@ pub enum ClickResult {
     MatchWithoutLocation,
     MatchFolded,
     MatchHint(Location),
+}
+
+#[derive(Debug)]
+struct LineDelta {
+    start_line: usize,
+    end_line: usize,
+    buffer_offset_start_line: usize,
 }
