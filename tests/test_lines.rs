@@ -14,6 +14,7 @@ use doc::lines::buffer::rope_text::RopeText;
 use doc::lines::cursor::{Cursor, CursorAffinity, CursorMode};
 use doc::lines::fold::{FoldingDisplayItem, FoldingDisplayType};
 use doc::lines::selection::Selection;
+use doc::lines::word::WordCursor;
 use crate::lines_util::{folded_v1, folded_v2, init_empty, init_main, init_main_2, init_semantic_2};
 
 mod lines_util;
@@ -33,19 +34,12 @@ fn test_performance() {
 #[test]
 fn test_debug() {
     custom_utils::logger::logger_stdout_debug();
-    let mut lines = init_main_2();
-    let item =
-        FoldingDisplayItem {
-            position: Position {
-                line: 10,
-                character: 10,
-            },
-            y: 230,
-            ty: FoldingDisplayType::UnfoldStart,
-        };
+    let lines = init_main_2();
+    let text = lines.buffer.text();
+    let mut cursor = WordCursor::new(text, 5);
+    let (start, end) = cursor.select_word();
 
-    lines.update_folding_ranges(item.into());
-    lines.log();
+    assert_eq!(text.slice_to_cow(Interval::new(start, end)), "main");
 }
 
 #[test]

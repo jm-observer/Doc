@@ -1,5 +1,4 @@
 use lapce_xi_rope::Interval;
-use std::sync::Arc;
 use super::layout::TextLayoutLine;
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
 use std::fmt::{Debug, Formatter};
@@ -56,7 +55,7 @@ pub struct OriginFoldedLine {
     pub origin_line_start: usize,
     pub origin_line_end: usize,
     pub origin_interval: Interval,
-    pub text_layout: Arc<TextLayoutLine>,
+    pub text_layout: TextLayoutLine,
     pub semantic_styles: Vec<NewLineStyle>,
     pub diagnostic_styles: Vec<NewLineStyle>
 }
@@ -145,7 +144,7 @@ pub struct VisualLine {
     pub origin_line: usize,
     pub origin_folded_line: usize,
     pub origin_folded_line_sub_index: usize,
-    pub text_layout: Arc<TextLayoutLine>,
+    // pub text_layout: TextLayoutLine,
 }
 
 impl Debug for VisualLine {
@@ -160,8 +159,8 @@ impl Debug for VisualLine {
                 "origin_folded_line_sub_index",
                 &self.origin_folded_line_sub_index,
             )
-            .field("text_layout layout len=", &self.text_layout.text.line().layout_opt().map(|x| x.len()))
-            .field("phantom_text", &self.text_layout.phantom_text)
+            // .field("text_layout layout len=", &self.text_layout.text.line().layout_opt().map(|x| x.len()))
+            // .field("phantom_text", &self.text_layout.phantom_text)
             .finish()
     }
 }
