@@ -534,8 +534,8 @@ impl DocLines {
         self.visual_lines.clear();
 
         let last_line = self.buffer.last_line();
-        let mut origin_folded_line_index = 0;
-        let mut visual_line_index = 0;
+
+
         self.line_height = self.config.line_height;
         let font_size = self.config.font_size;
         let family = Cow::Owned(
@@ -561,117 +561,125 @@ impl DocLines {
         } else {
             Vec::new()
         };
-        let mut current_line = if let Some(line) = origin_folded_lines.last() {
-            line.origin_line_end + 1
-        } else {
-            0
-        };
-        while current_line <= last_line {
-            let Some((text_layout, semantic_styles, diagnostic_styles)) = self.new_text_layout_2(
-                current_line,
-                &all_origin_lines,
-                font_size,
-                attrs,
-            ) else {
-                // todo
-                break;
+        {
+            let mut origin_folded_line_index = 0;
+
+            let mut current_line = if let Some(line) = origin_folded_lines.last() {
+                line.origin_line_end + 1
+            } else {
+                0
             };
-            // duration += time.elapsed().unwrap();
-            let origin_line_start = text_layout.phantom_text.line;
-            let origin_line_end = text_layout.phantom_text.last_line;
+            while current_line <= last_line {
+                let Some((text_layout, semantic_styles, diagnostic_styles)) = self.new_text_layout_2(
+                    current_line,
+                    &all_origin_lines,
+                    font_size,
+                    attrs,
+                ) else {
+                    // todo
+                    break;
+                };
+                // duration += time.elapsed().unwrap();
+                let origin_line_start = text_layout.phantom_text.line;
+                let origin_line_end = text_layout.phantom_text.last_line;
 
-            let width = text_layout.text.size().width;
-            if width > self.max_width {
-                self.max_width = width;
-            }
-
-            let origin_interval = Interval {
-                start: self.buffer.offset_of_line(origin_line_start),
-                end: self.buffer.offset_of_line(origin_line_end + 1),
-            };
-
-            origin_folded_lines.push(OriginFoldedLine {
-                line_index: origin_folded_line_index,
-                origin_line_start,
-                origin_line_end,
-                origin_interval,
-                text_layout,
-                semantic_styles,
-                diagnostic_styles,
-            });
-
-            current_line = origin_line_end + 1;
-            origin_folded_line_index += 1;
-        }
-        let mut origin_line_iter = origin_folded_lines.iter();
-        while let Some(line) = origin_line_iter.next() {
-            // duration += time.elapsed().unwrap();
-            let text_layout = &line.text_layout;
-            let origin_line_start = text_layout.phantom_text.line;
-            let origin_line_end = text_layout.phantom_text.last_line;
-
-            let origin_interval = Interval {
-                start: self.buffer.offset_of_line(origin_line_start),
-                end: self.buffer.offset_of_line(origin_line_end + 1),
-            };
-
-            let mut visual_offset_start = 0;
-            let mut visual_offset_end;
-
-            // [visual_offset_start..visual_offset_end)
-            for (origin_folded_line_sub_index, layout) in
-                text_layout.text.line_layout().iter().enumerate()
-            {
-                if layout.glyphs.is_empty() {
-                    self.visual_lines.push(VisualLine {
-                        line_index: visual_line_index,
-                        origin_interval: Interval::new(
-                            origin_interval.end,
-                            origin_interval.end,
-                        ),
-                        visual_interval: Interval::new(
-                            visual_offset_start,
-                            visual_offset_start,
-                        ),
-                        origin_line: origin_line_start,
-                        origin_folded_line: origin_folded_line_index,
-                        origin_folded_line_sub_index: 0,
-                        // text_layout: text_layout.clone(),
-                    });
-                    continue;
+                let width = text_layout.text.size().width;
+                if width > self.max_width {
+                    self.max_width = width;
                 }
-                visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
-                let offset_info = text_layout
-                    .phantom_text
-                    .cursor_position_of_final_col(visual_offset_start);
-                let origin_interval_start =
-                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
-                let offset_info = text_layout
-                    .phantom_text
-                    .cursor_position_of_final_col(visual_offset_end);
 
-                let origin_interval_end =
-                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
                 let origin_interval = Interval {
-                    start: origin_interval_start,
-                    end: origin_interval_end + 1,
+                    start: self.buffer.offset_of_line(origin_line_start),
+                    end: self.buffer.offset_of_line(origin_line_end + 1),
                 };
 
-                self.visual_lines.push(VisualLine {
-                    line_index: visual_line_index,
+                origin_folded_lines.push(OriginFoldedLine {
+                    line_index: origin_folded_line_index,
+                    origin_line_start,
+                    origin_line_end,
                     origin_interval,
-                    origin_line: origin_line_start,
-                    origin_folded_line: origin_folded_line_index,
-                    origin_folded_line_sub_index,
-                    // text_layout: text_layout.clone(),
-                    visual_interval: Interval::new(
-                        visual_offset_start,
-                        visual_offset_end + 1,
-                    ),
+                    text_layout,
+                    semantic_styles,
+                    diagnostic_styles,
                 });
 
-                visual_offset_start = visual_offset_end;
-                visual_line_index += 1;
+                current_line = origin_line_end + 1;
+                origin_folded_line_index += 1;
+            }
+        }
+        {
+            let mut visual_line_index = 0;
+            // while let Some(line) = origin_line_iter.next() {
+            for line in origin_folded_lines.iter() {
+                // duration += time.elapsed().unwrap();
+                let text_layout = &line.text_layout;
+                let origin_line_start = text_layout.phantom_text.line;
+                let origin_line_end = text_layout.phantom_text.last_line;
+                let origin_folded_line_index = line.line_index;
+
+                let origin_interval = Interval {
+                    start: self.buffer.offset_of_line(origin_line_start),
+                    end: self.buffer.offset_of_line(origin_line_end + 1),
+                };
+
+                let mut visual_offset_start = 0;
+                let mut visual_offset_end;
+
+                // [visual_offset_start..visual_offset_end)
+                for (origin_folded_line_sub_index, layout) in
+                    text_layout.text.line_layout().iter().enumerate()
+                {
+                    if layout.glyphs.is_empty() {
+                        self.visual_lines.push(VisualLine {
+                            line_index: visual_line_index,
+                            origin_interval: Interval::new(
+                                origin_interval.end,
+                                origin_interval.end,
+                            ),
+                            visual_interval: Interval::new(
+                                visual_offset_start,
+                                visual_offset_start,
+                            ),
+                            origin_line: origin_line_start,
+                            origin_folded_line: origin_folded_line_index,
+                            origin_folded_line_sub_index: 0,
+                            // text_layout: text_layout.clone(),
+                        });
+                        continue;
+                    }
+                    visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
+                    let offset_info = text_layout
+                        .phantom_text
+                        .cursor_position_of_final_col(visual_offset_start);
+                    let origin_interval_start =
+                        self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                    let offset_info = text_layout
+                        .phantom_text
+                        .cursor_position_of_final_col(visual_offset_end);
+
+                    let origin_interval_end =
+                        self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                    let origin_interval = Interval {
+                        start: origin_interval_start,
+                        end: origin_interval_end + 1,
+                    };
+
+                    self.visual_lines.push(VisualLine {
+                        line_index: visual_line_index,
+                        origin_interval,
+                        origin_line: origin_line_start,
+                        origin_folded_line: origin_folded_line_index,
+                        origin_folded_line_sub_index,
+                        // text_layout: text_layout.clone(),
+                        visual_interval: Interval::new(
+                            visual_offset_start,
+                            visual_offset_end + 1,
+                        ),
+                    });
+
+                    visual_offset_start = visual_offset_end;
+                    visual_line_index += 1;
+                }
             }
         }
 
@@ -793,7 +801,7 @@ impl DocLines {
                                                start_line, end_line, ..
                                            }) = start_delta {
             start_init_line = *end_line;
-            (&self.origin_lines[*start_line..*end_line]).iter().map(|x| x.clone()).collect()
+            (&self.origin_lines[*start_line..*end_line]).to_vec()
         } else {
             Vec::with_capacity(end_init_line)
         };
@@ -846,7 +854,7 @@ impl DocLines {
     pub fn start_visual_line_of_origin_line(
         &self,
         origin_line: usize,
-    ) ->Result<&VisualLine> {
+    ) -> Result<&VisualLine> {
         let folded_line = self.folded_line_of_origin_line(origin_line)?;
         self.start_visual_line_of_folded_line(folded_line.line_index)
     }
@@ -2126,7 +2134,7 @@ impl DocLines {
         horiz: Option<ColPosition>,
         _mode: Mode,
         _count: usize,
-    ) ->Result< (usize, ColPosition, CursorAffinity) >{
+    ) -> Result<(usize, ColPosition, CursorAffinity)> {
         let (visual_line, line_offset, ..) =
             self.visual_line_of_offset(offset, affinity)?;
         let (previous_visual_line, line_offset, ..) =
