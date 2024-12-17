@@ -192,7 +192,7 @@ pub struct DocLines {
     pub editor_style: EditorStyle,
     viewport_size: Size,
     pub config: EditorConfig,
-    pub buffer: Buffer,
+    // pub buffer: Buffer,
     // pub buffer_rev: u64,
     pub kind: RwSignal<EditorViewKind>,
     pub(crate) signals: Signals,
@@ -218,7 +218,7 @@ impl DocLines {
         let screen_lines = ScreenLines::new(cx, viewport, 0.0);
         let last_line = buffer.last_line() + 1;
         let signals =
-            Signals::new(cx, &editor_style, viewport, buffer.rev(), buffer.clone(), screen_lines, last_line);
+            Signals::new(cx, &editor_style, viewport, buffer, screen_lines, last_line);
         let mut lines = Self {
             signals,
             layout_event: Listener::new_empty(cx), // font_size_cache_id: id,
@@ -242,7 +242,6 @@ impl DocLines {
             semantic_styles: None,
             parser,
             // line_styles: Default::default(),
-            buffer,
             kind,
             style_from_lsp: false,
             // folding_items: Default::default(),
@@ -271,12 +270,17 @@ impl DocLines {
     }
 
     fn update_parser(&mut self) {
-        if self.syntax.styles.is_some() {
-            self.parser.update_code(&self.buffer, Some(&self.syntax));
+        let buffer = self.signals.buffer.val(); // 提前保存，结束不可变借用
+        let styles_exist = self.syntax.styles.is_some(); // 提前判断，不再借用 self.syntax
+
+        let parser = &mut self.parser; // 现在安全地进行可变借用
+        if styles_exist {
+            parser.update_code(buffer, Some(&self.syntax));
         } else {
-            self.parser.update_code(&self.buffer, None);
+            parser.update_code(buffer, None);
         }
     }
+
 
     // fn update_lines_old(&mut self) {
     //     self.clear();
@@ -412,7 +416,7 @@ impl DocLines {
         self.origin_lines.clear();
         self.origin_folded_lines.clear();
         self.visual_lines.clear();
-        let last_line = self.buffer.last_line();
+        let last_line = self.buffer().last_line();
         let mut current_line = 0;
         let mut origin_folded_line_index = 0;
         let mut visual_line_index = 0;
@@ -449,8 +453,8 @@ impl DocLines {
             }
 
             let origin_interval = Interval {
-                start: self.buffer.offset_of_line(origin_line_start),
-                end: self.buffer.offset_of_line(origin_line_end + 1),
+                start: self.buffer().offset_of_line(origin_line_start),
+                end: self.buffer().offset_of_line(origin_line_end + 1),
             };
 
             let mut visual_offset_start = 0;
@@ -483,13 +487,13 @@ impl DocLines {
                     .phantom_text
                     .cursor_position_of_final_col(visual_offset_start);
                 let origin_interval_start =
-                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                    self.buffer().offset_of_line(offset_info.0) + offset_info.1;
                 let offset_info = text_layout
                     .phantom_text
                     .cursor_position_of_final_col(visual_offset_end);
 
                 let origin_interval_end =
-                    self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                    self.buffer().offset_of_line(offset_info.0) + offset_info.1;
                 let origin_interval = Interval {
                     start: origin_interval_start,
                     end: origin_interval_end + 1,
@@ -532,11 +536,8 @@ impl DocLines {
     fn update_lines(&mut self, (start_delta, end_delta): (Option<LineDelta>, Option<LineDelta>)) {
         self.clear();
         self.visual_lines.clear();
-
-        let last_line = self.buffer.last_line();
-
-
         self.line_height = self.config.line_height;
+        let last_line = self.signals.buffer.val().last_line();
         let font_size = self.config.font_size;
         let family = Cow::Owned(
             FamilyOwned::parse_list(&self.config.font_family).collect(),
@@ -589,8 +590,8 @@ impl DocLines {
                 }
 
                 let origin_interval = Interval {
-                    start: self.buffer.offset_of_line(origin_line_start),
-                    end: self.buffer.offset_of_line(origin_line_end + 1),
+                    start: self.buffer().offset_of_line(origin_line_start),
+                    end: self.buffer().offset_of_line(origin_line_end + 1),
                 };
 
                 origin_folded_lines.push(OriginFoldedLine {
@@ -618,8 +619,8 @@ impl DocLines {
                 let origin_folded_line_index = line.line_index;
 
                 let origin_interval = Interval {
-                    start: self.buffer.offset_of_line(origin_line_start),
-                    end: self.buffer.offset_of_line(origin_line_end + 1),
+                    start: self.buffer().offset_of_line(origin_line_start),
+                    end: self.buffer().offset_of_line(origin_line_end + 1),
                 };
 
                 let mut visual_offset_start = 0;
@@ -652,13 +653,13 @@ impl DocLines {
                         .phantom_text
                         .cursor_position_of_final_col(visual_offset_start);
                     let origin_interval_start =
-                        self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                        self.buffer().offset_of_line(offset_info.0) + offset_info.1;
                     let offset_info = text_layout
                         .phantom_text
                         .cursor_position_of_final_col(visual_offset_end);
 
                     let origin_interval_end =
-                        self.buffer.offset_of_line(offset_info.0) + offset_info.1;
+                        self.buffer().offset_of_line(offset_info.0) + offset_info.1;
                     let origin_interval = Interval {
                         start: origin_interval_start,
                         end: origin_interval_end + 1,
@@ -735,8 +736,8 @@ impl DocLines {
     //     }
     //     line_styles
     fn init_origin_line(&self, current_line: usize) -> OriginLine {
-        let start_offset = self.buffer.offset_of_line(current_line);
-        let end_offset = self.buffer.offset_of_line(current_line + 1);
+        let start_offset = self.buffer().offset_of_line(current_line);
+        let end_offset = self.buffer().offset_of_line(current_line + 1);
         // let mut fg_styles = Vec::new();
         // 用于存储该行的最高诊断级别。最后决定该行的背景色
         // let mut max_severity: Option<DiagnosticSeverity> = None;
@@ -795,7 +796,7 @@ impl DocLines {
 
     fn init_all_origin_line(&self, (start_delta, _end_delta): (&Option<LineDelta>, &Option<LineDelta>)) -> Vec<OriginLine> {
         let mut start_init_line = 0;
-        let last_line = self.buffer.last_line();
+        let last_line = self.buffer().last_line();
         let end_init_line = last_line;
         let mut origin_liens = if let Some(LineDelta {
                                                start_line, end_line, ..
@@ -970,7 +971,7 @@ impl DocLines {
         let (origin_line, origin_col, _offset_of_line) = text_layout
             .phantom_text
             .cursor_position_of_final_col(hit_point.index);
-        let offset_of_buffer = self.buffer.offset_of_line_col(origin_line, origin_col);
+        let offset_of_buffer = self.buffer().offset_of_line_col(origin_line, origin_col);
         (offset_of_buffer, hit_point.is_inside)
     }
     pub fn result_of_left_click(
@@ -1029,7 +1030,7 @@ impl DocLines {
     ) -> Result<LinesOfOriginOffset> {
         // 位于的原始行，以及在原始行的起始offset
         let origin_line = self
-            .buffer
+            .buffer()
             .line_of_offset(origin_offset);
         let origin_line = self.origin_lines[origin_line].clone();
         let offset = origin_offset - origin_line.start_offset;
@@ -1144,8 +1145,8 @@ impl DocLines {
     ) -> Result<(VisualLine, usize, usize, bool)> {
         // 位于的原始行，以及在原始行的起始offset
         let (origin_line, offset_of_origin_line) = {
-            let origin_line = self.buffer.line_of_offset(offset);
-            let origin_line_start_offset = self.buffer.offset_of_line(origin_line);
+            let origin_line = self.buffer().line_of_offset(offset);
+            let origin_line_start_offset = self.buffer().offset_of_line(origin_line);
             (origin_line, origin_line_start_offset)
         };
         let offset = offset - offset_of_origin_line;
@@ -1156,7 +1157,7 @@ impl DocLines {
             folded_line.line_index,
             sub_line_index,
         )?;
-        let last_char = offset_of_folded >= folded_line.len_without_rn(self.buffer.line_ending());
+        let last_char = offset_of_folded >= folded_line.len_without_rn(self.buffer().line_ending());
 
         Ok((visual_line.clone(), offset_of_visual, offset_of_folded, last_char))
     }
@@ -1191,8 +1192,9 @@ impl DocLines {
         &self,
         line: usize,
     ) -> PhantomTextLine {
+        let buffer = self.buffer();
         let (start_offset, end_offset) =
-            (self.buffer.offset_of_line(line), self.buffer.offset_of_line(line + 1));
+            (buffer.offset_of_line(line), buffer.offset_of_line(line + 1));
 
         let origin_text_len = end_offset - start_offset;
         // lsp返回的字符包括换行符，现在长度不考虑，后续会有问题
@@ -1224,7 +1226,7 @@ impl DocLines {
             .map(|(interval, inlay_hint)| {
                 let (col, affinity) = {
                     let mut cursor =
-                        lapce_xi_rope::Cursor::new(self.buffer.text(), interval.start);
+                        lapce_xi_rope::Cursor::new(buffer.text(), interval.start);
 
                     let next_char = cursor.peek_next_codepoint();
                     let prev_char = cursor.prev_codepoint();
@@ -1259,7 +1261,7 @@ impl DocLines {
                         }
                     }
 
-                    let (_, col) = self.buffer.offset_to_line_col(interval.start);
+                    let (_, col) = buffer.offset_to_line_col(interval.start);
                     (col, affinity)
                 };
                 let mut text = match &inlay_hint.label {
@@ -1433,7 +1435,7 @@ impl DocLines {
         // todo filter by folded?
         if let Some(preedit) = util::preedit_phantom(
             &self.preedit,
-            &self.buffer,
+            buffer,
             Some(self.config.editor_foreground),
             line,
         ) {
@@ -1444,7 +1446,7 @@ impl DocLines {
         let font_size = self.config.inlay_hint_font_size();
         let bg = self.config.inlay_hint_bg;
         text.extend(
-            folded_ranges.into_phantom_text(&self.buffer, line, font_size, fg, bg),
+            folded_ranges.into_phantom_text(buffer, line, font_size, fg, bg),
         );
 
         PhantomTextLine::new(line, origin_text_len, start_offset, text)
@@ -1620,7 +1622,7 @@ impl DocLines {
         let mut line_content = String::new();
 
         {
-            let line_content_original = self.buffer.line_content(line);
+            let line_content_original = self.buffer().line_content(line);
             util::push_strip_suffix(&line_content_original, &mut line_content);
         }
 
@@ -1636,7 +1638,7 @@ impl DocLines {
         while let Some(collapsed_line) = collapsed_line_col.take() {
             {
                 util::push_strip_suffix(
-                    self.buffer.line_content(collapsed_line).as_ref(),
+                    self.buffer().line_content(collapsed_line).as_ref(),
                     &mut line_content,
                 );
             }
@@ -1741,7 +1743,7 @@ impl DocLines {
             return;
         };
         let (line, col) = self.completion_pos;
-        let offset = self.buffer.offset_of_line_col(line, col);
+        let offset = self.signals.buffer.val().offset_of_line_col(line, col);
         if delta.as_simple_insert().is_some() {
             let (iv, new_len) = delta.summary();
             if iv.start() == iv.end()
@@ -1761,18 +1763,18 @@ impl DocLines {
         let mut transformer = Transformer::new(delta);
 
         let new_offset = transformer.transform(offset, true);
-        let new_pos = self.buffer.offset_to_line_col(new_offset);
+        let new_pos = self.buffer().offset_to_line_col(new_offset);
         self.completion_pos = new_pos;
     }
 
     /// init by lsp
     fn init_diagnostics_with_buffer(&self) {
-        let len = self.buffer.len();
+        let len = self.buffer().len();
         let diagnostics = self.diagnostics.diagnostics.get_untracked();
         let mut span = SpansBuilder::new(len);
         for diag in diagnostics.into_iter() {
-            let start = self.buffer.offset_of_position(&diag.range.start);
-            let end = self.buffer.offset_of_position(&diag.range.end);
+            let start = self.buffer().offset_of_position(&diag.range.start);
+            let end = self.buffer().offset_of_position(&diag.range.end);
             // warn!("start={start} end={end} {:?}", diag);
             span.add_span(Interval::new(start, end), diag);
         }
@@ -1891,9 +1893,9 @@ impl DocLines {
 
     pub fn log(&self) {
         warn!(
-            "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}] style_from_lsp={}",
-            self.viewport_size, self.buffer.rev(),
-            self.buffer.text().len(), self.style_from_lsp
+            "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}] style_from_lsp={} is_pristine={}",
+            self.viewport_size, self.buffer().rev(),
+            self.buffer().text().len(), self.style_from_lsp, self.buffer().is_pristine()
         );
         warn!(
             "{:?}",self.config
@@ -2346,6 +2348,16 @@ impl DocLines {
         info!("{:?}", rs);
         rs
     }
+
+    #[inline]
+    pub fn buffer(&self) -> &Buffer {
+        self.signals.buffer.val()
+    }
+
+    #[inline]
+    fn buffer_mut(&mut self) -> &mut Buffer {
+        self.signals.buffer.val_mut()
+    }
 }
 
 
@@ -2405,71 +2417,207 @@ type LinesOnUpdate = DocLines;
 impl LinesOnUpdate {
     fn on_update_buffer(&mut self) {
         if self.syntax.styles.is_some() {
-            self.parser.update_code(&self.buffer, Some(&self.syntax));
+            self.parser.update_code(self.signals.buffer.val(), Some(&self.syntax));
         } else {
-            self.parser.update_code(&self.buffer, None);
+            self.parser.update_code(self.signals.buffer.val(), None);
         }
         self.init_diagnostics_with_buffer();
-        self.signals.update_buffer(self.buffer.clone());
     }
 
     fn on_update_lines(&mut self) {
-        self.signals.last_line.update_if_not_equal(self.buffer.last_line() + 1);
+        self.signals.last_line.update_if_not_equal(self.buffer().last_line() + 1);
     }
 }
 
 type PubUpdateLines = DocLines;
 
+pub enum EditBuffer<'a> {
+    Init(Rope),
+    SetLineEnding(LineEnding),
+    EditBuffer {
+        iter: &'a[(Selection, &'a str)],
+        edit_type: EditType
+    },
+    SetPristine(u64),
+    Reload {
+        content: Rope, set_pristine: bool
+    },
+    ExecuteMotionMode {
+        cursor: &'a mut Cursor,
+        motion_mode: MotionMode,
+        range: Range<usize>,
+        is_vertical: bool,
+        register: &'a mut Register,
+    },
+    DoEditBuffer {
+        cursor: &'a mut Cursor,
+        cmd: &'a EditCommand,
+        modal: bool,
+        register: &'a mut Register,
+        smart_tab: bool
+    },
+    DoInsertBuffer{
+        cursor: &'a mut Cursor,
+        s: &'a str
+    },
+SetCursor {
+    before_cursor: CursorMode, after_cursor: CursorMode
+}
+}
 impl PubUpdateLines {
+
     pub fn init_buffer(&mut self, content: Rope) -> bool {
-        self.buffer.init_content(content);
-        self.buffer.detect_indent(|| {
-            IndentStyle::from_str(self.syntax.language.indent_unit())
-        });
-        info!("line_ending {:?}", self.buffer.line_ending());
-        // let time = std::time::SystemTime::now();
-        self.on_update_buffer();
-        self.update_lines((None, None));
-        self.on_update_lines();
-        self.update_screen_lines();
-        self.update_display_items();
-        // info!("update elapsed {:?}", time.elapsed().unwrap());
-        true
+        self.buffer_edit(crate::lines::EditBuffer::Init(content))
     }
-
-    pub fn set_line_ending(&mut self, line_ending: LineEnding) {
-        self.buffer.set_line_ending(line_ending);
+    pub fn buffer_edit(&mut self, edit: EditBuffer) -> bool {
+        let mut line_delta = (None, None);
+        match edit {
+            EditBuffer::Init(content) => {
+                let indent = IndentStyle::from_str(self.syntax.language.indent_unit());
+                self.buffer_mut().init_content(content);
+                self.buffer_mut().detect_indent(|| {
+                    indent
+                });
+            }
+            EditBuffer::SetLineEnding(line_ending) => {
+                self.buffer_mut().set_line_ending(line_ending);
+            }
+            EditBuffer::EditBuffer { iter, edit_type } => {
+                let rs = self.buffer_mut().edit(iter, edit_type);
+                self.apply_delta(&rs.1);
+                line_delta = self._compute_change_lines_one(&rs);
+            }
+            EditBuffer::SetPristine(recv) => {
+                return if recv == self.buffer().rev() {
+                    self.buffer_mut().set_pristine();
+                    self.signals.pristine.update_if_not_equal(true);
+                    self.trigger_signals();
+                    true
+                } else {
+                    false
+                };
+            }
+            EditBuffer::Reload { content, set_pristine } => {
+                let rs = self.buffer_mut().reload(content, set_pristine);
+                self.apply_delta(&rs.1);
+                line_delta = self._compute_change_lines_one(&rs);
+            }
+            EditBuffer::ExecuteMotionMode { cursor,
+                motion_mode,
+                range,
+                is_vertical,
+                register } => {
+                let rs = Action::execute_motion_mode(
+                    cursor,
+                    self.buffer_mut(),
+                    motion_mode,
+                    range,
+                    is_vertical,
+                    register,
+                );
+                for delta in &rs {
+                    self.apply_delta(&delta.1);
+                }
+                line_delta = self.compute_change_lines(&rs);
+            }
+            EditBuffer::DoEditBuffer { cursor,
+                cmd,
+                modal,
+                register,
+                smart_tab } => {
+                info!("do_edit_buffer cursor={cursor:?} cmd={cmd:?} modal={modal} smart_tab={smart_tab}");
+                let syntax = &self.syntax;
+                let mut clipboard = SystemClipboard::new();
+                let old_cursor = cursor.mode().clone();
+                let deltas =
+                    Action::do_edit(
+                        cursor,
+                        self.signals.buffer.val_mut(),
+                        cmd,
+                        &mut clipboard,
+                        register,
+                        EditConf {
+                            comment_token: syntax.language.comment_token(),
+                            modal,
+                            smart_tab,
+                            keep_indent: true,
+                            auto_indent: true,
+                        },
+                    );
+                if !deltas.is_empty() {
+                    self.buffer_mut().set_cursor_before(old_cursor);
+                    self.buffer_mut().set_cursor_after(cursor.mode().clone());
+                    for delta in &deltas {
+                        self.apply_delta(&delta.1);
+                    }
+                }
+                line_delta = self.compute_change_lines(&deltas);
+                // deltas;
+            }
+            EditBuffer::DoInsertBuffer { cursor,s  } => {
+                let auto_closing_matching_pairs = self.config.auto_closing_matching_pairs;
+                let auto_surround = self.config.auto_surround;
+                let old_cursor = cursor.mode().clone();
+                let syntax = &self.syntax;
+                let deltas = Action::insert(
+                    cursor,
+                    self.signals.buffer.val_mut(),
+                    s,
+                    &|buffer, c, offset| {
+                        util::syntax_prev_unmatched(buffer, syntax, c, offset)
+                    },
+                    auto_closing_matching_pairs,
+                    auto_surround,
+                );
+                self.buffer_mut().set_cursor_before(old_cursor);
+                self.buffer_mut().set_cursor_after(cursor.mode().clone());
+                for delta in &deltas {
+                    self.apply_delta(&delta.1);
+                }
+                line_delta = self.compute_change_lines(&deltas);
+            }
+            EditBuffer::SetCursor { before_cursor, after_cursor } => {
+                self.buffer_mut().set_cursor_after(after_cursor);
+                self.buffer_mut().set_cursor_before(before_cursor);
+                return false;
+            }
+        }
+        self.signals.pristine.update_if_not_equal(false);
+        self.signals.last_line.update_if_not_equal(self.buffer().last_line());
+        self.signals.buffer_rev.update_if_not_equal(self.buffer().rev());
         self.on_update_buffer();
-        self.update_lines((None, None));
-        self.on_update_lines();
-        self.update_screen_lines();
-        self.update_display_items();
-    }
-
-    pub fn edit_buffer(
-        &mut self,
-        iter: &[(impl AsRef<Selection>, &str)],
-        edit_type: EditType,
-    ) -> (Rope, RopeDelta, InvalLines) {
-        let rs = self.buffer.edit(iter, edit_type);
-        self.apply_delta(&rs.1);
-        self.on_update_buffer();
-        let line_delta = self._compute_change_lines_one(&rs);
         self.update_lines(line_delta);
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
-        rs
+
+        self.trigger_signals();
+        true
+    }
+
+    pub fn set_line_ending(&mut self, line_ending: LineEnding) {
+        self.buffer_edit(EditBuffer::SetLineEnding(line_ending));
+    }
+
+    pub fn edit_buffer(
+        &mut self,
+        iter: &[(Selection, &str)],
+        edit_type: EditType,
+    ) -> (Rope, RopeDelta, InvalLines) {
+        self.buffer_edit(EditBuffer::EditBuffer {  edit_type, iter});
+        todo!()
     }
     pub fn reload_buffer(&mut self, content: Rope, set_pristine: bool) -> (Rope, RopeDelta, InvalLines) {
-        let rs = self.buffer.reload(content, set_pristine);
-        self.apply_delta(&rs.1);
-        self.on_update_buffer();
-        self.update_lines((None, None));
-        self.on_update_lines();
-        self.update_screen_lines();
-        self.update_display_items();
-        rs
+        self.buffer_edit(EditBuffer::Reload {  content, set_pristine});
+        todo!()
+    }
+
+    pub fn set_pristine(&mut self, rev: u64) -> bool {
+        self.buffer_edit(EditBuffer::SetPristine(rev))
+    }
+
+    pub fn set_cursor(&mut self, before_cursor: CursorMode, after_cursor: CursorMode) {
+        self.buffer_edit(EditBuffer::SetCursor {before_cursor, after_cursor});
     }
 
     pub fn execute_motion_mode(
@@ -2480,24 +2628,14 @@ impl PubUpdateLines {
         is_vertical: bool,
         register: &mut Register,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
-        let rs = Action::execute_motion_mode(
+        self.buffer_edit(EditBuffer::ExecuteMotionMode {
             cursor,
-            &mut self.buffer,
             motion_mode,
             range,
             is_vertical,
             register,
-        );
-        for delta in &rs {
-            self.apply_delta(&delta.1);
-        }
-        self.on_update_buffer();
-        let line_delta = self.compute_change_lines(&rs);
-        self.update_lines(line_delta);
-        self.on_update_lines();
-        self.update_screen_lines();
-        self.update_display_items();
-        rs
+        });
+        todo!()
     }
 
     pub fn do_edit_buffer(
@@ -2508,39 +2646,14 @@ impl PubUpdateLines {
         register: &mut Register,
         smart_tab: bool,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
-        info!("do_edit_buffer cursor={cursor:?} cmd={cmd:?} modal={modal} smart_tab={smart_tab}");
-        let syntax = &self.syntax;
-        let mut clipboard = SystemClipboard::new();
-        let old_cursor = cursor.mode().clone();
-        let deltas =
-            Action::do_edit(
-                cursor,
-                &mut self.buffer,
-                cmd,
-                &mut clipboard,
-                register,
-                EditConf {
-                    comment_token: syntax.language.comment_token(),
-                    modal,
-                    smart_tab,
-                    keep_indent: true,
-                    auto_indent: true,
-                },
-            );
-        if !deltas.is_empty() {
-            self.buffer.set_cursor_before(old_cursor);
-            self.buffer.set_cursor_after(cursor.mode().clone());
-            for delta in &deltas {
-                self.apply_delta(&delta.1);
-            }
-        }
-        self.on_update_buffer();
-        let line_delta = self.compute_change_lines(&deltas);
-        self.update_lines(line_delta);
-        self.on_update_lines();
-        self.update_screen_lines();
-        self.update_display_items();
-        deltas
+        self.buffer_edit(EditBuffer::DoEditBuffer {
+            cursor,
+            cmd,
+            modal,
+            register,
+            smart_tab,
+        });
+        todo!()
     }
 
     pub fn do_insert_buffer(
@@ -2548,40 +2661,11 @@ impl PubUpdateLines {
         cursor: &mut Cursor,
         s: &str,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
-        info!("do_insert_buffer s={s}");
-
-        let config = &self.config;
-        let old_cursor = cursor.mode().clone();
-        let syntax = &self.syntax;
-        let deltas = Action::insert(
+        self.buffer_edit(EditBuffer::DoInsertBuffer {
             cursor,
-            &mut self.buffer,
             s,
-            &|buffer, c, offset| {
-                util::syntax_prev_unmatched(buffer, syntax, c, offset)
-            },
-            config.auto_closing_matching_pairs,
-            config.auto_surround,
-        );
-        self.buffer.set_cursor_before(old_cursor);
-        self.buffer.set_cursor_after(cursor.mode().clone());
-        for delta in &deltas {
-            self.apply_delta(&delta.1);
-        }
-        self.on_update_buffer();
-        let line_delta = self.compute_change_lines(&deltas);
-        self.update_lines(line_delta);
-        self.on_update_lines();
-        self.update_screen_lines();
-        self.update_display_items();
-        // info!("do_edit_buffer {:?} [{:?}]", cursor, s);
-        // for (rope, delta, inval) in &deltas {
-        //     info!("{:?}", rope);
-        //     info!("{:?}", delta);
-        //     info!("{:?}", inval);
-        //     info!("");
-        // }
-        deltas
+        });
+        todo!()
     }
 
     pub fn clear_completion_lens(&mut self) {
@@ -2664,13 +2748,13 @@ impl PubUpdateLines {
             return;
         };
         let (line, col) = self.completion_pos;
-        let offset = self.buffer.offset_of_line_col(line, col);
+        let offset = self.buffer().offset_of_line_col(line, col);
 
         // Shift the position by the rope delta
         let mut transformer = Transformer::new(delta);
 
         let new_offset = transformer.transform(offset, true);
-        let new_pos = self.buffer.offset_to_line_col(new_offset);
+        let new_pos = self.buffer().offset_to_line_col(new_offset);
 
         if delta.as_simple_insert().is_some() {
             let (iv, new_len) = delta.summary();
@@ -2750,7 +2834,7 @@ impl PubUpdateLines {
     }
 
     pub fn set_syntax_with_rev(&mut self, syntax: Syntax, rev: u64) -> bool {
-        if self.buffer.rev() != rev {
+        if self.buffer().rev() != rev {
             return false;
         }
         self.set_syntax(syntax)
@@ -2815,7 +2899,7 @@ impl PubUpdateLines {
         &mut self,
         styles: (Option<String>, Spans<String>), rev: u64,
     ) -> bool {
-        if self.buffer.rev() != rev {
+        if self.buffer().rev() != rev {
             return false;
         }
         self.style_from_lsp = true;
@@ -2909,6 +2993,10 @@ impl LinesSignals {
     }
     pub fn signal_last_line(&self) -> ReadSignal<usize> {
         self.signals.last_line.signal()
+    }
+
+    pub fn signal_pristine(&self) -> ReadSignal<bool> {
+        self.signals.pristine.signal()
     }
 }
 

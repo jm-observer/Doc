@@ -136,7 +136,7 @@ fn test_buffer_offset_of_click_2() {
         assert_eq!(offset_of_buffer, 456);
         assert_eq!(is_inside, false);
 
-        let (_, _, _, _, point, _, _) = lines.cursor_position_of_buffer_offset(offset_of_buffer, CursorAffinity::Forward);
+        let (_, _, _, _, point, _, _) = lines.cursor_position_of_buffer_offset(offset_of_buffer, CursorAffinity::Forward).unwrap();
         assert_eq!(point.unwrap().y, 118.0 + lines.viewport().y0);
     }
 }
