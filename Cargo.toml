@@ -27,6 +27,7 @@ libloading  = "0.8.1"
 directories       = { version = "4.0.1" }
 arc-swap    = "1.6.0"
 log = "0.4.22"
+anyhow            = { version = "1.0" }
 
 [dev-dependencies]
 custom-utils = "0.10.16"

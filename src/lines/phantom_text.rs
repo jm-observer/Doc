@@ -861,6 +861,7 @@ mod test {
                     kind: PhantomTextKind::LineFoldedRang {
                         len: 3,
                         next_line: Some(3),
+                        start_position: Default::default(),
                     },
                     line: 1,
                     final_col: 12,
@@ -876,6 +877,7 @@ mod test {
                     kind: PhantomTextKind::LineFoldedRang {
                         next_line: None,
                         len: 5,
+                        start_position: Default::default(),
                     },
                     line: 3,
                     final_col: 0,

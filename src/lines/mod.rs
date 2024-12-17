@@ -52,6 +52,7 @@ use crate::lines::selection::Selection;
 use crate::lines::word::{CharClassification, get_char_property};
 use crate::syntax::{BracketParser, Syntax};
 use crate::syntax::edit::SyntaxEdit;
+use anyhow::{bail, Result};
 
 pub mod action;
 pub mod diff;
@@ -145,8 +146,14 @@ impl DocLinesManager {
     pub fn lines_of_origin_offset(
         &self,
         origin_offset: usize,
-    ) -> LinesOfOriginOffset {
-        self.with_untracked(|x| x.lines_of_origin_offset(origin_offset))
+    ) -> Result<LinesOfOriginOffset> {
+        self.with_untracked(|x| {
+            let rs = x.lines_of_origin_offset(origin_offset);
+            if rs.is_err() {
+                x.log();
+            }
+            rs
+        })
     }
 }
 
@@ -400,7 +407,7 @@ impl DocLines {
     // }
 
 
-    fn update_lines(&mut self, (_start_delta, _end_delta): (Option<LineDelta>, Option<LineDelta>)) {
+    fn update_lines_2(&mut self, (_start_delta, _end_delta): (Option<LineDelta>, Option<LineDelta>)) {
         self.clear();
         self.origin_lines.clear();
         self.origin_folded_lines.clear();
@@ -522,7 +529,7 @@ impl DocLines {
         self.on_update_lines();
     }
 
-    fn update_lines_2(&mut self, (start_delta, end_delta): (Option<LineDelta>, Option<LineDelta>)) {
+    fn update_lines(&mut self, (start_delta, end_delta): (Option<LineDelta>, Option<LineDelta>)) {
         self.clear();
         self.visual_lines.clear();
 
@@ -596,8 +603,8 @@ impl DocLines {
             current_line = origin_line_end + 1;
             origin_folded_line_index += 1;
         }
-
-        while let Some(line) = origin_folded_lines.iter().next() {
+        let mut origin_line_iter = origin_folded_lines.iter();
+        while let Some(line) = origin_line_iter.next() {
             // duration += time.elapsed().unwrap();
             let text_layout = &line.text_layout;
             let origin_line_start = text_layout.phantom_text.line;
@@ -783,7 +790,7 @@ impl DocLines {
         let last_line = self.buffer.last_line();
         let end_init_line = last_line;
         let mut origin_liens = if let Some(LineDelta {
-                                               start_line, end_line, buffer_offset_start_line
+                                               start_line, end_line, ..
                                            }) = start_delta {
             start_init_line = *end_line;
             (&self.origin_lines[*start_line..*end_line]).iter().map(|x| x.clone()).collect()
@@ -839,50 +846,50 @@ impl DocLines {
     pub fn start_visual_line_of_origin_line(
         &self,
         origin_line: usize,
-    ) -> &VisualLine {
-        let folded_line = self.folded_line_of_origin_line(origin_line);
+    ) ->Result<&VisualLine> {
+        let folded_line = self.folded_line_of_origin_line(origin_line)?;
         self.start_visual_line_of_folded_line(folded_line.line_index)
     }
 
     pub fn start_visual_line_of_folded_line(
         &self,
         origin_folded_line: usize,
-    ) -> &VisualLine {
+    ) -> Result<&VisualLine> {
         for visual_line in &self.visual_lines {
             if visual_line.origin_folded_line == origin_folded_line {
-                return visual_line;
+                return Ok(visual_line);
             }
         }
-        panic!()
+        bail!("start_visual_line_of_folded_line origin_folded_line={origin_folded_line}")
     }
 
     pub fn folded_line_of_origin_line(
         &self,
         origin_line: usize,
-    ) -> &OriginFoldedLine {
+    ) -> Result<&OriginFoldedLine> {
         for folded_line in &self.origin_folded_lines {
             if folded_line.origin_line_start <= origin_line
                 && origin_line <= folded_line.origin_line_end
             {
-                return folded_line;
+                return Ok(folded_line);
             }
         }
-        panic!()
+        bail!("folded_line_of_origin_line origin_line={origin_line}")
     }
 
     pub fn visual_line_of_folded_line_and_sub_index(
         &self,
         origin_folded_line: usize,
         sub_index: usize,
-    ) -> &VisualLine {
+    ) -> Result<&VisualLine> {
         for visual_line in &self.visual_lines {
             if visual_line.origin_folded_line == origin_folded_line
                 && visual_line.origin_folded_line_sub_index == sub_index
             {
-                return visual_line;
+                return Ok(visual_line);
             }
         }
-        panic!()
+        bail!("visual_line_of_folded_line_and_sub_index origin_folded_line={origin_folded_line} sub_index={sub_index}")
     }
 
     pub fn last_visual_line(&self) -> &VisualLine {
@@ -895,7 +902,7 @@ impl DocLines {
         origin_line: usize,
         offset: usize,
         _affinity: CursorAffinity,
-    ) -> (VLineInfo, usize, bool) {
+    ) -> Result<(VLineInfo, usize, bool)> {
         // 位于的原始行，以及在原始行的起始offset
         // let (origin_line, offset_of_line) = self.font_sizes.doc.with_untracked(|x| {
         //     let text = x.text();
@@ -905,7 +912,7 @@ impl DocLines {
         // });
         // let mut offset = offset - offset_of_line;
         let before_cursor = _affinity.before_cursor();
-        let folded_line = self.folded_line_of_origin_line(origin_line);
+        let folded_line = self.folded_line_of_origin_line(origin_line)?;
         let mut final_offset = folded_line
             .text_layout
             .phantom_text
@@ -931,9 +938,9 @@ impl DocLines {
         let visual_line = self.visual_line_of_folded_line_and_sub_index(
             folded_line.line_index,
             sub_line_index,
-        );
+        )?;
 
-        (visual_line.vline_info(), final_offset, last_char)
+        Ok((visual_line.vline_info(), final_offset, last_char))
     }
 
 
@@ -1011,14 +1018,14 @@ impl DocLines {
     pub fn lines_of_origin_offset(
         &self,
         origin_offset: usize,
-    ) -> LinesOfOriginOffset {
+    ) -> Result<LinesOfOriginOffset> {
         // 位于的原始行，以及在原始行的起始offset
         let origin_line = self
             .buffer
             .line_of_offset(origin_offset);
         let origin_line = self.origin_lines[origin_line].clone();
         let offset = origin_offset - origin_line.start_offset;
-        let folded_line = self.folded_line_of_origin_line(origin_line.line_index);
+        let folded_line = self.folded_line_of_origin_line(origin_line.line_index)?;
         let origin_folded_line_offest = folded_line
             .text_layout
             .phantom_text
@@ -1037,15 +1044,15 @@ impl DocLines {
         let visual_line = self.visual_line_of_folded_line_and_sub_index(
             folded_line.line_index,
             sub_line_index,
-        );
-        LinesOfOriginOffset {
+        )?;
+        Ok(LinesOfOriginOffset {
             origin_offset: 0,
             origin_line,
             origin_folded_line: folded_line.clone(),
             origin_folded_line_offest: 0,
             visual_line: visual_line.clone(),
             visual_line_offest: 0,
-        }
+        })
     }
 
     /// 视觉行的偏移位置，对应的上一行的偏移位置（原始文本）和是否为最后一个字符
@@ -1126,7 +1133,7 @@ impl DocLines {
         &self,
         offset: usize,
         _affinity: CursorAffinity,
-    ) -> (VisualLine, usize, usize, bool) {
+    ) -> Result<(VisualLine, usize, usize, bool)> {
         // 位于的原始行，以及在原始行的起始offset
         let (origin_line, offset_of_origin_line) = {
             let origin_line = self.buffer.line_of_offset(offset);
@@ -1134,16 +1141,16 @@ impl DocLines {
             (origin_line, origin_line_start_offset)
         };
         let offset = offset - offset_of_origin_line;
-        let folded_line = self.folded_line_of_origin_line(origin_line);
+        let folded_line = self.folded_line_of_origin_line(origin_line)?;
 
         let (sub_line_index, offset_of_visual, offset_of_folded) = folded_line.visual_line_of_line_and_offset(origin_line, offset);
         let visual_line = self.visual_line_of_folded_line_and_sub_index(
             folded_line.line_index,
             sub_line_index,
-        );
+        )?;
         let last_char = offset_of_folded >= folded_line.len_without_rn(self.buffer.line_ending());
 
-        (visual_line.clone(), offset_of_visual, offset_of_folded, last_char)
+        Ok((visual_line.clone(), offset_of_visual, offset_of_folded, last_char))
     }
 
     pub fn visual_lines(&self, start: usize, end: usize) -> Vec<VisualLine> {
@@ -2119,9 +2126,9 @@ impl DocLines {
         horiz: Option<ColPosition>,
         _mode: Mode,
         _count: usize,
-    ) -> (usize, ColPosition, CursorAffinity) {
+    ) ->Result< (usize, ColPosition, CursorAffinity) >{
         let (visual_line, line_offset, ..) =
-            self.visual_line_of_offset(offset, affinity);
+            self.visual_line_of_offset(offset, affinity)?;
         let (previous_visual_line, line_offset, ..) =
             self.previous_visual_line(visual_line.line_index, line_offset, affinity);
         let horiz = horiz.unwrap_or_else(|| {
@@ -2145,7 +2152,7 @@ impl DocLines {
         } else {
             CursorAffinity::Backward
         };
-        (offset_of_buffer, horiz, affinity)
+        Ok((offset_of_buffer, horiz, affinity))
     }
 
     pub fn move_down(
@@ -2155,9 +2162,9 @@ impl DocLines {
         horiz: Option<ColPosition>,
         _mode: Mode,
         _count: usize,
-    ) -> (usize, ColPosition, CursorAffinity) {
+    ) -> Result<(usize, ColPosition, CursorAffinity)> {
         let (visual_line, line_offset, ..) =
-            self.visual_line_of_offset(offset, affinity);
+            self.visual_line_of_offset(offset, affinity)?;
         let (next_visual_line, next_line_offset, ..) =
             self.next_visual_line(visual_line.line_index, line_offset, affinity);
         let horiz = horiz.unwrap_or_else(|| {
@@ -2180,7 +2187,7 @@ impl DocLines {
         };
         warn!("offset_of_buffer={offset_of_buffer} horiz={horiz:?}");
 
-        (offset_of_buffer, horiz, affinity)
+        Ok((offset_of_buffer, horiz, affinity))
     }
 
     fn rvline_horiz_col(
@@ -2361,8 +2368,8 @@ impl ComputeLines {
         &self,
         offset: usize,
         affinity: CursorAffinity,
-    ) -> (VisualLine, usize, usize, bool, Option<Point>, f64, Point) {
-        let (vl, offset_of_visual, offset_folded, last_char) = self.visual_line_of_offset(offset, affinity);
+    ) -> Result<(VisualLine, usize, usize, bool, Option<Point>, f64, Point)> {
+        let (vl, offset_of_visual, offset_folded, last_char) = self.visual_line_of_offset(offset, affinity)?;
         let mut viewpport_point = hit_position_aff(
             &self.text_layout_of_visual_line(vl.line_index).text,
             offset_folded,
@@ -2381,7 +2388,7 @@ impl ComputeLines {
         let mut origin_point = viewpport_point;
         origin_point.y = vl.line_index as f64 * line_height;
 
-        (vl, offset_of_visual, offset_folded, last_char, point, line_height, origin_point)
+        Ok((vl, offset_of_visual, offset_folded, last_char, point, line_height, origin_point))
     }
 }
 
@@ -2559,13 +2566,13 @@ impl PubUpdateLines {
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();
-        info!("do_edit_buffer {:?} [{:?}]", cursor, s);
-        for (rope, delta, inval) in &deltas {
-            info!("{:?}", rope);
-            info!("{:?}", delta);
-            info!("{:?}", inval);
-            info!("");
-        }
+        // info!("do_edit_buffer {:?} [{:?}]", cursor, s);
+        // for (rope, delta, inval) in &deltas {
+        //     info!("{:?}", rope);
+        //     info!("{:?}", delta);
+        //     info!("{:?}", inval);
+        //     info!("");
+        // }
         deltas
     }
 

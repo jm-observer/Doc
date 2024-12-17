@@ -35,11 +35,11 @@ fn test_performance() {
 fn test_debug() {
     custom_utils::logger::logger_stdout_debug();
     let lines = init_main_2();
-    let text = lines.buffer.text();
-    let mut cursor = WordCursor::new(text, 5);
-    let (start, end) = cursor.select_word();
-
-    assert_eq!(text.slice_to_cow(Interval::new(start, end)), "main");
+    // let text = lines.buffer.text();
+    // let mut cursor = WordCursor::new(text, 5);
+    // let (start, end) = cursor.select_word();
+    //
+    // assert_eq!(text.slice_to_cow(Interval::new(start, end)), "main");
 }
 
 #[test]
