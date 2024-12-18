@@ -27,6 +27,7 @@ pub struct ScreenLines {
     // This exists so that if a text layout is created outside of the view, we don't have to
     // completely recompute the screen lines (or do somewhat intricate things to update them)
     // we simply have to update the `base_y`.
+    /// 滚动窗口
     pub base: Rect,
     pub line_height: f64,
 }

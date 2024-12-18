@@ -2388,7 +2388,7 @@ impl ComputeLines {
         &self,
         offset: usize,
         affinity: CursorAffinity,
-    ) -> Result<(VisualLine, usize, usize, bool, Option<Point>, f64, Point)> {
+    ) -> Result<(VisualLine, usize, usize, bool, Option<Point>, f64, Point, usize)> {
         let (vl, offset_of_visual, offset_folded, last_char) = self.visual_line_of_offset(offset, affinity)?;
         let mut viewpport_point = hit_position_aff(
             &self.text_layout_of_visual_line(vl.line_index).text,
@@ -2397,10 +2397,12 @@ impl ComputeLines {
         )
             .point;
         let line_height = self.screen_lines().line_height;
-        let screen_line = self.screen_lines().visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index).cloned();
+        let screen_line = self.screen_lines().visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index);
 
-        let point = if let Some(screen_line) = &screen_line {
-            viewpport_point.y = self.screen_lines().base.y0 + screen_line.vline_y;
+        let point = if let Some(screen_line) = screen_line {
+            // ?
+            // viewpport_point.y = self.screen_lines().base.y0 + screen_line.vline_y;
+            viewpport_point.y = screen_line.vline_y;
             Some(viewpport_point)
         } else {
             None
@@ -2408,7 +2410,7 @@ impl ComputeLines {
         let mut origin_point = viewpport_point;
         origin_point.y = vl.line_index as f64 * line_height;
 
-        Ok((vl, offset_of_visual, offset_folded, last_char, point, line_height, origin_point))
+        Ok((vl, offset_of_visual, offset_folded, last_char, point, line_height, origin_point, self.line_height))
     }
 }
 
