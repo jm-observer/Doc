@@ -411,127 +411,127 @@ impl DocLines {
     // }
 
 
-    fn update_lines_2(&mut self, (_start_delta, _end_delta): (Option<LineDelta>, Option<LineDelta>)) {
-        self.clear();
-        self.origin_lines.clear();
-        self.origin_folded_lines.clear();
-        self.visual_lines.clear();
-        let last_line = self.buffer().last_line();
-        let mut current_line = 0;
-        let mut origin_folded_line_index = 0;
-        let mut visual_line_index = 0;
-        self.line_height = self.config.line_height;
-        let font_size = self.config.font_size;
-        let family = Cow::Owned(
-            FamilyOwned::parse_list(&self.config.font_family).collect(),
-        );
-        let attrs = Attrs::new()
-            .color(self.editor_style.ed_text_color())
-            .family(&family)
-            .font_size(font_size as f32)
-            .line_height(LineHeightValue::Px(self.line_height as f32));
-        // let mut duration = Duration::from_secs(0);
-
-        let all_origin_lines = self.init_all_origin_line((&None, &None));
-        while current_line <= last_line {
-            let Some((text_layout, semantic_styles, diagnostic_styles)) = self.new_text_layout_2(
-                current_line,
-                &all_origin_lines,
-                font_size,
-                attrs,
-            ) else {
-                // todo
-                break;
-            };
-            // duration += time.elapsed().unwrap();
-            let origin_line_start = text_layout.phantom_text.line;
-            let origin_line_end = text_layout.phantom_text.last_line;
-
-            let width = text_layout.text.size().width;
-            if width > self.max_width {
-                self.max_width = width;
-            }
-
-            let origin_interval = Interval {
-                start: self.buffer().offset_of_line(origin_line_start),
-                end: self.buffer().offset_of_line(origin_line_end + 1),
-            };
-
-            let mut visual_offset_start = 0;
-            let mut visual_offset_end;
-
-            // [visual_offset_start..visual_offset_end)
-            for (origin_folded_line_sub_index, layout) in
-                text_layout.text.line_layout().iter().enumerate()
-            {
-                if layout.glyphs.is_empty() {
-                    self.visual_lines.push(VisualLine {
-                        line_index: visual_line_index,
-                        origin_interval: Interval::new(
-                            origin_interval.end,
-                            origin_interval.end,
-                        ),
-                        visual_interval: Interval::new(
-                            visual_offset_start,
-                            visual_offset_start,
-                        ),
-                        origin_line: origin_line_start,
-                        origin_folded_line: origin_folded_line_index,
-                        origin_folded_line_sub_index: 0,
-                        // text_layout: text_layout.clone(),
-                    });
-                    continue;
-                }
-                visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
-                let offset_info = text_layout
-                    .phantom_text
-                    .cursor_position_of_final_col(visual_offset_start);
-                let origin_interval_start =
-                    self.buffer().offset_of_line(offset_info.0) + offset_info.1;
-                let offset_info = text_layout
-                    .phantom_text
-                    .cursor_position_of_final_col(visual_offset_end);
-
-                let origin_interval_end =
-                    self.buffer().offset_of_line(offset_info.0) + offset_info.1;
-                let origin_interval = Interval {
-                    start: origin_interval_start,
-                    end: origin_interval_end + 1,
-                };
-
-                self.visual_lines.push(VisualLine {
-                    line_index: visual_line_index,
-                    origin_interval,
-                    origin_line: origin_line_start,
-                    origin_folded_line: origin_folded_line_index,
-                    origin_folded_line_sub_index,
-                    // text_layout: text_layout.clone(),
-                    visual_interval: Interval::new(
-                        visual_offset_start,
-                        visual_offset_end + 1,
-                    ),
-                });
-
-                visual_offset_start = visual_offset_end;
-                visual_line_index += 1;
-            }
-
-            self.origin_folded_lines.push(OriginFoldedLine {
-                line_index: origin_folded_line_index,
-                origin_line_start,
-                origin_line_end,
-                origin_interval,
-                text_layout,
-                semantic_styles,
-                diagnostic_styles,
-            });
-
-            current_line = origin_line_end + 1;
-            origin_folded_line_index += 1;
-        }
-        self.origin_lines = all_origin_lines;
-        self.on_update_lines();
-    }
+    // fn update_lines_2(&mut self, (_start_delta, _end_delta): (Option<LineDelta>, Option<LineDelta>)) {
+    //     self.clear();
+    //     self.origin_lines.clear();
+    //     self.origin_folded_lines.clear();
+    //     self.visual_lines.clear();
+    //     let last_line = self.buffer().last_line();
+    //     let mut current_line = 0;
+    //     let mut origin_folded_line_index = 0;
+    //     let mut visual_line_index = 0;
+    //     self.line_height = self.config.line_height;
+    //     let font_size = self.config.font_size;
+    //     let family = Cow::Owned(
+    //         FamilyOwned::parse_list(&self.config.font_family).collect(),
+    //     );
+    //     let attrs = Attrs::new()
+    //         .color(self.editor_style.ed_text_color())
+    //         .family(&family)
+    //         .font_size(font_size as f32)
+    //         .line_height(LineHeightValue::Px(self.line_height as f32));
+    //     // let mut duration = Duration::from_secs(0);
+    //
+    //     let all_origin_lines = self.init_all_origin_line((&None, &None));
+    //     while current_line <= last_line {
+    //         let Some((text_layout, semantic_styles, diagnostic_styles)) = self.new_text_layout_2(
+    //             current_line,
+    //             &all_origin_lines,
+    //             font_size,
+    //             attrs,
+    //         ) else {
+    //             // todo
+    //             break;
+    //         };
+    //         // duration += time.elapsed().unwrap();
+    //         let origin_line_start = text_layout.phantom_text.line;
+    //         let origin_line_end = text_layout.phantom_text.last_line;
+    //
+    //         let width = text_layout.text.size().width;
+    //         if width > self.max_width {
+    //             self.max_width = width;
+    //         }
+    //
+    //         let origin_interval = Interval {
+    //             start: self.buffer().offset_of_line(origin_line_start),
+    //             end: self.buffer().offset_of_line(origin_line_end + 1),
+    //         };
+    //
+    //         let mut visual_offset_start = 0;
+    //         let mut visual_offset_end;
+    //
+    //         // [visual_offset_start..visual_offset_end)
+    //         for (origin_folded_line_sub_index, layout) in
+    //             text_layout.text.line_layout().iter().enumerate()
+    //         {
+    //             if layout.glyphs.is_empty() {
+    //                 self.visual_lines.push(VisualLine {
+    //                     line_index: visual_line_index,
+    //                     origin_interval: Interval::new(
+    //                         origin_interval.end,
+    //                         origin_interval.end,
+    //                     ),
+    //                     visual_interval: Interval::new(
+    //                         visual_offset_start,
+    //                         visual_offset_start,
+    //                     ),
+    //                     origin_line: origin_line_start,
+    //                     origin_folded_line: origin_folded_line_index,
+    //                     origin_folded_line_sub_index: 0,
+    //                     // text_layout: text_layout.clone(),
+    //                 });
+    //                 continue;
+    //             }
+    //             visual_offset_end = visual_offset_start + layout.glyphs.len() - 1;
+    //             let offset_info = text_layout
+    //                 .phantom_text
+    //                 .cursor_position_of_final_col(visual_offset_start);
+    //             let origin_interval_start =
+    //                 self.buffer().offset_of_line(offset_info.0) + offset_info.1;
+    //             let offset_info = text_layout
+    //                 .phantom_text
+    //                 .cursor_position_of_final_col(visual_offset_end);
+    //
+    //             let origin_interval_end =
+    //                 self.buffer().offset_of_line(offset_info.0) + offset_info.1;
+    //             let origin_interval = Interval {
+    //                 start: origin_interval_start,
+    //                 end: origin_interval_end + 1,
+    //             };
+    //
+    //             self.visual_lines.push(VisualLine {
+    //                 line_index: visual_line_index,
+    //                 origin_interval,
+    //                 origin_line: origin_line_start,
+    //                 origin_folded_line: origin_folded_line_index,
+    //                 origin_folded_line_sub_index,
+    //                 // text_layout: text_layout.clone(),
+    //                 visual_interval: Interval::new(
+    //                     visual_offset_start,
+    //                     visual_offset_end + 1,
+    //                 ),
+    //             });
+    //
+    //             visual_offset_start = visual_offset_end;
+    //             visual_line_index += 1;
+    //         }
+    //
+    //         self.origin_folded_lines.push(OriginFoldedLine {
+    //             line_index: origin_folded_line_index,
+    //             origin_line_start,
+    //             origin_line_end,
+    //             origin_interval,
+    //             text_layout,
+    //             semantic_styles,
+    //             diagnostic_styles,
+    //         });
+    //
+    //         current_line = origin_line_end + 1;
+    //         origin_folded_line_index += 1;
+    //     }
+    //     self.origin_lines = all_origin_lines;
+    //     self.on_update_lines();
+    // }
 
     fn update_lines(&mut self, (start_delta, end_delta): (Option<LineDelta>, Option<LineDelta>)) {
         self.clear();
@@ -2270,7 +2270,7 @@ impl DocLines {
                                 return (Some(LineDelta {
                                     start_line: 0,
                                     end_line,
-                                    buffer_offset_start_line: 0,
+                                    _buffer_offset_start_line: 0,
                                 }), None);
                             } else if *end == single_change_end {
                                 let start_line = rope.line_of_offset(*start);
@@ -2278,7 +2278,7 @@ impl DocLines {
                                 return (None, Some(LineDelta {
                                     start_line,
                                     end_line,
-                                    buffer_offset_start_line: rope.offset_of_line(start_line),
+                                    _buffer_offset_start_line: rope.offset_of_line(start_line),
                                 }));
                             }
                         }
@@ -2298,7 +2298,7 @@ impl DocLines {
                                 first = Some(LineDelta {
                                     start_line: 0,
                                     end_line,
-                                    buffer_offset_start_line: 0,
+                                    _buffer_offset_start_line: 0,
                                 });
                             }
                             if *last_end == single_change_end {
@@ -2307,7 +2307,7 @@ impl DocLines {
                                 last = Some(LineDelta {
                                     start_line,
                                     end_line,
-                                    buffer_offset_start_line: rope.offset_of_line(start_line),
+                                    _buffer_offset_start_line: rope.offset_of_line(start_line),
                                 });
                             }
                             return (first, last);
@@ -2318,7 +2318,7 @@ impl DocLines {
                                 return (Some(LineDelta {
                                     start_line: 0,
                                     end_line,
-                                    buffer_offset_start_line: 0,
+                                    _buffer_offset_start_line: 0,
                                 }), None);
                             }
                         }
@@ -2329,7 +2329,7 @@ impl DocLines {
                                 return (None, Some(LineDelta {
                                     start_line,
                                     end_line,
-                                    buffer_offset_start_line: rope.offset_of_line(start_line),
+                                    _buffer_offset_start_line: rope.offset_of_line(start_line),
                                 }));
                             }
                         }
@@ -2436,29 +2436,30 @@ pub enum EditBuffer<'a> {
     SetLineEnding(LineEnding),
     EditBuffer {
         iter: &'a[(Selection, &'a str)],
-        edit_type: EditType
+        edit_type: EditType,
+        response: &'a mut Vec<(Rope, RopeDelta, InvalLines)>
     },
     SetPristine(u64),
     Reload {
-        content: Rope, set_pristine: bool
+        content: Rope, set_pristine: bool, response: &'a mut Vec<(Rope, RopeDelta, InvalLines)>
     },
     ExecuteMotionMode {
         cursor: &'a mut Cursor,
         motion_mode: MotionMode,
         range: Range<usize>,
         is_vertical: bool,
-        register: &'a mut Register,
+        register: &'a mut Register, response: &'a mut Vec<(Rope, RopeDelta, InvalLines)>
     },
     DoEditBuffer {
         cursor: &'a mut Cursor,
         cmd: &'a EditCommand,
         modal: bool,
         register: &'a mut Register,
-        smart_tab: bool
+        smart_tab: bool, response: &'a mut Vec<(Rope, RopeDelta, InvalLines)>
     },
     DoInsertBuffer{
         cursor: &'a mut Cursor,
-        s: &'a str
+        s: &'a str, response: &'a mut Vec<(Rope, RopeDelta, InvalLines)>
     },
 SetCursor {
     before_cursor: CursorMode, after_cursor: CursorMode
@@ -2482,10 +2483,11 @@ impl PubUpdateLines {
             EditBuffer::SetLineEnding(line_ending) => {
                 self.buffer_mut().set_line_ending(line_ending);
             }
-            EditBuffer::EditBuffer { iter, edit_type } => {
+            EditBuffer::EditBuffer { iter, edit_type, response } => {
                 let rs = self.buffer_mut().edit(iter, edit_type);
                 self.apply_delta(&rs.1);
                 line_delta = self._compute_change_lines_one(&rs);
+                response.push(rs);
             }
             EditBuffer::SetPristine(recv) => {
                 return if recv == self.buffer().rev() {
@@ -2497,17 +2499,18 @@ impl PubUpdateLines {
                     false
                 };
             }
-            EditBuffer::Reload { content, set_pristine } => {
+            EditBuffer::Reload { content, set_pristine , response} => {
                 let rs = self.buffer_mut().reload(content, set_pristine);
                 self.apply_delta(&rs.1);
                 line_delta = self._compute_change_lines_one(&rs);
+                response.push(rs);
             }
             EditBuffer::ExecuteMotionMode { cursor,
                 motion_mode,
                 range,
                 is_vertical,
-                register } => {
-                let rs = Action::execute_motion_mode(
+                register, response } => {
+                *response = Action::execute_motion_mode(
                     cursor,
                     self.buffer_mut(),
                     motion_mode,
@@ -2515,21 +2518,21 @@ impl PubUpdateLines {
                     is_vertical,
                     register,
                 );
-                for delta in &rs {
+                for delta in &*response {
                     self.apply_delta(&delta.1);
                 }
-                line_delta = self.compute_change_lines(&rs);
+                line_delta = self.compute_change_lines(&*response);
             }
             EditBuffer::DoEditBuffer { cursor,
                 cmd,
                 modal,
                 register,
-                smart_tab } => {
+                smart_tab, response } => {
                 info!("do_edit_buffer cursor={cursor:?} cmd={cmd:?} modal={modal} smart_tab={smart_tab}");
                 let syntax = &self.syntax;
                 let mut clipboard = SystemClipboard::new();
                 let old_cursor = cursor.mode().clone();
-                let deltas =
+                *response =
                     Action::do_edit(
                         cursor,
                         self.signals.buffer.val_mut(),
@@ -2544,22 +2547,22 @@ impl PubUpdateLines {
                             auto_indent: true,
                         },
                     );
-                if !deltas.is_empty() {
+                if !response.is_empty() {
                     self.buffer_mut().set_cursor_before(old_cursor);
                     self.buffer_mut().set_cursor_after(cursor.mode().clone());
-                    for delta in &deltas {
+                    for delta in &*response {
                         self.apply_delta(&delta.1);
                     }
                 }
-                line_delta = self.compute_change_lines(&deltas);
+                line_delta = self.compute_change_lines(&*response);
                 // deltas;
             }
-            EditBuffer::DoInsertBuffer { cursor,s  } => {
+            EditBuffer::DoInsertBuffer { cursor,s , response  } => {
                 let auto_closing_matching_pairs = self.config.auto_closing_matching_pairs;
                 let auto_surround = self.config.auto_surround;
                 let old_cursor = cursor.mode().clone();
                 let syntax = &self.syntax;
-                let deltas = Action::insert(
+                *response = Action::insert(
                     cursor,
                     self.signals.buffer.val_mut(),
                     s,
@@ -2571,10 +2574,10 @@ impl PubUpdateLines {
                 );
                 self.buffer_mut().set_cursor_before(old_cursor);
                 self.buffer_mut().set_cursor_after(cursor.mode().clone());
-                for delta in &deltas {
+                for delta in &*response {
                     self.apply_delta(&delta.1);
                 }
-                line_delta = self.compute_change_lines(&deltas);
+                line_delta = self.compute_change_lines(&*response);
             }
             EditBuffer::SetCursor { before_cursor, after_cursor } => {
                 self.buffer_mut().set_cursor_after(after_cursor);
@@ -2604,12 +2607,14 @@ impl PubUpdateLines {
         iter: &[(Selection, &str)],
         edit_type: EditType,
     ) -> (Rope, RopeDelta, InvalLines) {
-        self.buffer_edit(EditBuffer::EditBuffer {  edit_type, iter});
-        todo!()
+        let mut rs = Vec::with_capacity(1);
+        self.buffer_edit(EditBuffer::EditBuffer {  edit_type, iter, response: &mut rs});
+        rs.remove(0)
     }
     pub fn reload_buffer(&mut self, content: Rope, set_pristine: bool) -> (Rope, RopeDelta, InvalLines) {
-        self.buffer_edit(EditBuffer::Reload {  content, set_pristine});
-        todo!()
+        let mut rs = Vec::with_capacity(1);
+        self.buffer_edit(EditBuffer::Reload {  content, set_pristine, response: &mut rs});
+        rs.remove(0)
     }
 
     pub fn set_pristine(&mut self, rev: u64) -> bool {
@@ -2628,14 +2633,15 @@ impl PubUpdateLines {
         is_vertical: bool,
         register: &mut Register,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        let mut rs = Vec::with_capacity(1);
         self.buffer_edit(EditBuffer::ExecuteMotionMode {
             cursor,
             motion_mode,
             range,
             is_vertical,
-            register,
+            register, response: &mut rs
         });
-        todo!()
+        rs
     }
 
     pub fn do_edit_buffer(
@@ -2646,14 +2652,15 @@ impl PubUpdateLines {
         register: &mut Register,
         smart_tab: bool,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        let mut rs = Vec::with_capacity(1);
         self.buffer_edit(EditBuffer::DoEditBuffer {
             cursor,
             cmd,
             modal,
             register,
-            smart_tab,
+            smart_tab, response: &mut rs
         });
-        todo!()
+        rs
     }
 
     pub fn do_insert_buffer(
@@ -2661,11 +2668,12 @@ impl PubUpdateLines {
         cursor: &mut Cursor,
         s: &str,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        let mut rs = Vec::new();
         self.buffer_edit(EditBuffer::DoInsertBuffer {
             cursor,
-            s,
+            s, response: &mut rs
         });
-        todo!()
+        rs
     }
 
     pub fn clear_completion_lens(&mut self) {
@@ -3057,5 +3065,5 @@ pub enum ClickResult {
 struct LineDelta {
     start_line: usize,
     end_line: usize,
-    buffer_offset_start_line: usize,
+    _buffer_offset_start_line: usize,
 }
