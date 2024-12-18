@@ -7,7 +7,7 @@ use floem::kurbo::Rect;
 use floem::reactive::{Scope};
 use floem::views::editor::view::{DiffSection, LineInfo};
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
-use log::info;
+use log::{error, info};
 
 use crate::lines::line::VisualLine;
 
@@ -366,5 +366,59 @@ impl ScreenLines {
         None
     }
 
+    /// 视窗的最上一行
+    pub fn most_up_visual_line_info_of_visual_line(
+        &self,
+        visual_line: &VisualLine
+    ) -> Option<&VisualLineInfo> {
+        if let Some(last) = self.visual_lines.last() {
+            if let Ordering::Less = last.visual_line.cmp_y(visual_line) {
+                return None;
+            }
+        }
+        if let Some(first) = self.visual_lines.first() {
+            match first.visual_line.cmp_y(visual_line) {
+                Ordering::Less | Ordering::Equal => {
+                    let rs = self.visual_line_info_of_visual_line(visual_line);
+                    if rs.is_none() {
+                        error!("should not be reached");
+                    }
+                    return rs;
+                }
+                Ordering::Greater => {
+                    return Some(first)
+                }
+            }
+        }
+        error!("should not be reached");
+        None
+    }
+    /// 视窗的最上一行
+    pub fn most_down_visual_line_info_of_visual_line(
+        &self,
+        visual_line: &VisualLine
+    ) -> Option<&VisualLineInfo> {
+        if let Some(first) = self.visual_lines.first() {
+            if let Ordering::Greater = first.visual_line.cmp_y(visual_line) {
+                return None;
+            }
+        }
+        if let Some(last) = self.visual_lines.last() {
+            match last.visual_line.cmp_y(visual_line) {
+                Ordering::Greater | Ordering::Equal => {
+                    let rs = self.visual_line_info_of_visual_line(visual_line);
+                    if rs.is_none() {
+                        error!("should not be reached");
+                    }
+                    return rs;
+                }
+                Ordering::Less => {
+                    return Some(last)
+                }
+            }
+        }
+        error!("should not be reached");
+        None
+    }
 
 }

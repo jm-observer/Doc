@@ -1,7 +1,9 @@
+use std::cmp::Ordering;
 use lapce_xi_rope::Interval;
 use super::layout::TextLayoutLine;
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
 use std::fmt::{Debug, Formatter};
+use floem::kurbo::Point;
 use floem_editor_core::line_ending::LineEnding;
 use crate::lines::phantom_text::PhantomTextLine;
 use crate::lines::style::NewLineStyle;
@@ -128,6 +130,15 @@ impl OriginFoldedLine {
     pub(crate) fn len_without_rn(&self, ending: LineEnding) -> usize {
         self.len().max(ending.len()) - ending.len()
     }
+
+    /// 单一视觉行的间隔point
+    pub fn line_scope(&self, start_col: usize, end_col: usize, line_height: f64, y: f64) -> (Point, Point) {
+        let mut hit0 = self.text_layout.text.hit_position(start_col);
+        let mut hit1 = self.text_layout.text.hit_position(end_col + 1);
+        hit0.point.y += y;
+        hit1.point.y += y + line_height;
+        return (hit0.point, hit1.point)
+    }
 }
 
 impl Debug for OriginFoldedLine {
@@ -141,6 +152,7 @@ impl Debug for OriginFoldedLine {
 pub struct VisualLine {
     pub line_index: usize,
     pub origin_interval: Interval,
+    /// 合并后的视觉范围
     pub visual_interval: Interval,
     pub origin_line: usize,
     pub origin_folded_line: usize,
@@ -167,6 +179,20 @@ impl Debug for VisualLine {
 }
 
 impl VisualLine {
+
+    pub fn cmp_y(&self, other: &Self) -> Ordering {
+        let rs = self.origin_folded_line.cmp(&other.origin_folded_line);
+        match rs {
+            Ordering::Equal => {
+                self.origin_folded_line_sub_index.cmp(&other.origin_folded_line_sub_index)
+            }
+            Ordering::Less |
+            Ordering::Greater => {
+                return rs;
+            }
+        }
+    }
+
     pub fn rvline(&self) -> RVLine {
         RVLine {
             line: self.origin_folded_line,

@@ -887,6 +887,19 @@ impl DocLines {
         bail!("folded_line_of_origin_line origin_line={origin_line}")
     }
 
+    pub fn folded_line_of_visual_line(
+        &self,
+        vl: &VisualLine,
+    ) -> Result<&OriginFoldedLine> {
+        for folded_line in &self.origin_folded_lines {
+            if folded_line.line_index == vl.origin_folded_line
+            {
+                return Ok(folded_line);
+            }
+        }
+        bail!("folded_line_of_visual_line {vl:?}")
+    }
+
     pub fn visual_line_of_folded_line_and_sub_index(
         &self,
         origin_folded_line: usize,
@@ -2470,6 +2483,50 @@ impl ComputeLines {
         hit0.point.y += rs.y;
         hit1.point.y += rs.y + self.line_height as f64;
         Some((hit0.point, hit1.point))
+    }
+
+    pub fn normal_selection(&self, start_offset: usize,
+                                 end_offset: usize,) -> Vec<(Point, Point)>{
+        let Ok((vl_start, _col, col_start, _, folded_line_start)) = self.visual_line_of_offset(start_offset, CursorAffinity::Forward) else {
+            error!("visual_line_of_offset offset={start_offset} not exist");
+            return vec![]
+        };
+        let Ok((vl_end, _col, col_end, _, folded_line_end)) = self.visual_line_of_offset(end_offset, CursorAffinity::Forward) else {
+            error!("visual_line_of_offset offset={end_offset} not exist");
+            return vec![]
+        };
+        let Some(rs_start) = self.screen_lines().most_up_visual_line_info_of_visual_line(&vl_start) else {
+            return vec![]
+        };
+        let Some(rs_end) = self.screen_lines().most_down_visual_line_info_of_visual_line(&vl_end) else {
+            return vec![]
+        };
+
+        if vl_start == vl_end {
+            let rs = folded_line_start.line_scope(col_start, col_end, self.line_height as f64, rs_start.y);
+            return vec![rs];
+        } else {
+            let mut first = Vec::with_capacity(vl_end.line_index - vl_start.line_index + 1);
+            first.push(folded_line_start.line_scope(col_start, vl_start.visual_interval.end, self.line_height as f64, rs_start.y));
+
+            for vl in &self.screen_lines().visual_lines {
+                if vl.visual_line.line_index >= vl_end.line_index {
+                    break;
+                } else if vl.visual_line.line_index <= vl_start.line_index {
+                    continue
+                } else {
+                    let Ok(folded_line) = self.folded_line_of_visual_line(&vl.visual_line) else {
+                        error!("folded_line_of_visual_line {:?} not exist", vl.visual_line);
+                        continue;
+                    };
+                    let selection = folded_line.line_scope(vl.visual_line.visual_interval.start, vl.visual_line.visual_interval.end, self.line_height as f64, vl.y);
+                    first.push(selection)
+                }
+            }
+            let last = folded_line_end.line_scope(0, col_end, self.line_height as f64, rs_end.y);
+            first.push(last);
+            first
+        }
     }
 }
 
