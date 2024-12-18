@@ -52,7 +52,7 @@ use crate::lines::selection::Selection;
 use crate::lines::word::{CharClassification, get_char_property};
 use crate::syntax::{BracketParser, Syntax};
 use crate::syntax::edit::SyntaxEdit;
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 pub mod action;
 pub mod diff;
@@ -2163,6 +2163,38 @@ impl DocLines {
             CursorAffinity::Backward
         };
         Ok((offset_of_buffer, horiz, affinity))
+    }
+
+
+    pub fn end_of_line(
+        &self,
+        affinity: &mut CursorAffinity,
+        offset: usize,
+        _mode: Mode,
+    ) -> Result<(usize, ColPosition)> {
+
+        let (vl, _offset_of_visual, _offset_folded, _last_char) = self.visual_line_of_offset(offset, *affinity)?;
+        // let new_col = info.last_col(view.text_prov(), mode != Mode::Normal);
+        // let vline_end = vl.visual_interval.end;
+        // let start_offset = vl.visual_interval.start;
+        // // If these subtractions crash, then it is likely due to a bad vline being kept around
+        // // somewhere
+        // let new_col = if mode == Mode::Normal && !vl.visual_interval.is_empty() {
+        //     let vline_pre_end = self.buffer().prev_grapheme_offset(vline_end, 1, 0);
+        //     vline_pre_end - start_offset
+        // } else {
+        //     vline_end - start_offset
+        // };
+
+        let origin_folded_line = self.origin_folded_lines.get(vl.origin_folded_line).ok_or(anyhow!("origin_folded_line is not exist"))?;
+        *affinity = if origin_folded_line.origin_interval.is_empty() {
+            CursorAffinity::Forward
+        } else {
+            CursorAffinity::Backward
+        };
+        let new_offset = self.buffer().offset_of_line_col(origin_folded_line.origin_line_end, origin_folded_line.origin_interval.end);
+
+        Ok((new_offset, ColPosition::End))
     }
 
     pub fn move_down(

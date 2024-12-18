@@ -51,8 +51,9 @@ impl OriginLine {
 #[derive(Clone)]
 pub struct OriginFoldedLine {
     pub line_index: usize,
-    // [origin_line_start..origin_line_end]
+    /// [origin_line_start...origin_line_end]
     pub origin_line_start: usize,
+    // [origin_line_start...origin_line_end]
     pub origin_line_end: usize,
     pub origin_interval: Interval,
     pub text_layout: TextLayoutLine,
@@ -141,6 +142,7 @@ pub struct VisualLine {
     pub line_index: usize,
     pub origin_interval: Interval,
     pub visual_interval: Interval,
+    /// 不准
     pub origin_line: usize,
     pub origin_folded_line: usize,
     pub origin_folded_line_sub_index: usize,
