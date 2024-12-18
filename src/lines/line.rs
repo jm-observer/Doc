@@ -137,12 +137,11 @@ impl Debug for OriginFoldedLine {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct VisualLine {
     pub line_index: usize,
     pub origin_interval: Interval,
     pub visual_interval: Interval,
-    /// 不准
     pub origin_line: usize,
     pub origin_folded_line: usize,
     pub origin_folded_line_sub_index: usize,

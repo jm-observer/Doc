@@ -209,10 +209,10 @@ impl ScreenLines {
             .map(move |vline| self.info(*vline).unwrap())
     }
 
-    /// Get the earliest line info for a given line.
-    pub fn info_for_line(&self, line: usize) -> Option<LineInfo> {
-        self.info(self.first_rvline_for_line(line)?)
-    }
+    // /// Get the earliest line info for a given line.
+    // pub fn info_for_line(&self, line: usize) -> Option<VisualLineInfo> {
+    //     self.info(self.first_rvline_for_line(line)?)
+    // }
 
     /// Get the earliest rvline for the given line
     pub fn first_rvline_for_line(&self, line: usize) -> Option<RVLine> {
@@ -337,19 +337,34 @@ impl ScreenLines {
     }
 
     /// 获取原始行的视觉行信息。为none则说明被折叠，或者没有在窗口范围
-    pub fn visual_line_info_of_visual_line(
+    pub fn visual_line_info_of_origin_line(
         &self,
-        folded_line: usize,
-        sub_line: usize
+        origin_line: usize,
     ) -> Option<&VisualLineInfo> {
         for visual_line in &self.visual_lines {
-            if visual_line.visual_line.origin_folded_line == folded_line && visual_line.visual_line.origin_folded_line_sub_index == sub_line {
+            if visual_line.visual_line.origin_line == origin_line && visual_line.visual_line.origin_folded_line_sub_index == 0 {
                 return Some(visual_line)
-            } else if (visual_line.visual_line.origin_folded_line == folded_line && visual_line.visual_line.origin_folded_line_sub_index > sub_line ) || visual_line.visual_line.origin_folded_line > folded_line{
+            } else if (visual_line.visual_line.origin_line == origin_line && visual_line.visual_line.origin_folded_line_sub_index > 0 ) || visual_line.visual_line.origin_line > origin_line {
                 break;
             }
         }
         None
     }
+
+    /// 获取原始行的视觉行信息。为none则说明被折叠，或者没有在窗口范围
+    pub fn visual_line_info_of_visual_line(
+        &self,
+        visual_line: &VisualLine
+    ) -> Option<&VisualLineInfo> {
+        for visual_line_info in &self.visual_lines {
+            if visual_line_info.visual_line == *visual_line {
+                return Some(visual_line_info)
+            } else if (visual_line_info.visual_line.origin_folded_line == visual_line.origin_folded_line && visual_line_info.visual_line.origin_folded_line_sub_index > visual_line.origin_folded_line_sub_index ) || visual_line_info.visual_line.origin_folded_line > visual_line.origin_folded_line{
+                break;
+            }
+        }
+        None
+    }
+
 
 }

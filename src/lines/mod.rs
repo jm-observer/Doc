@@ -20,7 +20,7 @@ use phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
-use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent, VLine, VLineInfo};
+use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent, VLineInfo};
 use floem_editor_core::command::EditCommand;
 use floem_editor_core::indent::IndentStyle;
 use floem_editor_core::line_ending::LineEnding;
@@ -31,7 +31,7 @@ use lapce_xi_rope::{DeltaElement, Interval, Rope, RopeDelta, Transformer};
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Location, Position};
 use smallvec::SmallVec;
-use log::{info, warn};
+use log::{error, info, warn};
 use line::{OriginFoldedLine, VisualLine};
 use signal::Signals;
 use style::NewLineStyle;
@@ -53,6 +53,7 @@ use crate::lines::word::{CharClassification, get_char_property};
 use crate::syntax::{BracketParser, Syntax};
 use crate::syntax::edit::SyntaxEdit;
 use anyhow::{anyhow, bail, Result};
+use floem_editor_core::word::WordCursor;
 
 pub mod action;
 pub mod diff;
@@ -1142,7 +1143,7 @@ impl DocLines {
         &self,
         offset: usize,
         _affinity: CursorAffinity,
-    ) -> Result<(VisualLine, usize, usize, bool)> {
+    ) -> Result<(VisualLine, usize, usize, bool, &OriginFoldedLine)> {
         // 位于的原始行，以及在原始行的起始offset
         let (origin_line, offset_of_origin_line) = {
             let origin_line = self.buffer().line_of_offset(offset);
@@ -1159,7 +1160,7 @@ impl DocLines {
         )?;
         let last_char = offset_of_folded >= folded_line.len_without_rn(self.buffer().line_ending());
 
-        Ok((visual_line.clone(), offset_of_visual, offset_of_folded, last_char))
+        Ok((visual_line.clone(), offset_of_visual, offset_of_folded, last_char, folded_line))
     }
 
     pub fn visual_lines(&self, start: usize, end: usize) -> Vec<VisualLine> {
@@ -1171,21 +1172,6 @@ impl DocLines {
             vline_infos.push(self.visual_lines[index].clone());
         }
         vline_infos
-    }
-
-    pub fn vline_infos(&self, start: usize, end: usize) -> Vec<VLineInfo<VLine>> {
-        let start = start.min(self.visual_lines.len() - 1);
-        let end = end.min(self.visual_lines.len() - 1);
-
-        let mut vline_infos = Vec::with_capacity(end - start + 1);
-        for index in start..=end {
-            vline_infos.push(self.visual_lines[index].vline_info());
-        }
-        vline_infos
-    }
-
-    pub fn first_vline_info(&self) -> VLineInfo<VLine> {
-        self.visual_lines[0].vline_info()
     }
 
     fn phantom_text(
@@ -2173,7 +2159,7 @@ impl DocLines {
         _mode: Mode,
     ) -> Result<(usize, ColPosition)> {
 
-        let (vl, _offset_of_visual, _offset_folded, _last_char) = self.visual_line_of_offset(offset, *affinity)?;
+        let (vl, _offset_of_visual, _offset_folded, _last_char, _) = self.visual_line_of_offset(offset, *affinity)?;
         // let new_col = info.last_col(view.text_prov(), mode != Mode::Normal);
         // let vline_end = vl.visual_interval.end;
         // let start_offset = vl.visual_interval.start;
@@ -2396,6 +2382,34 @@ impl DocLines {
 type ComputeLines = DocLines;
 
 impl ComputeLines {
+
+    pub fn first_non_blank(
+        &self,
+        affinity: &mut CursorAffinity,
+        offset: usize,
+    ) -> Result<(usize, ColPosition)> {
+        let (info, _offset_of_visual, _offset_folded, _last_char, _) = self.visual_line_of_offset(offset, *affinity)?;
+        let non_blank_offset =
+            WordCursor::new(self.buffer().text(), info.origin_interval.start).next_non_blank_char();
+
+        let start_line_offset = info.origin_interval.start;
+        // TODO: is this always the correct affinity? It might be desirable for the very first character on a wrapped line?
+        *affinity = CursorAffinity::Forward;
+
+        Ok(if offset > non_blank_offset {
+            // Jump to the first non-whitespace character if we're strictly after it
+            (non_blank_offset, ColPosition::FirstNonBlank)
+        } else {
+            // If we're at the start of the line, also jump to the first not blank
+            if start_line_offset == offset {
+                (non_blank_offset, ColPosition::FirstNonBlank)
+            } else {
+                // Otherwise, jump to the start of the line
+                (start_line_offset, ColPosition::Start)
+            }
+        })
+    }
+
     pub fn line_point_of_visual_line_col(
         &self,
         visual_line: usize,
@@ -2421,7 +2435,7 @@ impl ComputeLines {
         offset: usize,
         affinity: CursorAffinity,
     ) -> Result<(VisualLine, usize, usize, bool, Option<Point>, f64, Point, usize)> {
-        let (vl, offset_of_visual, offset_folded, last_char) = self.visual_line_of_offset(offset, affinity)?;
+        let (vl, offset_of_visual, offset_folded, last_char, _) = self.visual_line_of_offset(offset, affinity)?;
         let mut viewpport_point = hit_position_aff(
             &self.text_layout_of_visual_line(vl.line_index).text,
             offset_folded,
@@ -2429,7 +2443,7 @@ impl ComputeLines {
         )
             .point;
         let line_height = self.screen_lines().line_height;
-        let screen_line = self.screen_lines().visual_line_info_of_visual_line(vl.origin_folded_line, vl.origin_folded_line_sub_index);
+        let screen_line = self.screen_lines().visual_line_info_of_visual_line(&vl);
 
         let point = if let Some(screen_line) = screen_line {
             // ?
@@ -2443,6 +2457,19 @@ impl ComputeLines {
         origin_point.y = vl.line_index as f64 * line_height;
 
         Ok((vl, offset_of_visual, offset_folded, last_char, point, line_height, origin_point, self.line_height))
+    }
+
+    pub fn char_rect_in_viewport(&self, offset: usize) -> Option<(Point, Point)>{
+        let Ok((vl, _col, col_2, _, folded_line)) = self.visual_line_of_offset(offset, CursorAffinity::Forward) else {
+            error!("visual_line_of_offset offset={offset} not exist");
+            return None
+        };
+        let rs = self.screen_lines().visual_line_info_of_visual_line(&vl)?;
+        let mut hit0 = folded_line.text_layout.text.hit_position(col_2);
+        let mut hit1 = folded_line.text_layout.text.hit_position(col_2 + 1);
+        hit0.point.y += rs.y;
+        hit1.point.y += rs.y + self.line_height as f64;
+        Some((hit0.point, hit1.point))
     }
 }
 
