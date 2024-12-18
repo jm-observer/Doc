@@ -58,6 +58,7 @@ impl Signals {
             self.buffer_rev.trigger();
             self.buffer.trigger();
             self.last_line.trigger();
+            self.pristine.trigger();
         });
     }
 

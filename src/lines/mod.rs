@@ -2585,7 +2585,7 @@ impl PubUpdateLines {
                 return false;
             }
         }
-        self.signals.pristine.update_if_not_equal(false);
+        self.signals.pristine.update_if_not_equal(self.buffer().is_pristine());
         self.signals.last_line.update_if_not_equal(self.buffer().last_line());
         self.signals.buffer_rev.update_if_not_equal(self.buffer().rev());
         self.on_update_buffer();
