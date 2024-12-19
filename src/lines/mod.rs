@@ -20,7 +20,7 @@ use phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
-use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent, VLineInfo};
+use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent};
 use floem_editor_core::command::EditCommand;
 use floem_editor_core::indent::IndentStyle;
 use floem_editor_core::line_ending::LineEnding;
@@ -919,52 +919,52 @@ impl DocLines {
         &self.visual_lines[self.visual_lines.len() - 1]
     }
 
-    /// 原始字符所在的视觉行，以及行的偏移位置和是否是最后一个字符
-    pub fn visual_line_of_origin_line_offset(
-        &self,
-        origin_line: usize,
-        offset: usize,
-        _affinity: CursorAffinity,
-    ) -> Result<(VLineInfo, usize, bool)> {
-        // 位于的原始行，以及在原始行的起始offset
-        // let (origin_line, offset_of_line) = self.font_sizes.doc.with_untracked(|x| {
-        //     let text = x.text();
-        //     let origin_line = text.line_of_offset(offset);
-        //     let origin_line_start_offset = text.offset_of_line(origin_line);
-        //     (origin_line, origin_line_start_offset)
-        // });
-        // let mut offset = offset - offset_of_line;
-        let before_cursor = _affinity.before_cursor();
-        let folded_line = self.folded_line_of_origin_line(origin_line)?;
-        let mut final_offset = folded_line
-            .text_layout
-            .phantom_text
-            .final_col_of_col(origin_line, offset, before_cursor);
-        let folded_line_layout = folded_line.text_layout.text.line_layout();
-        let mut sub_line_index = folded_line_layout.len() - 1;
-        let mut last_char = false;
-        for (index, sub_line) in folded_line_layout.iter().enumerate() {
-            if before_cursor && final_offset < sub_line.glyphs.len() {
-                sub_line_index = index;
-                last_char = final_offset == sub_line.glyphs.len() - 1;
-                break;
-            } else if before_cursor {
-                final_offset -= sub_line.glyphs.len();
-            } else if final_offset <= sub_line.glyphs.len() {
-                sub_line_index = index;
-                last_char = final_offset + 1 >= sub_line.glyphs.len();
-                break;
-            } else {
-                final_offset -= sub_line.glyphs.len();
-            }
-        }
-        let visual_line = self.visual_line_of_folded_line_and_sub_index(
-            folded_line.line_index,
-            sub_line_index,
-        )?;
-
-        Ok((visual_line.vline_info(), final_offset, last_char))
-    }
+    // /// 原始字符所在的视觉行，以及行的偏移位置和是否是最后一个字符
+    // pub fn visual_line_of_origin_line_offset(
+    //     &self,
+    //     origin_line: usize,
+    //     offset: usize,
+    //     _affinity: CursorAffinity,
+    // ) -> Result<(VLineInfo, usize, bool)> {
+    //     // 位于的原始行，以及在原始行的起始offset
+    //     // let (origin_line, offset_of_line) = self.font_sizes.doc.with_untracked(|x| {
+    //     //     let text = x.text();
+    //     //     let origin_line = text.line_of_offset(offset);
+    //     //     let origin_line_start_offset = text.offset_of_line(origin_line);
+    //     //     (origin_line, origin_line_start_offset)
+    //     // });
+    //     // let mut offset = offset - offset_of_line;
+    //     let before_cursor = _affinity.before_cursor();
+    //     let folded_line = self.folded_line_of_origin_line(origin_line)?;
+    //     let mut final_offset = folded_line
+    //         .text_layout
+    //         .phantom_text
+    //         .final_col_of_col(origin_line, offset, before_cursor);
+    //     let folded_line_layout = folded_line.text_layout.text.line_layout();
+    //     let mut sub_line_index = folded_line_layout.len() - 1;
+    //     let mut last_char = false;
+    //     for (index, sub_line) in folded_line_layout.iter().enumerate() {
+    //         if before_cursor && final_offset < sub_line.glyphs.len() {
+    //             sub_line_index = index;
+    //             last_char = final_offset == sub_line.glyphs.len() - 1;
+    //             break;
+    //         } else if before_cursor {
+    //             final_offset -= sub_line.glyphs.len();
+    //         } else if final_offset <= sub_line.glyphs.len() {
+    //             sub_line_index = index;
+    //             last_char = final_offset + 1 >= sub_line.glyphs.len();
+    //             break;
+    //         } else {
+    //             final_offset -= sub_line.glyphs.len();
+    //         }
+    //     }
+    //     let visual_line = self.visual_line_of_folded_line_and_sub_index(
+    //         folded_line.line_index,
+    //         sub_line_index,
+    //     )?;
+    //
+    //     Ok((visual_line.vline_info(), final_offset, last_char))
+    // }
 
 
     pub fn buffer_offset_of_click(
