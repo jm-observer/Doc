@@ -32,8 +32,8 @@ pub fn compute_screen_lines(
                 let folded_line_y = visual_line_y - visual_line.origin_folded_line_sub_index * line_height;
 
                 let visual_line_info = VisualLineInfo {
-                    y: folded_line_y as f64 - y0,
-                    vline_y: visual_line_y as f64 - y0,
+                    folded_line_y: folded_line_y as f64 - y0,
+                    visual_line_y: visual_line_y as f64 - y0,
                     visual_line,
                 };
                 visual_lines.push(visual_line_info);

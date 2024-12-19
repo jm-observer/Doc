@@ -31,9 +31,9 @@ pub struct ScreenLines {
 #[derive(Clone, Debug, PartialEq)]
 pub struct VisualLineInfo {
     /// 该视觉行所属折叠行（原始行）在窗口的y偏移（不是整个文档的y偏移）。若该折叠行（原始行）只有1行视觉行，则y=vline_y。行顶的y值！！！
-    pub y: f64,
+    pub folded_line_y: f64,
     /// 视觉行在窗口的y偏移（不是整个文档的y偏移）。行顶的y值！！！
-    pub vline_y: f64,
+    pub visual_line_y: f64,
     pub visual_line: VisualLine,
 }
 
@@ -66,7 +66,7 @@ impl ScreenLines {
     pub fn visual_line_of_y(&self, y: f64) -> &VisualLineInfo {
         let y = y - self.base.y0;
         for vli in &self.visual_lines {
-            if vli.y <= y && y < vli.y + self.line_height {
+            if vli.folded_line_y <= y && y < vli.folded_line_y + self.line_height {
                 return vli;
             }
         }
