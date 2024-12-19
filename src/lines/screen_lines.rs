@@ -7,7 +7,7 @@ use anyhow::{bail, Result};
 use floem::kurbo::Rect;
 use floem::reactive::{Scope};
 use floem::views::editor::view::{DiffSection, LineInfo};
-use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
+use floem::views::editor::visual_line::{RVLine};
 use log::{error, info};
 
 use crate::lines::line::VisualLine;
@@ -87,14 +87,14 @@ impl ScreenLines {
     //     self.info.get(&rvline).map(|info| info.vline_info)
     // }
 
-    pub fn rvline_range(&self) -> Option<(RVLine, RVLine)> {
-        self.lines.first().copied().zip(self.lines.last().copied())
-    }
+    // pub fn rvline_range(&self) -> Option<(RVLine, RVLine)> {
+    //     self.lines.first().copied().zip(self.lines.last().copied())
+    // }
 
-    /// Iterate over the line info, copying them with the full y positions.
-    pub fn iter_line_info(&self) -> impl Iterator<Item = LineInfo> + '_ {
-        self.lines.iter().map(|rvline| self.info(*rvline).unwrap())
-    }
+    // /// Iterate over the line info, copying them with the full y positions.
+    // pub fn iter_line_info(&self) -> impl Iterator<Item = LineInfo> + '_ {
+    //     self.lines.iter().map(|rvline| self.info(*rvline).unwrap())
+    // }
 
     /// Iterate over the line info within the range, copying them with the full y positions.
     /// If the values are out of range, it is clamped to the valid lines within.
@@ -182,27 +182,27 @@ impl ScreenLines {
     //     })
     // }
 
-    /// Iterate over the real lines underlying the visual lines on the screen with the y position
-    /// of their layout.
-    /// (line, y)
-    /// 应该为视觉行
-    pub fn iter_lines_y(&self) -> impl Iterator<Item = (usize, f64)> + '_ {
-        let mut last_line = None;
-        self.lines.iter().filter_map(move |vline| {
-            let info = self.info(*vline).unwrap();
-
-            let line = info.vline_info.origin_line;
-
-            if last_line == Some(line) {
-                // We've already considered this line.
-                return None;
-            }
-
-            last_line = Some(line);
-
-            Some((line, info.y))
-        })
-    }
+    // /// Iterate over the real lines underlying the visual lines on the screen with the y position
+    // /// of their layout.
+    // /// (line, y)
+    // /// 应该为视觉行
+    // pub fn iter_lines_y(&self) -> impl Iterator<Item = (usize, f64)> + '_ {
+    //     let mut last_line = None;
+    //     self.lines.iter().filter_map(move |vline| {
+    //         let info = self.info(*vline).unwrap();
+    //
+    //         let line = info.vline_info.origin_line;
+    //
+    //         if last_line == Some(line) {
+    //             // We've already considered this line.
+    //             return None;
+    //         }
+    //
+    //         last_line = Some(line);
+    //
+    //         Some((line, info.y))
+    //     })
+    // }
 
     pub fn iter_line_info_y(&self) -> impl Iterator<Item = LineInfo> + '_ {
         self.lines
@@ -231,83 +231,6 @@ impl ScreenLines {
             .copied()
     }
 
-    // /// Ran on [LayoutEvent::CreatedLayout](super::visual_line::LayoutEvent::CreatedLayout) to update  [`ScreenLinesBase`] &
-    // /// the viewport if necessary.
-    // ///
-    // /// Returns `true` if [`ScreenLines`] needs to be completely updated in response
-    // pub fn on_created_layout(&self, ed: &Editor, line: usize) -> bool {
-    //     // The default creation is empty, force an update if we're ever like this since it should
-    //     // not happen.
-    //     if self.is_empty() {
-    //         return true;
-    //     }
-    //
-    //     let base = self.base.get_untracked();
-    //     let vp = ed.viewport.get_untracked();
-    //
-    //     let is_before = self
-    //         .iter_vline_info()
-    //         .next()
-    //         .map(|l| line < l.rvline.line)
-    //         .unwrap_or(false);
-    //
-    //     // If the line is created before the current screenlines, we can simply shift the
-    //     // base and viewport forward by the number of extra wrapped lines,
-    //     // without needing to recompute the screen lines.
-    //     if is_before {
-    //         // TODO: don't assume line height is constant
-    //         let line_height = f64::from(ed.line_height(0));
-    //
-    //         // We could use `try_text_layout` here, but I believe this guards against a rare
-    //         // crash (though it is hard to verify) wherein the style id has changed and so the
-    //         // layouts get cleared.
-    //         // However, the original trigger of the layout event was when a layout was created
-    //         // and it expects it to still exist. So we create it just in case, though we of course
-    //         // don't trigger another layout event.
-    //         let layout = ed.text_layout_trigger(line, false);
-    //
-    //         // One line was already accounted for by treating it as an unwrapped line.
-    //         let new_lines = layout.line_count() - 1;
-    //
-    //         let new_y0 = base.active_viewport.y0 + new_lines as f64 * line_height;
-    //         let new_y1 = new_y0 + vp.height();
-    //         let new_viewport = Rect::new(vp.x0, new_y0, vp.x1, new_y1);
-    //
-    //         batch(|| {
-    //             self.base.set(ScreenLinesBase {
-    //                 active_viewport: new_viewport,
-    //             });
-    //             ed.viewport.set(new_viewport);
-    //         });
-    //
-    //         // Ensure that it is created even after the base/viewport signals have been updated.
-    //         // (We need the `text_layout` to still have the layout)
-    //         // But we have to trigger an event still if it is created because it *would* alter the
-    //         // screenlines.
-    //         // TODO: this has some risk for infinite looping if we're unlucky.
-    //         let _layout = ed.text_layout_trigger(line, true);
-    //
-    //         return false;
-    //     }
-    //
-    //     let is_after = self
-    //         .iter_vline_info()
-    //         .last()
-    //         .map(|l| line > l.rvline.line)
-    //         .unwrap_or(false);
-    //
-    //     // If the line created was after the current view, we don't need to update the screenlines
-    //     // at all, since the new line is not visible and has no effect on y positions
-    //     if is_after {
-    //         return false;
-    //     }
-    //
-    //     // If the line is created within the current screenlines, we need to update the
-    //     // screenlines to account for the new line.
-    //     // That is handled by the caller.
-    //     true
-    // }
-
     pub fn log(&self) {
         info!("{:?}", self.lines);
         info!("{:?}", self.info);
@@ -317,6 +240,15 @@ impl ScreenLines {
 
 
 impl ScreenLines {
+
+    pub fn line_interval(&self) -> Result<(usize, usize)>{
+        match (self.visual_lines.first(), self.visual_lines.last()) {
+            (Some(first), Some(last)) => {
+                Ok((first.visual_line.origin_line, last.visual_line.origin_line))
+            }
+            _ => bail!("ScreenLines is empty?")
+        }
+    }
 
     pub fn offset_interval(&self) -> Result<(usize, usize)>{
         match (self.visual_lines.first(), self.visual_lines.last()) {
