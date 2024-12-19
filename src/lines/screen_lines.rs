@@ -1,12 +1,10 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::rc::Rc;
 use anyhow::{bail, Result};
 
 use floem::kurbo::Rect;
 use floem::reactive::{Scope};
-use floem::views::editor::view::{DiffSection, LineInfo};
-use floem::views::editor::visual_line::{RVLine};
+use floem::views::editor::view::{DiffSection};
 use log::{error, info};
 
 use crate::lines::line::VisualLine;
@@ -17,11 +15,9 @@ use crate::lines::line::VisualLine;
 // 不允许滚到到窗口没有文本！！！因此lines等不会为空
 #[derive(Clone)]
 pub struct ScreenLines {
-    pub lines: Vec<RVLine>,
     pub visual_lines: Vec<VisualLineInfo>,
     /// Guaranteed to have an entry for each `VLine` in `lines`
     /// You should likely use accessor functions rather than this directly.
-    pub info: Rc<HashMap<RVLine, LineInfo>>,
     pub diff_sections: Option<Rc<Vec<DiffSection>>>,
     // The base y position that all the y positions inside `info` are relative to.
     // This exists so that if a text layout is created outside of the view, we don't have to
@@ -32,7 +28,7 @@ pub struct ScreenLines {
     pub line_height: f64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VisualLineInfo {
     /// 该视觉行所属折叠行（原始行）在窗口的y偏移（不是整个文档的y偏移）。若该折叠行（原始行）只有1行视觉行，则y=vline_y。行顶的y值！！！
     pub y: f64,
@@ -44,9 +40,7 @@ pub struct VisualLineInfo {
 impl ScreenLines {
     pub fn new(_cx: Scope, viewport: Rect, line_height: f64) -> ScreenLines {
         ScreenLines {
-            lines: Default::default(),
             visual_lines: Default::default(),
-            info: Default::default(),
             diff_sections: Default::default(),
             base: viewport,
             line_height
@@ -54,13 +48,10 @@ impl ScreenLines {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.lines.is_empty()
+        self.visual_lines.is_empty()
     }
 
     pub fn clear(&mut self, viewport: Rect) {
-        self.lines = Default::default();
-        self.info = Default::default();
-        self.diff_sections = Default::default();
         self.base = viewport;
     }
 
@@ -231,8 +222,7 @@ impl ScreenLines {
     // }
 
     pub fn log(&self) {
-        info!("{:?}", self.lines);
-        info!("{:?}", self.info);
+        info!("{:?}", self.visual_lines);
     }
 }
 

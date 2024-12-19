@@ -1,9 +1,6 @@
 use floem_editor_core::char_buffer::CharBuffer;
 use floem_editor_core::word::WordCursor;
 use floem::kurbo::Rect;
-use std::collections::HashMap;
-use floem::views::editor::view::LineInfo;
-use std::rc::Rc;
 use floem::views::editor::text::PreeditData;
 use floem::peniko::Color;
 use super::phantom_text::{PhantomText, PhantomTextKind};
@@ -21,48 +18,28 @@ pub fn compute_screen_lines(
     view_kind: EditorViewKind,
     base: Rect,
     vline_infos: Vec<VisualLine>,
-    min_visual: usize,
     line_height: usize,
     y0: f64,
 ) -> ScreenLines {
     match view_kind {
         EditorViewKind::Normal => {
-            let mut rvlines = Vec::new();
             let mut visual_lines = Vec::new();
-            let mut info = HashMap::new();
 
             // let vline_infos = self.visual_lines(min_val, max_val);
 
             for visual_line in vline_infos {
-                let rvline = visual_line.rvline();
-                let y_idx = min_visual + rvlines.len();
-                let vline_y = y_idx * line_height;
-                let line_y = vline_y - rvline.line_index * line_height;
+                let visual_line_y = visual_line.line_index * line_height;
+                let folded_line_y = visual_line_y - visual_line.origin_folded_line_sub_index * line_height;
 
-                let vline_info = visual_line.vline_info();
                 let visual_line_info = VisualLineInfo {
-                    y: line_y as f64 - y0,
-                    vline_y: vline_y as f64 - y0,
+                    y: folded_line_y as f64 - y0,
+                    vline_y: visual_line_y as f64 - y0,
                     visual_line,
                 };
-                rvlines.push(rvline);
-                visual_lines.push(visual_line_info.clone());
-
-                // Add the information to make it cheap to get in the future.
-                // This y positions are shifted by the baseline y0
-                info.insert(
-                    rvline,
-                    LineInfo {
-                        y: line_y as f64 - y0,
-                        vline_y: vline_y as f64 - y0,
-                        vline_info,
-                    },
-                );
+                visual_lines.push(visual_line_info);
             }
             ScreenLines {
-                lines: rvlines,
                 visual_lines,
-                info: Rc::new(info),
                 diff_sections: None,
                 base,
                 line_height: line_height as f64

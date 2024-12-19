@@ -15,12 +15,11 @@ use floem::text::{
 };
 use floem::views::editor::EditorStyle;
 use layout::{TextLayoutLine};
-use floem::views::editor::listener::Listener;
 use phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
-use floem::views::editor::visual_line::{hit_position_aff, LayoutEvent};
+use floem::views::editor::visual_line::{hit_position_aff};
 use floem_editor_core::command::EditCommand;
 use floem_editor_core::indent::IndentStyle;
 use floem_editor_core::line_ending::LineEnding;
@@ -167,7 +166,7 @@ pub struct DocLines {
     // pub font_sizes: Rc<EditorFontSizes>,
     // font_size_cache_id: FontSizeCacheId,
     // wrap: ResolvedWrap,
-    pub layout_event: Listener<LayoutEvent>,
+    // pub layout_event: Listener<LayoutEvent>,
     max_width: f64,
 
     // editor: Editor
@@ -222,7 +221,7 @@ impl DocLines {
             Signals::new(cx, &editor_style, viewport, buffer, screen_lines, last_line);
         let mut lines = Self {
             signals,
-            layout_event: Listener::new_empty(cx), // font_size_cache_id: id,
+            // layout_event: Listener::new_empty(cx), // font_size_cache_id: id,
             viewport_size: viewport.size(),
             config,
             editor_style,
@@ -1872,7 +1871,6 @@ impl DocLines {
             view_kind,
             base,
             vline_infos,
-            min_val,
             line_height,
             y0,
         )
