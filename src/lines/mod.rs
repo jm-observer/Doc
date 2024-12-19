@@ -1892,9 +1892,9 @@ impl DocLines {
 
     pub fn log(&self) {
         warn!(
-            "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}] style_from_lsp={} is_pristine={}",
+            "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}] style_from_lsp={} is_pristine={} base={:?}",
             self.viewport_size, self.buffer().rev(),
-            self.buffer().text().len(), self.style_from_lsp, self.buffer().is_pristine()
+            self.buffer().text().len(), self.style_from_lsp, self.buffer().is_pristine(), self.screen_lines().base
         );
         warn!(
             "{:?}",self.config
@@ -2486,25 +2486,20 @@ impl ComputeLines {
     }
 
     pub fn normal_selection(&self, start_offset: usize,
-                                 end_offset: usize,) -> Vec<(Point, Point)>{
-        let Ok((vl_start, _col, col_start, _, folded_line_start)) = self.visual_line_of_offset(start_offset, CursorAffinity::Forward) else {
-            error!("visual_line_of_offset offset={start_offset} not exist");
-            return vec![]
-        };
-        let Ok((vl_end, _col, col_end, _, folded_line_end)) = self.visual_line_of_offset(end_offset, CursorAffinity::Forward) else {
-            error!("visual_line_of_offset offset={end_offset} not exist");
-            return vec![]
-        };
+                                 end_offset: usize,) -> Result<Vec<Rect>>{
+        let (vl_start, _col, col_start, _, folded_line_start) = self.visual_line_of_offset(start_offset, CursorAffinity::Forward)?;
+        let (vl_end, _col, col_end, _, folded_line_end) = self.visual_line_of_offset(end_offset, CursorAffinity::Forward)?;
         let Some(rs_start) = self.screen_lines().most_up_visual_line_info_of_visual_line(&vl_start) else {
-            return vec![]
+            return Ok(vec![]);
         };
         let Some(rs_end) = self.screen_lines().most_down_visual_line_info_of_visual_line(&vl_end) else {
-            return vec![]
+            return Ok(vec![]);
         };
 
         if vl_start == vl_end {
             let rs = folded_line_start.line_scope(col_start, col_end, self.line_height as f64, rs_start.y);
-            return vec![rs];
+            // Rect::from(rs).with_origin()
+            return Ok(vec![rs]);;
         } else {
             let mut first = Vec::with_capacity(vl_end.line_index - vl_start.line_index + 1);
             first.push(folded_line_start.line_scope(col_start, vl_start.visual_interval.end, self.line_height as f64, rs_start.y));
@@ -2525,7 +2520,7 @@ impl ComputeLines {
             }
             let last = folded_line_end.line_scope(0, col_end, self.line_height as f64, rs_end.y);
             first.push(last);
-            first
+            Ok(first)
         }
     }
 }

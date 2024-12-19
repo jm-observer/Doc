@@ -3,8 +3,9 @@ use lapce_xi_rope::Interval;
 use super::layout::TextLayoutLine;
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
 use std::fmt::{Debug, Formatter};
-use floem::kurbo::Point;
+use floem::kurbo::{Point, Rect, Size};
 use floem_editor_core::line_ending::LineEnding;
+use log::info;
 use crate::lines::phantom_text::PhantomTextLine;
 use crate::lines::style::NewLineStyle;
 
@@ -132,12 +133,11 @@ impl OriginFoldedLine {
     }
 
     /// 单一视觉行的间隔point
-    pub fn line_scope(&self, start_col: usize, end_col: usize, line_height: f64, y: f64) -> (Point, Point) {
+    pub fn line_scope(&self, start_col: usize, end_col: usize, line_height: f64, y: f64) -> Rect {
         let mut hit0 = self.text_layout.text.hit_position(start_col);
-        let mut hit1 = self.text_layout.text.hit_position(end_col + 1);
-        hit0.point.y += y;
-        hit1.point.y += y + line_height;
-        return (hit0.point, hit1.point)
+        let mut hit1 = self.text_layout.text.hit_position(end_col);
+        hit0.point.y = y;
+        Rect::from_origin_size(hit0.point, Size::new(hit1.point.x - hit0.point.x, line_height))
     }
 }
 
