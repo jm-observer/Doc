@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
+use anyhow::{bail, Result};
 
 use floem::kurbo::Rect;
 use floem::reactive::{Scope};
@@ -316,6 +317,15 @@ impl ScreenLines {
 
 
 impl ScreenLines {
+
+    pub fn offset_interval(&self) -> Result<(usize, usize)>{
+        match (self.visual_lines.first(), self.visual_lines.last()) {
+            (Some(first), Some(last)) => {
+                Ok((first.visual_line.origin_interval.start, last.visual_line.origin_interval.end))
+            }
+            _ => bail!("ScreenLines is empty?")
+        }
+    }
 
     /// 获取原始行的视觉行信息。为none则说明被折叠，或者没有在窗口范围
     pub fn visual_line_info_for_origin_line(
