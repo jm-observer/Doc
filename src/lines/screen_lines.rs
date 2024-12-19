@@ -83,9 +83,9 @@ impl ScreenLines {
         self.visual_lines.last().unwrap()
     }
 
-    pub fn vline_info(&self, rvline: RVLine) -> Option<VLineInfo<VLine>> {
-        self.info.get(&rvline).map(|info| info.vline_info)
-    }
+    // pub fn vline_info(&self, rvline: RVLine) -> Option<VLineInfo<VLine>> {
+    //     self.info.get(&rvline).map(|info| info.vline_info)
+    // }
 
     pub fn rvline_range(&self) -> Option<(RVLine, RVLine)> {
         self.lines.first().copied().zip(self.lines.last().copied())
