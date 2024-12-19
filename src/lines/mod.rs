@@ -2472,17 +2472,18 @@ impl ComputeLines {
         Ok((vl, offset_of_visual, offset_folded, last_char, point, line_height, origin_point, self.line_height))
     }
 
-    pub fn char_rect_in_viewport(&self, offset: usize) -> Option<(Point, Point)>{
-        let Ok((vl, _col, col_2, _, folded_line)) = self.visual_line_of_offset(offset, CursorAffinity::Forward) else {
-            error!("visual_line_of_offset offset={offset} not exist");
-            return None
-        };
-        let rs = self.screen_lines().visual_line_info_of_visual_line(&vl)?;
-        let mut hit0 = folded_line.text_layout.text.hit_position(col_2);
-        let mut hit1 = folded_line.text_layout.text.hit_position(col_2 + 1);
-        hit0.point.y += rs.y;
-        hit1.point.y += rs.y + self.line_height as f64;
-        Some((hit0.point, hit1.point))
+    pub fn char_rect_in_viewport(&self, offset: usize) -> Result<Vec<Rect>> {
+        // let Ok((vl, _col, col_2, _, folded_line)) = self.visual_line_of_offset(offset, CursorAffinity::Forward) else {
+        //     error!("visual_line_of_offset offset={offset} not exist");
+        //     return None
+        // };
+        // let rs = self.screen_lines().visual_line_info_of_visual_line(&vl)?;
+        // let mut hit0 = folded_line.text_layout.text.hit_position(col_2);
+        // let mut hit1 = folded_line.text_layout.text.hit_position(col_2 + 1);
+        // hit0.point.y += rs.y;
+        // hit1.point.y += rs.y + self.line_height as f64;
+        // Some((hit0.point, hit1.point))
+        self.normal_selection(offset, offset + 1)
     }
 
     pub fn normal_selection(&self, start_offset: usize,
