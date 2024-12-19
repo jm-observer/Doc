@@ -2,8 +2,8 @@ use std::{borrow::Cow, ops::Range};
 
 use lapce_xi_rope::{interval::IntervalBounds, rope::ChunkIter, Cursor, Rope};
 
-use floem_editor_core::{mode::Mode, paragraph::ParagraphCursor};
-use crate::lines::word::WordCursor;
+use floem_editor_core::{mode::Mode};
+use crate::lines::{word::WordCursor, paragraph::ParagraphCursor};
 
 pub trait RopeText {
     fn text(&self) -> &Rope;

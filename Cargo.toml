@@ -12,7 +12,6 @@ serde             = { version = "1.0" }
 serde_json        = { version = "1.0" }
 lsp-types = { version = "0.95.1", features = ["proposed"] }
 im                = { version = "15.0.0", features = ["serde"] }
-lapce-xi-rope = { version = "0.3.2", features = ["serde"] }
 smallvec          = { version = "1.13.2" }
 itertools = "0.12.1"
 slotmap     = "1.0"
@@ -28,6 +27,9 @@ directories       = { version = "4.0.1" }
 arc-swap    = "1.6.0"
 log = "0.4.22"
 anyhow            = { version = "1.0" }
+#lapce-xi-rope = { version = "0.3.2", features = ["serde"] }
+lapce-xi-rope = {path = "../xi-editor", features = ["serde"]}
+memchr = "2.7.1"
 
 [dev-dependencies]
 custom-utils = "0.10.16"

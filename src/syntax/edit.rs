@@ -1,4 +1,4 @@
-use floem_editor_core::buffer::{
+use crate::lines::buffer::{
     rope_text::{RopeText, RopeTextRef},
     InsertsValueIter,
 };

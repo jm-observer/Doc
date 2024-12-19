@@ -1,13 +1,11 @@
 use std::cmp::Ordering;
 use lapce_xi_rope::Interval;
 use super::layout::TextLayoutLine;
-use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
 use std::fmt::{Debug, Formatter};
 use std::ops::AddAssign;
 use floem::kurbo::{Rect, Size, Vec2};
-use floem_editor_core::line_ending::LineEnding;
 use crate::lines::phantom_text::PhantomTextLine;
-use crate::lines::style::NewLineStyle;
+use crate::lines::{style::NewLineStyle, line_ending::LineEnding};
 
 // #[allow(dead_code)]
 // #[derive(Clone, Debug)]
@@ -194,30 +192,30 @@ impl VisualLine {
         }
     }
 
-    pub fn rvline(&self) -> RVLine {
-        RVLine {
-            line: self.origin_folded_line,
-            line_index: self.origin_folded_line_sub_index,
-        }
-    }
+    // pub fn rvline(&self) -> RVLine {
+    //     RVLine {
+    //         line: self.origin_folded_line,
+    //         line_index: self.origin_folded_line_sub_index,
+    //     }
+    // }
+    //
+    // pub fn vline(&self) -> VLine {
+    //     VLine(self.line_index)
+    // }
 
-    pub fn vline(&self) -> VLine {
-        VLine(self.line_index)
-    }
-
-    pub fn vline_info(&self) -> VLineInfo {
-        let rvline = self.rvline();
-        let vline = self.vline();
-        let interval = self.origin_interval;
-        // todo?
-        let origin_line = self.origin_folded_line;
-        VLineInfo {
-            interval,
-            rvline,
-            origin_line,
-            vline,
-        }
-    }
+    // pub fn vline_info(&self) -> VLineInfo {
+    //     let rvline = self.rvline();
+    //     let vline = self.vline();
+    //     let interval = self.origin_interval;
+    //     // todo?
+    //     let origin_line = self.origin_folded_line;
+    //     VLineInfo {
+    //         interval,
+    //         rvline,
+    //         origin_line,
+    //         vline,
+    //     }
+    // }
 
     // 行号
     pub fn line_number(
@@ -246,14 +244,14 @@ impl VisualLine {
     }
 }
 
-impl From<&VisualLine> for RVLine {
-    fn from(value: &VisualLine) -> Self {
-        value.rvline()
-    }
-}
-
-impl From<&VisualLine> for VLine {
-    fn from(value: &VisualLine) -> Self {
-        value.vline()
-    }
-}
+// impl From<&VisualLine> for RVLine {
+//     fn from(value: &VisualLine) -> Self {
+//         value.rvline()
+//     }
+// }
+//
+// impl From<&VisualLine> for VLine {
+//     fn from(value: &VisualLine) -> Self {
+//         value.vline()
+//     }
+// }

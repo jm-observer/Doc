@@ -1,5 +1,5 @@
 use floem_editor_core::char_buffer::CharBuffer;
-use floem_editor_core::word::WordCursor;
+use crate::lines::word::WordCursor;
 use floem::kurbo::Rect;
 use floem::views::editor::text::PreeditData;
 use floem::peniko::Color;

@@ -22,7 +22,6 @@ use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
 use floem::views::editor::visual_line::{hit_position_aff};
 use floem_editor_core::command::EditCommand;
 use floem_editor_core::indent::IndentStyle;
-use floem_editor_core::line_ending::LineEnding;
 use floem_editor_core::mode::{Mode, MotionMode};
 use floem_editor_core::register::Register;
 use itertools::Itertools;
@@ -48,11 +47,11 @@ use crate::lines::line::OriginLine;
 use crate::lines::phantom_text::Text;
 use crate::lines::screen_lines::{ScreenLines};
 use crate::lines::selection::Selection;
-use crate::lines::word::{CharClassification, get_char_property};
+use crate::lines::word::{CharClassification, get_char_property, WordCursor};
 use crate::syntax::{BracketParser, Syntax};
 use crate::syntax::edit::SyntaxEdit;
 use anyhow::{anyhow, bail, Result};
-use floem_editor_core::word::WordCursor;
+use crate::lines::line_ending::LineEnding;
 
 pub mod action;
 pub mod diff;
@@ -71,6 +70,8 @@ pub mod indent;
 pub mod cursor;
 pub mod word;
 pub mod selection;
+pub mod line_ending;
+pub mod paragraph;
 
 // /// Minimum width that we'll allow the view to be wrapped at.
 // const MIN_WRAPPED_WIDTH: f32 = 100.0;

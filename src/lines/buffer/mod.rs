@@ -16,9 +16,10 @@ use lapce_xi_rope::{
 };
 
 use floem_editor_core::{
-    line_ending::{LineEnding, LineEndingDetermination},
+
     mode::Mode,
 };
+use crate::lines::line_ending::{LineEnding, LineEndingDetermination};
 use floem_editor_core::indent::IndentStyle;
 
 pub mod diff;
