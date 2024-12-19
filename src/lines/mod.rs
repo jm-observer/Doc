@@ -2496,13 +2496,14 @@ impl ComputeLines {
             return Ok(vec![]);
         };
 
+        let base = self.screen_lines().base.origin().to_vec2();
         if vl_start == vl_end {
-            let rs = folded_line_start.line_scope(col_start, col_end, self.line_height as f64, rs_start.y);
+            let rs = folded_line_start.line_scope(col_start, col_end, self.line_height as f64, rs_start.y, base);
             // Rect::from(rs).with_origin()
             return Ok(vec![rs]);;
         } else {
             let mut first = Vec::with_capacity(vl_end.line_index - vl_start.line_index + 1);
-            first.push(folded_line_start.line_scope(col_start, vl_start.visual_interval.end, self.line_height as f64, rs_start.y));
+            first.push(folded_line_start.line_scope(col_start, vl_start.visual_interval.end, self.line_height as f64, rs_start.y, base));
 
             for vl in &self.screen_lines().visual_lines {
                 if vl.visual_line.line_index >= vl_end.line_index {
@@ -2514,11 +2515,11 @@ impl ComputeLines {
                         error!("folded_line_of_visual_line {:?} not exist", vl.visual_line);
                         continue;
                     };
-                    let selection = folded_line.line_scope(vl.visual_line.visual_interval.start, vl.visual_line.visual_interval.end, self.line_height as f64, vl.y);
+                    let selection = folded_line.line_scope(vl.visual_line.visual_interval.start, vl.visual_line.visual_interval.end, self.line_height as f64, vl.y, base);
                     first.push(selection)
                 }
             }
-            let last = folded_line_end.line_scope(0, col_end, self.line_height as f64, rs_end.y);
+            let last = folded_line_end.line_scope(0, col_end, self.line_height as f64, rs_end.y, base);
             first.push(last);
             Ok(first)
         }
