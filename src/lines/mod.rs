@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 // use std::collections::HashMap;
-use std::ops::{Range};
+use std::ops::{AddAssign, Range};
 use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicUsize;
 
@@ -2462,6 +2462,7 @@ impl ComputeLines {
             // ?
             // viewpport_point.y = self.screen_lines().base.y0 + screen_line.vline_y;
             viewpport_point.y = screen_line.vline_y;
+            viewpport_point.add_assign(self.screen_lines().base.origin().to_vec2());
             Some(viewpport_point)
         } else {
             None
