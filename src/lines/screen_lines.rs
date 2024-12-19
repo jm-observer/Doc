@@ -215,21 +215,21 @@ impl ScreenLines {
     //     self.info(self.first_rvline_for_line(line)?)
     // }
 
-    /// Get the earliest rvline for the given line
-    pub fn first_rvline_for_line(&self, line: usize) -> Option<RVLine> {
-        self.lines
-            .iter()
-            .find(|rvline| rvline.line == line)
-            .copied()
-    }
+    // /// Get the earliest rvline for the given line
+    // pub fn first_rvline_for_line(&self, line: usize) -> Option<RVLine> {
+    //     self.lines
+    //         .iter()
+    //         .find(|rvline| rvline.line == line)
+    //         .copied()
+    // }
 
-    /// Get the latest rvline for the given line
-    pub fn last_rvline_for_line(&self, line: usize) -> Option<RVLine> {
-        self.lines
-            .iter()
-            .rfind(|rvline| rvline.line == line)
-            .copied()
-    }
+    // /// Get the latest rvline for the given line
+    // pub fn last_rvline_for_line(&self, line: usize) -> Option<RVLine> {
+    //     self.lines
+    //         .iter()
+    //         .rfind(|rvline| rvline.line == line)
+    //         .copied()
+    // }
 
     pub fn log(&self) {
         info!("{:?}", self.lines);
