@@ -4,9 +4,8 @@ use super::layout::TextLayoutLine;
 use floem::views::editor::visual_line::{RVLine, VLine, VLineInfo};
 use std::fmt::{Debug, Formatter};
 use std::ops::AddAssign;
-use floem::kurbo::{Point, Rect, Size, Vec2};
+use floem::kurbo::{Rect, Size, Vec2};
 use floem_editor_core::line_ending::LineEnding;
-use log::info;
 use crate::lines::phantom_text::PhantomTextLine;
 use crate::lines::style::NewLineStyle;
 
@@ -136,7 +135,7 @@ impl OriginFoldedLine {
     /// 单一视觉行的间隔point
     pub fn line_scope(&self, start_col: usize, end_col: usize, line_height: f64, y: f64, base: Vec2) -> Rect {
         let mut hit0 = self.text_layout.text.hit_position(start_col);
-        let mut hit1 = self.text_layout.text.hit_position(end_col);
+        let hit1 = self.text_layout.text.hit_position(end_col);
         hit0.point.y = y;
         hit0.point.add_assign(base);
         Rect::from_origin_size(hit0.point, Size::new(hit1.point.x - hit0.point.x, line_height))

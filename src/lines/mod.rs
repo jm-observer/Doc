@@ -2502,7 +2502,7 @@ impl ComputeLines {
         if vl_start == vl_end {
             let rs = folded_line_start.line_scope(col_start, col_end, self.line_height as f64, rs_start.y, base);
             // Rect::from(rs).with_origin()
-            return Ok(vec![rs]);;
+            return Ok(vec![rs]);
         } else {
             let mut first = Vec::with_capacity(vl_end.line_index - vl_start.line_index + 1);
             first.push(folded_line_start.line_scope(col_start, vl_start.visual_interval.end, self.line_height as f64, rs_start.y, base));
