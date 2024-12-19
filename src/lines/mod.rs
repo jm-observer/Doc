@@ -803,18 +803,10 @@ impl DocLines {
                                                start_line, end_line, ..
                                            }) = start_delta {
             start_init_line = *end_line;
-            (&self.origin_lines[*start_line..*end_line]).to_vec()
+            (self.origin_lines[*start_line..*end_line]).to_vec()
         } else {
             Vec::with_capacity(end_init_line)
         };
-        // if let Some(LineDelta {
-        //                 start_line, end_line, buffer_offset_start_line
-        //             }) = end_delta {
-        //     origin_liens.extend((*start_init_line..  ).map(|x| self.init_origin_line(x)).collect());
-        //     origin_liens.extend((&self.origin_lines[*start_line..=last_line]).iter().map(|x| x.clone()).collect());
-        // } else {
-        //
-        // };
         origin_liens.extend((start_init_line..=last_line).map(|x| self.init_origin_line(x)));
         origin_liens
     }
@@ -2440,6 +2432,7 @@ impl ComputeLines {
             .point
     }
 
+    #[allow(clippy::type_complexity)]
     /// return (visual line of offset, offset of visual line, offset of folded line, is last char, viewport position of cursor, line_height, origin position of cursor)
     ///
     /// last_char should be check in future
@@ -2502,7 +2495,7 @@ impl ComputeLines {
         if vl_start == vl_end {
             let rs = folded_line_start.line_scope(col_start, col_end, self.line_height as f64, rs_start.y, base);
             // Rect::from(rs).with_origin()
-            return Ok(vec![rs]);
+            Ok(vec![rs])
         } else {
             let mut first = Vec::with_capacity(vl_end.line_index - vl_start.line_index + 1);
             first.push(folded_line_start.line_scope(col_start, vl_start.visual_interval.end, self.line_height as f64, rs_start.y, base));

@@ -189,7 +189,7 @@ impl VisualLine {
             }
             Ordering::Less |
             Ordering::Greater => {
-                return rs;
+                rs
             }
         }
     }

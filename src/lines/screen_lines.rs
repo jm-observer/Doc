@@ -1,6 +1,5 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ops::RangeInclusive;
 use std::rc::Rc;
 use anyhow::{bail, Result};
 
@@ -65,13 +64,13 @@ impl ScreenLines {
         self.base = viewport;
     }
 
-    /// Get the line info for the given rvline.
-    pub fn info(&self, rvline: RVLine) -> Option<LineInfo> {
-        let info = self.info.get(&rvline)?;
-        // let base = self.base.get();
-
-        Some(info.clone().with_base(self.base))
-    }
+    // /// Get the line info for the given rvline.
+    // pub fn info(&self, rvline: RVLine) -> Option<LineInfo> {
+    //     let info = self.info.get(&rvline)?;
+    //     // let base = self.base.get();
+    //
+    //     Some(info.clone().with_base(self.base))
+    // }
 
     pub fn visual_line_of_y(&self, y: f64) -> &VisualLineInfo {
         let y = y - self.base.y0;
@@ -96,44 +95,44 @@ impl ScreenLines {
     //     self.lines.iter().map(|rvline| self.info(*rvline).unwrap())
     // }
 
-    /// Iterate over the line info within the range, copying them with the full y positions.
-    /// If the values are out of range, it is clamped to the valid lines within.
-    pub fn iter_line_info_r(
-        &self,
-        r: RangeInclusive<RVLine>,
-    ) -> impl Iterator<Item = LineInfo> + '_ {
-        // We search for the start/end indices due to not having a good way to iterate over
-        // successive rvlines without the view.
-        // This should be good enough due to lines being small.
-        let start_idx = self.lines.binary_search(r.start()).ok().or_else(|| {
-            if self.lines.first().map(|l| r.start() < l).unwrap_or(false) {
-                Some(0)
-            } else {
-                // The start is past the start of our lines
-                None
-            }
-        });
-
-        let end_idx = self.lines.binary_search(r.end()).ok().or_else(|| {
-            if self.lines.last().map(|l| r.end() > l).unwrap_or(false) {
-                Some(self.lines.len() - 1)
-            } else {
-                // The end is before the end of our lines but not available
-                None
-            }
-        });
-
-        if let (Some(start_idx), Some(end_idx)) = (start_idx, end_idx) {
-            self.lines.get(start_idx..=end_idx)
-        } else {
-            // Hacky method to get an empty iterator of the same type
-            self.lines.get(0..0)
-        }
-        .into_iter()
-        .flatten()
-        .copied()
-        .map(|rvline| self.info(rvline).unwrap())
-    }
+    // /// Iterate over the line info within the range, copying them with the full y positions.
+    // /// If the values are out of range, it is clamped to the valid lines within.
+    // pub fn iter_line_info_r(
+    //     &self,
+    //     r: RangeInclusive<RVLine>,
+    // ) -> impl Iterator<Item = LineInfo> + '_ {
+    //     // We search for the start/end indices due to not having a good way to iterate over
+    //     // successive rvlines without the view.
+    //     // This should be good enough due to lines being small.
+    //     let start_idx = self.lines.binary_search(r.start()).ok().or_else(|| {
+    //         if self.lines.first().map(|l| r.start() < l).unwrap_or(false) {
+    //             Some(0)
+    //         } else {
+    //             // The start is past the start of our lines
+    //             None
+    //         }
+    //     });
+    //
+    //     let end_idx = self.lines.binary_search(r.end()).ok().or_else(|| {
+    //         if self.lines.last().map(|l| r.end() > l).unwrap_or(false) {
+    //             Some(self.lines.len() - 1)
+    //         } else {
+    //             // The end is before the end of our lines but not available
+    //             None
+    //         }
+    //     });
+    //
+    //     if let (Some(start_idx), Some(end_idx)) = (start_idx, end_idx) {
+    //         self.lines.get(start_idx..=end_idx)
+    //     } else {
+    //         // Hacky method to get an empty iterator of the same type
+    //         self.lines.get(0..0)
+    //     }
+    //     .into_iter()
+    //     .flatten()
+    //     .copied()
+    //     .map(|rvline| self.info(rvline).unwrap())
+    // }
 
     // pub fn iter_vline_info(&self) -> impl Iterator<Item = VLineInfo<()>> + '_ {
     //     self.lines
@@ -203,12 +202,12 @@ impl ScreenLines {
     //         Some((line, info.y))
     //     })
     // }
-
-    pub fn iter_line_info_y(&self) -> impl Iterator<Item = LineInfo> + '_ {
-        self.lines
-            .iter()
-            .map(move |vline| self.info(*vline).unwrap())
-    }
+    //
+    // pub fn iter_line_info_y(&self) -> impl Iterator<Item = LineInfo> + '_ {
+    //     self.lines
+    //         .iter()
+    //         .map(move |vline| self.info(*vline).unwrap())
+    // }
 
     // /// Get the earliest line info for a given line.
     // pub fn info_for_line(&self, line: usize) -> Option<VisualLineInfo> {
