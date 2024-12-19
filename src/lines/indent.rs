@@ -1,19 +1,21 @@
 use floem_editor_core::chars::{char_is_line_ending, char_is_whitespace};
 use floem_editor_core::indent::IndentStyle;
 use lapce_xi_rope::Rope;
+use anyhow::Result;
+use log::error;
 
 use crate::{
     lines::{buffer::{rope_text::RopeText, Buffer}, selection::Selection},
 };
 
-pub fn create_edit<'s>(buffer: &Buffer, offset: usize, indent: &'s str) -> (Selection, &'s str) {
+pub fn create_edit<'s>(buffer: &Buffer, offset: usize, indent: &'s str) -> Result<(Selection, &'s str)> {
     let indent = if indent.starts_with('\t') {
         indent
     } else {
-        let (_, col) = buffer.offset_to_line_col(offset);
+        let (_, col) = buffer.offset_to_line_col(offset)?;
         indent.split_at(indent.len() - col % indent.len()).0
     };
-    (Selection::caret(offset), indent)
+    Ok((Selection::caret(offset), indent))
 }
 
 pub fn create_outdent<'s>(
@@ -21,7 +23,13 @@ pub fn create_outdent<'s>(
     offset: usize,
     indent: &'s str,
 ) -> Option<(Selection, &'s str)> {
-    let (_, col) = buffer.offset_to_line_col(offset);
+    let (_, col) = match buffer.offset_to_line_col(offset) {
+        Ok(rs) => {rs}
+        Err(err) => {
+            error!("{err:?}");
+            return None;
+        }
+    };
     if col == 0 {
         return None;
     }
@@ -53,8 +61,11 @@ pub fn auto_detect_indent_style(document_text: &Rope) -> Option<IndentStyle> {
 
         // Loop through the lines, checking for and recording indentation
         // increases as we go.
-        let offset = document_text
-            .offset_of_line(document_text.line_of_offset(document_text.len()).min(1000));
+        let Ok(offset) = document_text
+            .offset_of_line(document_text.line_of_offset(document_text.len()).min(1000)) else {
+            error!("offset_of_line fail");
+          return None
+        };
         'outer: for line in document_text.lines(..offset) {
             let mut c_iter = line.chars();
 

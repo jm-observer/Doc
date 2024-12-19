@@ -13,11 +13,13 @@ use floem_editor_core::{
     },
     word::{get_char_property, CharClassification},
 };
+use log::error;
 use crate::lines::indent::{create_edit, create_outdent};
 use crate::lines::buffer::{Buffer, InvalLines};
 use crate::lines::{buffer::rope_text::RopeText, selection::{InsertDrift, SelRegion},};
 use crate::lines::cursor::{Cursor, CursorMode, get_first_selection_after};
 use crate::lines::selection::Selection;
+use anyhow::Result;
 
 fn format_start_end(
     buffer: &Buffer,
@@ -25,25 +27,25 @@ fn format_start_end(
     is_vertical: bool,
     first_non_blank: bool,
     count: usize,
-) -> Range<usize> {
+) -> Result<Range<usize>> {
     let start = range.start;
     let end = range.end;
 
-    if is_vertical {
+    Ok(if is_vertical {
         let start_line = buffer.line_of_offset(start.min(end));
         let end_line = buffer.line_of_offset(end.max(start));
         let start = if first_non_blank {
             buffer.first_non_blank_character_on_line(start_line)
         } else {
             buffer.offset_of_line(start_line)
-        };
-        let end = buffer.offset_of_line(end_line + count);
+        }?;
+        let end = buffer.offset_of_line(end_line + count)?;
         start..end
     } else {
         let s = start.min(end);
         let e = start.max(end);
         s..e
-    }
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,7 +120,10 @@ impl Action {
                 for (idx, region) in selection.regions_mut().iter_mut().enumerate() {
                     let offset = region.end;
                     let cursor_char = buffer.char_at_offset(offset);
-                    let prev_offset = buffer.move_left(offset, Mode::Normal, 1);
+                    let Ok(prev_offset) = buffer.move_left(offset, Mode::Normal, 1) else {
+                        error!("{offset}");
+                        continue
+                    };
                     let prev_cursor_char = if prev_offset < offset {
                         buffer.char_at_offset(prev_offset)
                     } else {
@@ -164,7 +169,10 @@ impl Action {
                             }
 
                             let line = buffer.line_of_offset(offset);
-                            let line_start = buffer.offset_of_line(line);
+                            let Ok(line_start) = buffer.offset_of_line(line) else {
+                                error!("{line}");
+                                continue
+                            };
                             if buffer.slice_to_cow(line_start..offset).trim() == "" {
                                 let opening_character = matching_char(c).unwrap();
                                 if let Some(previous_offset) =
@@ -337,9 +345,18 @@ impl Action {
         for region in selection.regions() {
             let offset = region.max();
             let line = buffer.line_of_offset(offset);
-            let line_start = buffer.offset_of_line(line);
-            let line_end = buffer.line_end_offset(line, true);
-            let line_indent = buffer.indent_on_line(line);
+            let Ok(line_start) = buffer.offset_of_line(line) else {
+                error!("{line}");
+                continue
+            };
+            let Ok(line_end) = buffer.line_end_offset(line, true) else {
+                error!("{line}");
+                continue
+            };
+            let Ok(line_indent) = buffer.indent_on_line(line)  else {
+                error!("{line}");
+                continue
+            };
             let first_half = buffer.slice_to_cow(line_start..offset);
             let second_half = buffer.slice_to_cow(offset..line_end);
             let second_half_trim = second_half.trim();
@@ -417,7 +434,10 @@ impl Action {
         let mut deltas = Vec::new();
         match motion_mode {
             MotionMode::Delete { .. } => {
-                let range = format_start_end(buffer, range, is_vertical, false, 1);
+                let Ok(range) = format_start_end(buffer, range.clone(), is_vertical, false, 1)  else {
+                    error!("{range:?}");
+                    return vec![]
+                };
                 register.add(
                     RegisterKind::Delete,
                     RegisterData {
@@ -436,7 +456,10 @@ impl Action {
                 deltas.push((text, delta, inval_lines));
             }
             MotionMode::Yank { .. } => {
-                let range = format_start_end(buffer, range, is_vertical, false, 1);
+                let Ok(range) = format_start_end(buffer, range.clone(), is_vertical, false, 1) else {
+                    error!("{range:?}");
+                    return vec![]
+                };
                 register.add(
                     RegisterKind::Yank,
                     RegisterData {
@@ -451,12 +474,18 @@ impl Action {
             }
             MotionMode::Indent => {
                 let selection = Selection::region(range.start, range.end);
-                let (text, delta, inval_lines) = Self::do_indent(buffer, selection);
+                let Ok((text, delta, inval_lines)) = Self::do_indent(buffer, selection) else {
+                    error!("{selection:?}");
+                    return vec![]
+                };
                 deltas.push((text, delta, inval_lines));
             }
             MotionMode::Outdent => {
                 let selection = Selection::region(range.start, range.end);
-                let (text, delta, inval_lines) = Self::do_outdent(buffer, selection);
+                let Ok((text, delta, inval_lines)) = Self::do_outdent(buffer, selection) else {
+                    error!("{selection:?}");
+                    return vec![]
+                };
                 deltas.push((text, delta, inval_lines));
             }
         }
@@ -554,17 +583,30 @@ impl Action {
         buffer: &mut Buffer,
         data: &RegisterData,
     ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        match Self::_do_paste(cursor, buffer, data) {
+            Ok(rs) => {rs}
+            Err(err) => {
+                error!("{err:?}");
+                vec![]
+            }
+        }
+    }
+    fn _do_paste(
+        cursor: &mut Cursor,
+        buffer: &mut Buffer,
+        data: &RegisterData,
+    ) -> Result<Vec<(Rope, RopeDelta, InvalLines)>> {
         let mut deltas = Vec::new();
         match data.mode {
             VisualMode::Normal => {
                 let selection = match cursor.mode() {
                     CursorMode::Normal(offset) => {
-                        let line_end = buffer.offset_line_end(*offset, true);
+                        let line_end = buffer.offset_line_end(*offset, true)?;
                         let offset = (offset + 1).min(line_end);
                         Selection::caret(offset)
                     }
                     CursorMode::Insert { .. } | CursorMode::Visual { .. } => {
-                        cursor.edit_selection(buffer)
+                        cursor.edit_selection(buffer)?
                     }
                 };
                 let after = cursor.is_insert() || !data.content.contains('\n');
@@ -590,7 +632,7 @@ impl Action {
                 let (selection, content) = match cursor.mode() {
                     CursorMode::Normal(offset) => {
                         let line = buffer.line_of_offset(*offset);
-                        let offset = buffer.offset_of_line(line + 1);
+                        let offset = buffer.offset_of_line(line + 1)?;
                         (Selection::caret(offset), data.content.clone())
                     }
                     CursorMode::Insert(selection) => {
@@ -598,7 +640,7 @@ impl Action {
                         for region in selection.regions_mut() {
                             if region.is_caret() {
                                 let line = buffer.line_of_offset(region.start);
-                                let start = buffer.offset_of_line(line);
+                                let start = buffer.offset_of_line(line)?;
                                 region.start = start;
                                 region.end = start;
                             }
@@ -606,7 +648,7 @@ impl Action {
                         (selection, data.content.clone())
                     }
                     CursorMode::Visual { mode, .. } => {
-                        let selection = cursor.edit_selection(buffer);
+                        let selection = cursor.edit_selection(buffer)?;
                         let data = match mode {
                             VisualMode::Linewise => data.content.clone(),
                             _ => "\n".to_string() + &data.content,
@@ -628,7 +670,7 @@ impl Action {
                             offset
                         };
                         let line = buffer.line_of_offset(offset);
-                        let offset = buffer.first_non_blank_character_on_line(line);
+                        let offset = buffer.first_non_blank_character_on_line(line)?;
                         cursor.set_mode(CursorMode::Normal(offset));
                     }
                     CursorMode::Insert(_) => {
@@ -637,10 +679,10 @@ impl Action {
                 }
             }
         }
-        deltas
+        Ok(deltas)
     }
 
-    fn do_indent(buffer: &mut Buffer, selection: Selection) -> (Rope, RopeDelta, InvalLines) {
+    fn do_indent(buffer: &mut Buffer, selection: &Selection) -> Result<(Rope, RopeDelta, InvalLines)> {
         let indent = buffer.indent_unit();
         let mut edits = Vec::new();
 
@@ -649,28 +691,28 @@ impl Action {
             let start_line = buffer.line_of_offset(region.min());
             let mut end_line = buffer.line_of_offset(region.max());
             if end_line > start_line {
-                let end_line_start = buffer.offset_of_line(end_line);
+                let end_line_start = buffer.offset_of_line(end_line)?;
                 if end_line_start == region.max() {
                     end_line -= 1;
                 }
             }
             for line in start_line..=end_line {
                 if lines.insert(line) {
-                    let line_content = buffer.line_content(line);
+                    let line_content = buffer.line_content(line)?;
                     if line_content == "\n" || line_content == "\r\n" {
                         continue;
                     }
-                    let nonblank = buffer.first_non_blank_character_on_line(line);
-                    let edit = create_edit(buffer, nonblank, indent);
+                    let nonblank = buffer.first_non_blank_character_on_line(line)?;
+                    let edit = create_edit(buffer, nonblank, indent)?;
                     edits.push(edit);
                 }
             }
         }
 
-        buffer.edit(&edits, EditType::Indent)
+        Ok(buffer.edit(&edits, EditType::Indent))
     }
 
-    fn do_outdent(buffer: &mut Buffer, selection: Selection) -> (Rope, RopeDelta, InvalLines) {
+    fn do_outdent(buffer: &mut Buffer, selection: &Selection) -> Result<(Rope, RopeDelta, InvalLines)> {
         let indent = buffer.indent_unit();
         let mut edits = Vec::new();
 
@@ -679,18 +721,18 @@ impl Action {
             let start_line = buffer.line_of_offset(region.min());
             let mut end_line = buffer.line_of_offset(region.max());
             if end_line > start_line {
-                let end_line_start = buffer.offset_of_line(end_line);
+                let end_line_start = buffer.offset_of_line(end_line)?;
                 if end_line_start == region.max() {
                     end_line -= 1;
                 }
             }
             for line in start_line..=end_line {
                 if lines.insert(line) {
-                    let line_content = buffer.line_content(line);
+                    let line_content = buffer.line_content(line)?;
                     if line_content == "\n" || line_content == "\r\n" {
                         continue;
                     }
-                    let nonblank = buffer.first_non_blank_character_on_line(line);
+                    let nonblank = buffer.first_non_blank_character_on_line(line)?;
                     if let Some(edit) = create_outdent(buffer, nonblank, indent) {
                         edits.push(edit);
                     }
@@ -698,7 +740,7 @@ impl Action {
             }
         }
 
-        buffer.edit(&edits, EditType::Outdent)
+        Ok(buffer.edit(&edits, EditType::Outdent))
     }
 
     fn duplicate_line(
@@ -722,8 +764,14 @@ impl Action {
 
         let mut edits = vec![];
         for range in line_ranges {
-            let start = buffer.offset_of_line(range.start);
-            let end = buffer.offset_of_line(range.end);
+            let Ok(start) = buffer.offset_of_line(range.start) else {
+                error!("{}", range.start);
+                return continue
+            };
+            let Ok(end) = buffer.offset_of_line(range.end) else {
+                error!("{}", range.end);
+                return continue
+            };
 
             let content = buffer.slice_to_cow(start..end).into_owned();
             edits.push((
@@ -754,6 +802,23 @@ impl Action {
         cmd: &EditCommand,
         clipboard: &mut T,
         register: &mut Register,
+        conf: EditConf,
+    ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+        match Self::_do_edit(cursor, buffer, cmd, clipboard, register, conf) {
+            Ok(rs) => {rs}
+            Err(err) => {
+                error!("{err:?}");
+                vec![]
+            }
+        }
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn _do_edit<T: Clipboard>(
+        cursor: &mut Cursor,
+        buffer: &mut Buffer,
+        cmd: &EditCommand,
+        clipboard: &mut T,
+        register: &mut Register,
         EditConf {
             comment_token,
             modal,
@@ -761,9 +826,9 @@ impl Action {
             keep_indent,
             auto_indent,
         }: EditConf,
-    ) -> Vec<(Rope, RopeDelta, InvalLines)> {
+    ) -> Result<Vec<(Rope, RopeDelta, InvalLines)>> {
         use floem_editor_core::command::EditCommand::*;
-        match cmd {
+        Ok(match cmd {
             MoveLineUp => {
                 let mut deltas = Vec::new();
                 if let CursorMode::Insert(mut selection) = cursor.mode().clone() {
@@ -980,7 +1045,10 @@ impl Action {
                 }
             }
             ClipboardCopy => {
-                let data = cursor.yank(buffer);
+                let Ok(data) = cursor.yank(buffer)else {
+                    error!("fail");
+                    return vec![]
+                };
                 clipboard.put_string(data.content);
 
                 match cursor.mode() {
@@ -998,7 +1066,10 @@ impl Action {
                 vec![]
             }
             ClipboardCut => {
-                let data = cursor.yank(buffer);
+                let Ok(data) = cursor.yank(buffer)else {
+                    error!("fail");
+                    return vec![]
+                };
                 clipboard.put_string(data.content);
 
                 let selection = if let CursorMode::Insert(mut selection) = cursor.mode().clone() {
@@ -1064,10 +1135,13 @@ impl Action {
             NewLineAbove => {
                 let offset = cursor.offset();
                 let line = buffer.line_of_offset(offset);
-                let offset = if line > 0 {
+                let Ok(offset) = (if line > 0 {
                     buffer.line_end_offset(line - 1, true)
                 } else {
                     buffer.first_non_blank_character_on_line(line)
+                }) else {
+                    error!("{line}");
+                    return vec![]
                 };
                 let delta = Self::insert_new_line(
                     buffer,
@@ -1094,12 +1168,12 @@ impl Action {
             }
             DeleteBackward => {
                 let (selection, edit_type) = match cursor.mode() {
-                    CursorMode::Normal(_) => (cursor.edit_selection(buffer), EditType::Delete),
+                    CursorMode::Normal(_) => (cursor.edit_selection(buffer)?, EditType::Delete),
                     CursorMode::Visual { .. } => {
-                        (cursor.edit_selection(buffer), EditType::DeleteSelection)
+                        (cursor.edit_selection(buffer)?, EditType::DeleteSelection)
                     }
                     CursorMode::Insert(_) => {
-                        let selection = cursor.edit_selection(buffer);
+                        let selection = cursor.edit_selection(buffer)?;
                         let edit_type = if selection.is_caret() {
                             EditType::Delete
                         } else {
@@ -1110,11 +1184,11 @@ impl Action {
                         for region in selection.regions() {
                             let new_region = if region.is_caret() {
                                 if indent.starts_with('\t') {
-                                    let new_end = buffer.move_left(region.end, Mode::Insert, 1);
+                                    let new_end = buffer.move_left(region.end, Mode::Insert, 1)?;
                                     SelRegion::new(region.start, new_end, None)
                                 } else {
                                     let line = buffer.line_of_offset(region.start);
-                                    let nonblank = buffer.first_non_blank_character_on_line(line);
+                                    let nonblank = buffer.first_non_blank_character_on_line(line)?;
                                     let (_, col) = buffer.offset_to_line_col(region.start);
                                     let count = if region.start <= nonblank && col > 0 {
                                         let r = col % indent.len();
@@ -1126,7 +1200,7 @@ impl Action {
                                     } else {
                                         1
                                     };
-                                    let new_end = buffer.move_left(region.end, Mode::Insert, count);
+                                    let new_end = buffer.move_left(region.end, Mode::Insert, count)?;
                                     SelRegion::new(region.start, new_end, None)
                                 }
                             } else {
@@ -1154,7 +1228,7 @@ impl Action {
                                 if let Some(c) = matching_char {
                                     let offset = selection.max_offset();
                                     let line = buffer.line_of_offset(offset);
-                                    let line_end = buffer.line_end_offset(line, true);
+                                    let line_end = buffer.line_end_offset(line, true)?;
                                     let content = buffer.slice_to_cow(offset..line_end).to_string();
                                     if content.trim().starts_with(&c.to_string()) {
                                         let index = content.match_indices(c).next().unwrap().0;
@@ -1176,12 +1250,12 @@ impl Action {
             }
             DeleteForward => {
                 let (selection, edit_type) = match cursor.mode() {
-                    CursorMode::Normal(_) => (cursor.edit_selection(buffer), EditType::Delete),
+                    CursorMode::Normal(_) => (cursor.edit_selection(buffer)?, EditType::Delete),
                     CursorMode::Visual { .. } => {
-                        (cursor.edit_selection(buffer), EditType::DeleteSelection)
+                        (cursor.edit_selection(buffer)?, EditType::DeleteSelection)
                     }
                     CursorMode::Insert(_) => {
-                        let selection = cursor.edit_selection(buffer);
+                        let selection = cursor.edit_selection(buffer)?;
                         let edit_type = if selection.is_caret() {
                             EditType::Delete
                         } else {
@@ -1190,7 +1264,7 @@ impl Action {
                         let mut new_selection = Selection::new();
                         for region in selection.regions() {
                             let new_region = if region.is_caret() {
-                                let new_end = buffer.move_right(region.end, Mode::Insert, 1);
+                                let new_end = buffer.move_right(region.end, Mode::Insert, 1)?;
                                 SelRegion::new(region.start, new_end, None)
                             } else {
                                 *region
@@ -1206,14 +1280,14 @@ impl Action {
                 vec![(text, delta, inval_lines)]
             }
             DeleteLine => {
-                let selection = cursor.edit_selection(buffer);
+                let selection = cursor.edit_selection(buffer)?;
                 let range = format_start_end(
                     buffer,
                     selection.min_offset()..selection.max_offset(),
                     true,
                     false,
                     1,
-                );
+                )?;
                 let selection = Selection::region(range.start, range.end);
                 let (text, delta, inval_lines) = buffer.edit([(&selection, "")], EditType::Delete);
                 let selection = selection.apply_delta(&delta, true, InsertDrift::Default);
@@ -1228,7 +1302,7 @@ impl Action {
                     }
                     CursorMode::Insert(_) => {
                         let mut new_selection = Selection::new();
-                        let selection = cursor.edit_selection(buffer);
+                        let selection = cursor.edit_selection(buffer)?;
 
                         for region in selection.regions() {
                             let end = buffer.move_word_forward(region.end);
@@ -1252,7 +1326,7 @@ impl Action {
                     }
                     CursorMode::Insert(_) => {
                         let mut new_selection = Selection::new();
-                        let selection = cursor.edit_selection(buffer);
+                        let selection = cursor.edit_selection(buffer)?;
 
                         for region in selection.regions() {
                             let end = buffer.move_word_backward_deletion(region.end);
@@ -1275,19 +1349,19 @@ impl Action {
                         cursor.edit_selection(buffer)
                     }
                     CursorMode::Insert(_) => {
-                        let selection = cursor.edit_selection(buffer);
+                        let selection = cursor.edit_selection(buffer)?;
 
                         let mut new_selection = Selection::new();
                         for region in selection.regions() {
                             let line = buffer.line_of_offset(region.end);
-                            let end = buffer.offset_of_line(line);
+                            let end = buffer.offset_of_line(line)?;
                             let new_region = SelRegion::new(region.start, end, None);
                             new_selection.add_region(new_region);
                         }
 
                         new_selection
                     }
-                };
+                }?;
                 let (text, delta, inval_lines) =
                     buffer.edit([(&selection, "")], EditType::DeleteToBeginningOfLine);
                 let selection = selection.apply_delta(&delta, true, InsertDrift::Default);
@@ -1300,17 +1374,17 @@ impl Action {
                         cursor.edit_selection(buffer)
                     }
                     CursorMode::Insert(_) => {
-                        let mut selection = cursor.edit_selection(buffer);
+                        let mut selection = cursor.edit_selection(buffer)?;
 
                         let cursor_offset = cursor.offset();
                         let line = buffer.line_of_offset(cursor_offset);
-                        let end_of_line_offset = buffer.line_end_offset(line, true);
+                        let end_of_line_offset = buffer.line_end_offset(line, true)?;
                         let new_region = SelRegion::new(cursor_offset, end_of_line_offset, None);
                         selection.add_region(new_region);
 
                         selection
                     }
-                };
+                }?;
                 let (text, delta, inval_lines) =
                     buffer.edit([(&selection, "")], EditType::DeleteToEndOfLine);
                 let selection = selection.apply_delta(&delta, true, InsertDrift::Default);
@@ -1318,7 +1392,7 @@ impl Action {
                 vec![(text, delta, inval_lines)]
             }
             DeleteForwardAndInsert => {
-                let selection = cursor.edit_selection(buffer);
+                let selection = cursor.edit_selection(buffer)?;
                 let (text, delta, inval_lines) = buffer.edit([(&selection, "")], EditType::Delete);
                 let selection = selection.apply_delta(&delta, true, InsertDrift::Default);
                 cursor.set_mode(CursorMode::Insert(selection));
@@ -1327,7 +1401,7 @@ impl Action {
             DeleteWordAndInsert => {
                 let selection = {
                     let mut new_selection = Selection::new();
-                    let selection = cursor.edit_selection(buffer);
+                    let selection = cursor.edit_selection(buffer)?;
 
                     for region in selection.regions() {
                         let end = buffer.move_word_forward(region.end);
@@ -1344,14 +1418,14 @@ impl Action {
                 vec![(text, delta, inval_lines)]
             }
             DeleteLineAndInsert => {
-                let selection = cursor.edit_selection(buffer);
+                let selection = cursor.edit_selection(buffer)?;
                 let range = format_start_end(
                     buffer,
                     selection.min_offset()..selection.max_offset(),
                     true,
                     true,
                     1,
-                );
+                )?;
                 let selection = Selection::region(range.start, range.end - 1); // -1 because we want to keep the line itself
                 let (text, delta, inval_lines) = buffer.edit([(&selection, "")], EditType::Delete);
                 let selection = selection.apply_delta(&delta, true, InsertDrift::Default);
@@ -1359,11 +1433,11 @@ impl Action {
                 vec![(text, delta, inval_lines)]
             }
             DeleteToEndOfLineAndInsert => {
-                let mut selection = cursor.edit_selection(buffer);
+                let mut selection = cursor.edit_selection(buffer)?;
 
                 let cursor_offset = cursor.offset();
                 let line = buffer.line_of_offset(cursor_offset);
-                let end_of_line_offset = buffer.line_end_offset(line, true);
+                let end_of_line_offset = buffer.line_end_offset(line, true)?;
 
                 let new_region = SelRegion::new(cursor_offset, end_of_line_offset, None);
                 selection.add_region(new_region);
@@ -1405,10 +1479,10 @@ impl Action {
                         buffer.prev_grapheme_offset(
                             offset,
                             1,
-                            buffer.offset_of_line(buffer.line_of_offset(offset)),
+                            buffer.offset_of_line(buffer.line_of_offset(offset))?,
                         )
                     }
-                    CursorMode::Visual { end, .. } => buffer.offset_line_end(*end, false).min(*end),
+                    CursorMode::Visual { end, .. } => buffer.offset_line_end(*end, false)?.min(*end),
                     CursorMode::Normal(offset) => *offset,
                 };
 
@@ -1425,12 +1499,12 @@ impl Action {
                 match &cursor.mode() {
                     CursorMode::Normal(offset) => {
                         let line = buffer.line_of_offset(*offset);
-                        let offset = buffer.first_non_blank_character_on_line(line);
+                        let offset = buffer.first_non_blank_character_on_line(line)?;
                         cursor.set_mode(CursorMode::Insert(Selection::caret(offset)));
                     }
                     CursorMode::Visual { .. } => {
                         let mut selection = Selection::new();
-                        for region in cursor.edit_selection(buffer).regions() {
+                        for region in cursor.edit_selection(buffer)?.regions() {
                             selection.add_region(SelRegion::caret(region.min()));
                         }
                         cursor.set_mode(CursorMode::Insert(selection));
@@ -1442,16 +1516,25 @@ impl Action {
             Append => {
                 let offset = cursor.offset();
                 let line = buffer.line_of_offset(offset);
-                let line_len = buffer.line_len(line);
+                let Ok(line_len) = buffer.line_len(line) else {
+                    error!("line len {line}");
+                    return vec![]
+                };
                 let count = (line_len > 1 || (buffer.last_line() == line && line_len > 0)) as usize;
-                let offset = buffer.move_right(cursor.offset(), Mode::Insert, count);
+                let Ok(offset) = buffer.move_right(cursor.offset(), Mode::Insert, count) else {
+                    error!("line_end_offset {line}");
+                    return vec![]
+                };
                 cursor.set_mode(CursorMode::Insert(Selection::caret(offset)));
                 vec![]
             }
             AppendEndOfLine => {
                 let offset = cursor.offset();
                 let line = buffer.line_of_offset(offset);
-                let offset = buffer.line_end_offset(line, true);
+                let Ok(offset) = buffer.line_end_offset(line, true) else {
+                    error!("line_end_offset {line}");
+                    return vec![]
+                };
                 cursor.set_mode(CursorMode::Insert(Selection::caret(offset)));
                 vec![]
             }
@@ -1478,7 +1561,7 @@ impl Action {
 
                 vec![(text, delta, inval)]
             }
-        }
+        })
     }
 }
 
@@ -1521,11 +1604,11 @@ enum DuplicateDirection {
 
 #[cfg(test)]
 mod test {
-    use floem_editor_core::word::WordCursor;
     use crate::lines::{
         buffer::{rope_text::RopeText, Buffer},
         cursor::{Cursor, CursorMode},
     };
+    use crate::lines::word::WordCursor;
 
     fn prev_unmatched(buffer: &Buffer, c: char, offset: usize) -> Option<usize> {
         WordCursor::new(buffer.text(), offset).previous_unmatched(c)

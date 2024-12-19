@@ -42,6 +42,7 @@ use crate::lens::{Lens, LensBuilder};
 use crate::lines::buffer::Buffer;
 use crate::lines::buffer::rope_text::RopeText;
 use crate::syntax::highlight::SCOPES;
+use anyhow::Result;
 
 pub mod edit;
 pub mod highlight;
@@ -186,7 +187,7 @@ impl BracketParser {
         *(self.active.borrow_mut()) = false;
     }*/
 
-    pub fn update_code(&mut self, buffer: &Buffer, syntax: Option<&Syntax>) {
+    pub fn update_code(&mut self, buffer: &Buffer, syntax: Option<&Syntax>) -> Result<()> {
         let palette = vec![
             "bracket.color.1".to_string(),
             "bracket.color.2".to_string(),
@@ -229,10 +230,10 @@ impl BracketParser {
                     &palette,
                 );
                 if buffer.is_empty() {
-                    return;
+                    return Ok(());
                 }
                 for (offset, color, bracket) in pos_vec.into_iter() {
-                    let (line, col) = buffer.offset_to_line_col(offset);
+                    let (line, col) = buffer.offset_to_line_col(offset)?;
                     let line_style = LineStyle {
                         start: col,
                         end: col + 1,
@@ -250,6 +251,7 @@ impl BracketParser {
         } else {
             self.bracket_pos = HashMap::new();
         }
+        Ok(())
     }
 
     fn is_left(c: &char) -> bool {
@@ -704,12 +706,19 @@ impl SyntaxLayers {
                     let mut injections = Vec::new();
                     let mut last_injection_end = 0;
                     for mat in matches {
+
                         let (injection_capture, content_node, included_children) =
-                            layer.config.injection_for_match(
-                                &layer.config.injections_query,
-                                &mat,
-                                source,
-                            );
+                           match layer.config.injection_for_match(
+                               &layer.config.injections_query,
+                               &mat,
+                               source,
+                           ) {
+                               Ok(rs) => rs,
+                               Err(err) => {
+                                   error!("{err:?}");
+                                   continue;
+                               }
+                           };
 
                         // in case this is a combined injection save it for more processing later
                         if let Some(combined_injection_idx) = layer
@@ -860,8 +869,8 @@ impl SyntaxLayers {
                 // pointers, so it's actually ok to move them.
                 let cursor_ref = unsafe {
                     mem::transmute::<
-                        &mut tree_sitter::QueryCursor,
-                        &mut tree_sitter::QueryCursor,
+                        &mut QueryCursor,
+                        &mut QueryCursor,
                     >(&mut cursor)
                 };
 

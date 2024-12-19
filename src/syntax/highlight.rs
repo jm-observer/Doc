@@ -25,7 +25,7 @@ use regex::Regex;
 use tree_sitter::{
     Language, Point, Query, QueryCaptures, QueryCursor, QueryMatch, Tree,
 };
-
+use anyhow::Result;
 use super::{util::RopeProvider, PARSER};
 use crate::{language::LapceLanguage};
 use crate::language::{load_grammar, read_grammar_query};
@@ -376,10 +376,10 @@ impl HighlightConfiguration {
         &self,
         query_match: &QueryMatch<'a, 'a>,
         source: &'a Rope,
-    ) -> (
+    ) -> Result<(
         Option<InjectionLanguageMarker<'a>>,
         Option<tree_sitter::Node<'a>>,
-    ) {
+    )> {
         let mut injection_capture = None;
         let mut content_node = None;
 
@@ -397,7 +397,7 @@ impl HighlightConfiguration {
                 let node_slice = source.slice(capture.node.byte_range());
                 let max_line = node_slice.line_of_offset(node_slice.len());
                 let node_slice = if max_line > 0 {
-                    node_slice.slice(..node_slice.offset_of_line(1))
+                    node_slice.slice(..node_slice.offset_of_line(1)?)
                 } else {
                     node_slice
                 };
@@ -413,7 +413,7 @@ impl HighlightConfiguration {
                 content_node = Some(capture.node);
             }
         }
-        (injection_capture, content_node)
+        Ok((injection_capture, content_node))
     }
 
     pub(crate) fn injection_for_match<'a>(
@@ -421,13 +421,13 @@ impl HighlightConfiguration {
         query: &'a Query,
         query_match: &QueryMatch<'a, 'a>,
         source: &'a Rope,
-    ) -> (
+    ) -> Result<(
         Option<InjectionLanguageMarker<'a>>,
         Option<tree_sitter::Node<'a>>,
         IncludedChildren,
-    ) {
+    )> {
         let (mut injection_capture, content_node) =
-            self.injection_pair(query_match, source);
+            self.injection_pair(query_match, source)?;
 
         let mut included_children = IncludedChildren::default();
         for prop in query.property_settings(query_match.pattern_index) {
@@ -460,7 +460,7 @@ impl HighlightConfiguration {
             }
         }
 
-        (injection_capture, content_node, included_children)
+        Ok((injection_capture, content_node, included_children))
     }
 }
 
