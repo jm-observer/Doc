@@ -2,11 +2,13 @@ use std::cmp::Ordering;
 use floem::peniko::Color;
 use super::phantom_text::{PhantomText, PhantomTextKind};
 use im::HashMap;
+use log::error;
 use lsp_types::Position;
 use serde::{Deserialize, Serialize};
 use crate::lines::buffer::Buffer;
 use crate::lines::buffer::rope_text::RopeText;
 use crate::lines::screen_lines::ScreenLines;
+use anyhow::Result;
 
 #[derive(Default, Clone)]
 pub struct FoldingRanges(pub Vec<FoldingRange>);
@@ -236,20 +238,26 @@ impl FoldedRanges {
         self.0
             .into_iter()
             .filter_map(|x| {
-                x.into_phantom_text(
+                match x.into_phantom_text(
                     buffer,
                     line as u32,
                     inlay_hint_font_size,
                     inlay_hint_foreground,
                     inlay_hint_background,
-                )
+                ) {
+                    Ok(rs) => {rs}
+                    Err(err) => {
+                        error!("{err}");
+                        None
+                    }
+                }
             })
             .collect()
     }
 }
 
-fn get_offset(buffer: &Buffer, positon: Position) -> usize {
-    buffer.offset_of_line(positon.line as usize) + positon.character as usize
+fn get_offset(buffer: &Buffer, positon: Position) -> Result<usize> {
+    Ok(buffer.offset_of_line(positon.line as usize)? + positon.character as usize)
 }
 
 #[derive(Debug, Clone)]
@@ -268,14 +276,18 @@ impl FoldedRange {
         inlay_hint_font_size: usize,
         inlay_hint_foreground: Color,
         inlay_hint_background: Color,
-    ) -> Option<PhantomText> {
+    ) -> Result<Option<PhantomText>> {
         // info!("line={line} start={:?} end={:?}", self.start, self.end);
         let same_line = self.end.line == self.start.line;
-        if self.start.line == line {
-            let start_char =
-                buffer.char_at_offset(get_offset(buffer, self.start))?;
-            let end_char =
-                buffer.char_at_offset(get_offset(buffer, self.end) - 1)?;
+        Ok(if self.start.line == line {
+            let Some(start_char) =
+                buffer.char_at_offset(get_offset(buffer, self.start)?) else {
+                return Ok(None)
+            };
+            let Some(end_char) =
+                buffer.char_at_offset(get_offset(buffer, self.end)?- 1) else {
+                return Ok(None)
+            };
 
             let mut text = String::new();
             text.push(start_char);
@@ -290,7 +302,8 @@ impl FoldedRange {
             let len = if same_line {
                 self.end.character as usize - start
             } else {
-                let start_line_len = buffer.line_content(line as usize).len();
+                let content = buffer.line_content(line as usize)?;
+                let start_line_len = content.len();
                 start_line_len - start
             };
             Some(PhantomText {
@@ -326,7 +339,7 @@ impl FoldedRange {
             })
         } else {
             None
-        }
+        })
     }
 }
 

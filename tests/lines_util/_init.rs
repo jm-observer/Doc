@@ -18,6 +18,7 @@ use doc::lines::{DocLines, RopeTextPosition};
 use doc::syntax::{BracketParser, Syntax};
 use crate::lines_util::init_semantic_2;
 use floem::reactive::SignalUpdate;
+use anyhow::Result;
 
 fn _init_lsp_folding_range() -> Vec<FoldingRange> {
     let folding_range = r#"[{"startLine":0,"startCharacter":10,"endLine":7,"endCharacter":1},{"startLine":1,"startCharacter":12,"endLine":3,"endCharacter":5},{"startLine":3,"startCharacter":11,"endLine":5,"endCharacter":5}]"#;
@@ -41,20 +42,20 @@ fn _init_lsp_folding_range_2() -> Vec<FoldingRange> {
         .collect()
 }
 
-fn _init_inlay_hint(buffer: &Buffer) -> Spans<InlayHint> {
+fn _init_inlay_hint(buffer: &Buffer) -> Result<Spans<InlayHint>> {
     let hints = r#"[{"position":{"line":6,"character":9},"label":[{"value":": "},{"value":"A","location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":8,"character":7},"end":{"line":8,"character":8}}}}],"kind":1,"textEdits":[{"range":{"start":{"line":6,"character":9},"end":{"line":6,"character":9}},"newText":": A"}],"paddingLeft":false,"paddingRight":false}]"#;
     let mut hints: Vec<InlayHint> = serde_json::from_str(hints).unwrap();
     let len = buffer.len();
     hints.sort_by(|left, right| left.position.cmp(&right.position));
     let mut hints_span = SpansBuilder::new(len);
     for hint in hints {
-        let offset = buffer.offset_of_position(&hint.position).min(len);
+        let offset = buffer.offset_of_position(&hint.position)?.min(len);
         hints_span.add_span(
             Interval::new(offset, (offset + 1).min(len)),
             hint,
         );
     }
-    hints_span.build()
+    Ok(hints_span.build())
 }
 
 fn _init_code(file: PathBuf) -> (String, Buffer) {
@@ -92,9 +93,9 @@ pub fn folded_v2() -> FoldingDisplayItem {
     }
 }
 
-fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String, Buffer), folding: Vec<FoldingRange>) -> (DocLines, EditorConfig) {
+fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String, Buffer), folding: Vec<FoldingRange>) -> Result<(DocLines, EditorConfig)> {
     // let folding = _init_lsp_folding_range();
-    let hints = _init_inlay_hint(&buffer);
+    let hints = _init_inlay_hint(&buffer)?;
 
     let config_str = r##"{"auto_closing_matching_pairs":true, "auto_surround":true,"font_family":"JetBrains Mono","font_size":13,"line_height":23,"enable_inlay_hints":true,"inlay_hint_font_size":0,"enable_error_lens":true,"error_lens_end_of_line":true,"error_lens_multiline":false,"error_lens_font_size":0,"enable_completion_lens":false,"enable_inline_completion":true,"completion_lens_font_size":0,"only_render_error_styling":false,"diagnostic_error":{"r":229,"g":20,"b":0,"a":255},"diagnostic_warn":{"r":233,"g":167,"b":0,"a":255},"inlay_hint_fg":{"r":108,"g":118,"b":128,"a":255},"inlay_hint_bg":{"r":245,"g":245,"b":245,"a":255},"error_lens_error_foreground":{"r":228,"g":86,"b":73,"a":255},"error_lens_warning_foreground":{"r":193,"g":132,"b":1,"a":255},"error_lens_other_foreground":{"r":160,"g":161,"b":167,"a":255},"completion_lens_foreground":{"r":160,"g":161,"b":167,"a":255},"editor_foreground":{"r":56,"g":58,"b":66,"a":255},"syntax":{"punctuation.delimiter":{"r":193,"g":132,"b":1,"a":255},"attribute":{"r":193,"g":132,"b":1,"a":255},"method":{"r":64,"g":120,"b":242,"a":255},"bracket.color.3":{"r":166,"g":38,"b":164,"a":255},"builtinType":{"r":18,"g":63,"b":184,"a":255},"enumMember":{"r":146,"g":17,"b":167,"a":255},"bracket.color.2":{"r":193,"g":132,"b":1,"a":255},"markup.heading":{"r":228,"g":86,"b":73,"a":255},"markup.link.url":{"r":64,"g":120,"b":242,"a":255},"string.escape":{"r":1,"g":132,"b":188,"a":255},"structure":{"r":193,"g":132,"b":1,"a":255},"text.reference":{"r":193,"g":132,"b":1,"a":255},"comment":{"r":160,"g":161,"b":167,"a":255},"markup.list":{"r":209,"g":154,"b":102,"a":255},"variable.other.member":{"r":228,"g":86,"b":73,"a":255},"type":{"r":56,"g":58,"b":66,"a":255},"keyword":{"r":7,"g":60,"b":183,"a":255},"text.uri":{"r":1,"g":132,"b":188,"a":255},"enum":{"r":56,"g":58,"b":66,"a":255},"constructor":{"r":193,"g":132,"b":1,"a":255},"interface":{"r":56,"g":58,"b":66,"a":255},"selfKeyword":{"r":166,"g":38,"b":164,"a":255},"type.builtin":{"r":1,"g":132,"b":188,"a":255},"escape":{"r":1,"g":132,"b":188,"a":255},"field":{"r":228,"g":86,"b":73,"a":255},"function.method":{"r":64,"g":120,"b":242,"a":255},"markup.link.text":{"r":166,"g":38,"b":164,"a":255},"property":{"r":136,"g":22,"b":150,"a":255},"struct":{"r":56,"g":58,"b":66,"a":255},"bracket.color.1":{"r":64,"g":120,"b":242,"a":255},"enum-member":{"r":228,"g":86,"b":73,"a":255},"string":{"r":80,"g":161,"b":79,"a":255},"text.title":{"r":209,"g":154,"b":102,"a":255},"bracket.unpaired":{"r":228,"g":86,"b":73,"a":255},"constant":{"r":193,"g":132,"b":1,"a":255},"typeAlias":{"r":56,"g":58,"b":66,"a":255},"function":{"r":61,"g":108,"b":126,"a":255},"markup.link.label":{"r":166,"g":38,"b":164,"a":255},"markup.bold":{"r":209,"g":154,"b":102,"a":255},"markup.italic":{"r":209,"g":154,"b":102,"a":255},"number":{"r":193,"g":132,"b":1,"a":255},"tag":{"r":64,"g":120,"b":242,"a":255},"variable":{"r":56,"g":58,"b":66,"a":255},"embedded":{"r":1,"g":132,"b":188,"a":255}}}"##;
     let config: EditorConfig = serde_json::from_str(config_str).unwrap();
@@ -124,15 +125,15 @@ fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String,
         config.clone(),
         buffer,
         kind,
-    );
-    lines.update_folding_ranges(folding.into());
-    lines.set_inlay_hints(hints);
+    )?;
+    lines.update_folding_ranges(folding.into())?;
+    lines.set_inlay_hints(hints)?;
     if let Some(folded) = folded {
         for folded in folded {
-            lines.update_folding_ranges(folded.into());
+            lines.update_folding_ranges(folded.into())?;
         }
     }
-    (lines, config)
+    Ok((lines, config))
 }
 
 fn load_code(file: &Path) -> String {
@@ -148,19 +149,19 @@ fn init_diag_2() -> im::Vector<Diagnostic>{
     diags
 }
 
-pub fn init_main_2() -> DocLines {
+pub fn init_main_2() -> Result<DocLines> {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/main_2.rs".into();
 
     let folding = _init_lsp_folding_range_2();
-    let (mut lines, _) = _init_lines(None, _init_code(file), folding);
+    let (mut lines, _) = _init_lines(None, _init_code(file), folding)?;
     let diags = init_diag_2();
     let semantic = init_semantic_2();
 
     lines.diagnostics.diagnostics.update(|x| *x = diags);
-    lines.init_diagnostics();
+    lines.init_diagnostics()?;
 
-    let mut styles_span = SpansBuilder::new(lines.buffer.len());
+    let mut styles_span = SpansBuilder::new(lines.buffer().len());
     for style in semantic.styles {
         if let Some(fg) = style.style.fg_color {
             styles_span.add_span(
@@ -171,22 +172,22 @@ pub fn init_main_2() -> DocLines {
     }
     let styles = styles_span.build();
 
-    lines.update_semantic_styles_from_lsp((None, styles), lines.buffer.rev());
+    lines.update_semantic_styles_from_lsp((None, styles), lines.buffer().rev())?;
 
-    lines
+    Ok(lines)
 }
 
-pub fn init_main() -> DocLines {
+pub fn init_main() -> Result<DocLines> {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/main.rs".into();
-    let (lines, _) = _init_lines(None, _init_code(file), vec![]);
-    lines
+    let (lines, _) = _init_lines(None, _init_code(file), vec![])?;
+    Ok(lines)
 }
 
-pub fn init_empty() -> DocLines {
+pub fn init_empty() -> Result<DocLines> {
     custom_utils::logger::logger_stdout_debug();
     let file: PathBuf = "resources/test_code/empty.rs".into();
 
-    let (lines, _) = _init_lines(None, _init_code(file), _init_lsp_folding_range());
-    lines
+    let (lines, _) = _init_lines(None, _init_code(file), _init_lsp_folding_range())?;
+    Ok(lines)
 }

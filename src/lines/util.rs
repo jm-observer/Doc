@@ -7,6 +7,7 @@ use super::phantom_text::{PhantomText, PhantomTextKind};
 use super::layout::{LineExtraStyle, TextLayoutLine};
 use floem::text::TextLayout;
 use floem::reactive::SignalGet;
+use log::error;
 use crate::EditorViewKind;
 use crate::lines::buffer::Buffer;
 use crate::lines::buffer::rope_text::RopeText;
@@ -270,7 +271,10 @@ pub fn preedit_phantom(
 ) -> Option<PhantomText> {
     let preedit = preedit.preedit.get_untracked()?;
 
-    let (ime_line, col) = buffer.offset_to_line_col(preedit.offset);
+    let Ok((ime_line, col)) = buffer.offset_to_line_col(preedit.offset) else {
+        error!("{}", preedit.offset);
+        return None
+    };
 
     if line != ime_line {
         return None;
