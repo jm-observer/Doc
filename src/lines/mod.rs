@@ -11,15 +11,14 @@ use floem::reactive::{
     batch, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
 };
 use floem::text::{
-    Attrs, AttrsList, FamilyOwned, FONT_SYSTEM, LineHeightValue, TextLayout, Wrap,
+    Attrs, AttrsList, FamilyOwned, FONT_SYSTEM, LineHeightValue, Wrap,
 };
 use floem::views::editor::EditorStyle;
-use layout::{TextLayoutLine};
+use layout::{TextLayoutLine, TextLayout};
 use phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
-use floem::views::editor::visual_line::{hit_position_aff};
 use floem_editor_core::command::EditCommand;
 use floem_editor_core::indent::IndentStyle;
 use floem_editor_core::mode::{Mode, MotionMode};
@@ -34,7 +33,7 @@ use line::{OriginFoldedLine, VisualLine};
 use signal::Signals;
 use style::NewLineStyle;
 
-use crate::{DiagnosticData, EditorViewKind};
+use crate::{DiagnosticData, EditorViewKind, hit_position_aff};
 use crate::lines::action::UpdateFolding;
 use crate::config::EditorConfig;
 use crate::lines::buffer::{Buffer, InvalLines};
@@ -727,9 +726,7 @@ impl DocLines {
             self.syntax.styles.as_ref()?
         }.iter().filter_map(|(Interval { start, end }, fg_color)| {
             if line_start <= start && end < line_end {
-                let Some(color) = self.config.syntax_style_color(fg_color) else {
-                    return None;
-                };
+                let color = self.config.syntax_style_color(fg_color)?;
                 Some(NewLineStyle {
                     origin_line,
                     origin_line_offset_start: start - line_start,
