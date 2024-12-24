@@ -243,7 +243,7 @@ impl TextLayout {
     pub fn line_layout(
         &self,
     ) -> &[LayoutLine] {
-        self.buffer.layout_opt().expect("layout not found")
+        self.buffer.layout_opt().as_ref().expect("layout_opt empty")
     }
 
 
@@ -697,8 +697,8 @@ impl<'b> Iterator for LayoutRunIter<'b> {
             return None;
         }
         let line = &self.text_layout.buffer;
-        let layout = line.layout_opt()?;
-        let shape = line.shape_opt()?;
+        let layout = line.layout_opt().as_ref()?;
+        let shape = line.shape_opt().as_ref()?;
         assert_eq!(self.line_i, 0);
         while let Some(layout_line) = layout.get(self.layout_i) {
             self.layout_i += 1;

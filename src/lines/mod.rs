@@ -10,19 +10,13 @@ use floem::peniko::{Brush, Color};
 use floem::reactive::{
     batch, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
 };
-use floem::text::{
-    Attrs, AttrsList, FamilyOwned, FONT_SYSTEM, LineHeightValue, Wrap,
-};
+use floem::text::{Attrs, AttrsList, FamilyOwned, FONT_SYSTEM, LineHeightValue, Wrap};
 use floem::views::editor::EditorStyle;
 use layout::{TextLayoutLine, TextLayout};
 use phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine,
 };
 use floem::views::editor::text::{PreeditData, SystemClipboard, WrapMethod};
-use floem_editor_core::command::EditCommand;
-use floem_editor_core::indent::IndentStyle;
-use floem_editor_core::mode::{Mode, MotionMode};
-use floem_editor_core::register::Register;
 use itertools::Itertools;
 use lapce_xi_rope::{DeltaElement, Interval, Rope, RopeDelta, Transformer};
 use lapce_xi_rope::spans::{Spans, SpansBuilder};
@@ -50,6 +44,10 @@ use crate::lines::word::{CharClassification, get_char_property, WordCursor};
 use crate::syntax::{BracketParser, Syntax};
 use crate::syntax::edit::SyntaxEdit;
 use anyhow::{anyhow, bail, Result};
+use floem::views::editor::core::command::EditCommand;
+use floem::views::editor::core::indent::IndentStyle;
+use floem::views::editor::core::mode::{Mode, MotionMode};
+use floem::views::editor::core::register::Register;
 use crate::lines::line_ending::LineEnding;
 
 pub mod action;

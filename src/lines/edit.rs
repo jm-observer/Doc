@@ -3,15 +3,15 @@ use std::{collections::HashSet, iter, ops::Range};
 use itertools::Itertools;
 use lapce_xi_rope::{DeltaElement, Rope, RopeDelta};
 
-use floem_editor_core::{
-    command::EditCommand,
-    mode::{Mode, MotionMode, VisualMode},
-    register::{Clipboard, Register, RegisterData, RegisterKind},
-    util::{
+use floem::prelude::editor::{
+    core::command::EditCommand,
+    core::mode::{Mode, MotionMode, VisualMode},
+    core::register::{Clipboard, Register, RegisterData, RegisterKind},
+    core::util::{
         has_unmatched_pair, matching_char, matching_pair_direction, str_is_pair_left,
         str_matching_pair,
     },
-    word::{get_char_property, CharClassification},
+    core::word::{get_char_property, CharClassification},
 };
 use log::error;
 use crate::lines::indent::{create_edit, create_outdent};
@@ -830,7 +830,7 @@ impl Action {
             auto_indent,
         }: EditConf,
     ) -> Result<Vec<(Rope, RopeDelta, InvalLines)>> {
-        use floem_editor_core::command::EditCommand::*;
+        use EditCommand::*;
         Ok(match cmd {
             MoveLineUp => {
                 let mut deltas = Vec::new();

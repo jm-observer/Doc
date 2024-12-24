@@ -15,12 +15,11 @@ use lapce_xi_rope::{
     Delta, DeltaBuilder, DeltaElement, Interval, Rope, RopeDelta,
 };
 
-use floem_editor_core::{
-
+use floem::prelude::editor::core::{
     mode::Mode,
 };
 use crate::lines::line_ending::{LineEnding, LineEndingDetermination};
-use floem_editor_core::indent::IndentStyle;
+use floem::prelude::editor::core::indent::IndentStyle;
 
 pub mod diff;
 pub mod rope_text;

@@ -1,8 +1,8 @@
-use floem_editor_core::char_buffer::CharBuffer;
 use crate::lines::word::WordCursor;
 use floem::kurbo::Rect;
 use floem::views::editor::text::PreeditData;
 use floem::peniko::Color;
+use floem::prelude::editor::core::char_buffer::CharBuffer;
 use super::phantom_text::{PhantomText, PhantomTextKind};
 use super::layout::{LineExtraStyle, TextLayoutLine, TextLayout};
 use floem::reactive::SignalGet;

@@ -6,8 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-floem = { path="../floem" }
-floem-editor-core = {  path="../floem/editor-core", features = ["serde"] }
+#floem = { path="../floem" }
+#floem-editor-core = {  path="../floem/editor-core", features = ["serde"] }
+#cosmic-text = { git = "https://github.com/pop-os/cosmic-text.git", features = ["shape-run-cache"], rev = "4fe90bb"  }
+# 2024-12-20
+floem = { version = "0.2.0" , features = ["serde"]}
+#floem-editor-core = {  version = "0.2.0" }
+cosmic-text = { version = "0.12.1", features = ["shape-run-cache"] }
+
 serde             = { version = "1.0" }
 serde_json        = { version = "1.0" }
 lsp-types = { version = "0.95.1", features = ["proposed"] }
@@ -30,6 +36,7 @@ anyhow            = { version = "1.0" }
 #lapce-xi-rope = { version = "0.3.2", features = ["serde"] }
 lapce-xi-rope = {path = "../xi-editor", features = ["serde"]}
 memchr = "2.7.1"
+unicode-segmentation = "1.12.0"
 
 [dev-dependencies]
 custom-utils = "0.10.16"
@@ -42,3 +49,4 @@ custom-utils = "0.10.16"
 
 [patch.crates-io]
 custom-utils = {path = "../custom-utils"}
+floem = { path="../floem-lapce" }

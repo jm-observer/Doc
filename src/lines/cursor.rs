@@ -1,5 +1,5 @@
-use floem_editor_core::mode::{Mode, MotionMode, VisualMode};
-use floem_editor_core::register::RegisterData;
+use floem::prelude::editor::core::mode::{Mode, MotionMode, VisualMode};
+use floem::prelude::editor::core::register::RegisterData;
 use lapce_xi_rope::{RopeDelta, Transformer};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;

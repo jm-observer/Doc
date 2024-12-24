@@ -1,5 +1,5 @@
-use floem_editor_core::chars::{char_is_line_ending, char_is_whitespace};
-use floem_editor_core::indent::IndentStyle;
+use floem::prelude::editor::core::chars::{char_is_line_ending, char_is_whitespace};
+use floem::prelude::editor::core::indent::IndentStyle;
 use lapce_xi_rope::Rope;
 use anyhow::Result;
 use log::error;
