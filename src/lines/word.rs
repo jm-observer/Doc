@@ -1,5 +1,7 @@
-use floem::views::editor::core::mode::Mode;
-use floem::views::editor::core::util::{matching_char, matching_pair_direction};
+use floem::views::editor::core::{
+    mode::Mode,
+    util::{matching_char, matching_pair_direction}
+};
 use lapce_xi_rope::{Cursor, Rope, RopeInfo};
 
 /// Describe char classifications used to compose word boundaries
@@ -14,10 +16,11 @@ pub enum CharClassification {
     /// Any punctuation character
     Punctuation,
     /// Includes letters and all of non-ascii unicode
-    Other,
+    Other
 }
 
-/// A word boundary can be the start of a word, its end or both for punctuation
+/// A word boundary can be the start of a word, its end or both for
+/// punctuation
 #[derive(PartialEq, Eq)]
 enum WordBoundary {
     /// Denote that this is not a boundary
@@ -27,7 +30,7 @@ enum WordBoundary {
     /// A boundary indicating the start of a word
     End,
     /// Both start and end boundaries (ex: punctuation characters)
-    Both,
+    Both
 }
 
 impl WordBoundary {
@@ -49,7 +52,7 @@ impl WordBoundary {
 /// by word boundaries.
 /// Boundaries can be the start of a word, its end, punctuation etc.
 pub struct WordCursor<'a> {
-    pub inner: Cursor<'a, RopeInfo>,
+    pub inner: Cursor<'a, RopeInfo>
 }
 
 impl<'a> WordCursor<'a> {
@@ -58,10 +61,11 @@ impl<'a> WordCursor<'a> {
         WordCursor { inner }
     }
 
-    /// Get the previous start boundary of a word, and set the cursor position to the boundary found.
-    /// The behaviour diffs a bit on new line character with modal and non modal,
-    /// while on modal, it will ignore the new line character and on non-modal,
-    /// it will stop at the new line character
+    /// Get the previous start boundary of a word, and set the cursor
+    /// position to the boundary found. The behaviour diffs a bit
+    /// on new line character with modal and non modal,
+    /// while on modal, it will ignore the new line character and on
+    /// non-modal, it will stop at the new line character
     /// **Example:**
     ///
     /// ```rust
@@ -72,7 +76,7 @@ impl<'a> WordCursor<'a> {
     /// let mut cursor = WordCursor::new(&rope, 4);
     /// let boundary = cursor.prev_boundary(Mode::Insert);
     /// assert_eq!(boundary, Some(0));
-    ///```
+    /// ```
     pub fn prev_boundary(&mut self, mode: Mode) -> Option<usize> {
         if let Some(ch) = self.inner.prev_codepoint() {
             let mut prop = get_char_property(ch);
@@ -83,7 +87,8 @@ impl<'a> WordCursor<'a> {
                     break;
                 }
 
-                // Stop if line beginning reached, without any non-whitespace characters
+                // Stop if line beginning reached, without any
+                // non-whitespace characters
                 if mode == Mode::Insert
                     && prop_prev == CharClassification::Lf
                     && prop == CharClassification::Space
@@ -100,7 +105,8 @@ impl<'a> WordCursor<'a> {
         None
     }
 
-    /// Computes where the cursor position should be after backward deletion.
+    /// Computes where the cursor position should be after backward
+    /// deletion.
     ///
     /// **Example:**
     ///
@@ -115,7 +121,7 @@ impl<'a> WordCursor<'a> {
     ///
     /// assert_eq!(position, Some(7));
     /// assert_eq!(&text[..position.unwrap()], "violet ");
-    ///```
+    /// ```
     pub fn prev_deletion_boundary(&mut self) -> Option<usize> {
         if let Some(ch) = self.inner.prev_codepoint() {
             let mut prop = get_char_property(ch);
@@ -127,17 +133,24 @@ impl<'a> WordCursor<'a> {
             while let Some(prev) = self.inner.prev_codepoint() {
                 let prop_prev = get_char_property(prev);
 
-                // Stop if line beginning reached, without any non-whitespace characters
-                if prop_prev == CharClassification::Lf && prop == CharClassification::Space {
+                // Stop if line beginning reached, without any
+                // non-whitespace characters
+                if prop_prev == CharClassification::Lf
+                    && prop == CharClassification::Space
+                {
                     break;
                 }
 
-                // More than a single whitespace: keep word, remove only whitespaces
-                if prop == CharClassification::Space && prop_prev == CharClassification::Space {
+                // More than a single whitespace: keep word, remove
+                // only whitespaces
+                if prop == CharClassification::Space
+                    && prop_prev == CharClassification::Space
+                {
                     keep_word = true;
                 }
 
-                // Line break found: keep words, delete line break & trailing whitespaces
+                // Line break found: keep words, delete line break &
+                // trailing whitespaces
                 if prop == CharClassification::Lf || prop == CharClassification::Cr {
                     keep_word = true;
                 }
@@ -174,7 +187,7 @@ impl<'a> WordCursor<'a> {
     /// let mut cursor = WordCursor::new(&rope, 0);
     /// let char_position = cursor.next_non_blank_char();
     /// assert_eq!(char_position, 4);
-    ///```
+    /// ```
     pub fn next_non_blank_char(&mut self) -> usize {
         let mut candidate = self.inner.pos();
         while let Some(next) = self.inner.next_codepoint() {
@@ -188,8 +201,8 @@ impl<'a> WordCursor<'a> {
         candidate
     }
 
-    /// Get the next start boundary of a word, and set the cursor position to the boundary found.
-    /// **Example:**
+    /// Get the next start boundary of a word, and set the cursor
+    /// position to the boundary found. **Example:**
     ///
     /// ```rust
     /// # use floem_editor_core::word::WordCursor;
@@ -198,7 +211,7 @@ impl<'a> WordCursor<'a> {
     /// let mut cursor = WordCursor::new(&rope, 0);
     /// let boundary = cursor.next_boundary();
     /// assert_eq!(boundary, Some(6));
-    ///```
+    /// ```
     pub fn next_boundary(&mut self) -> Option<usize> {
         if let Some(ch) = self.inner.next_codepoint() {
             let mut prop = get_char_property(ch);
@@ -217,8 +230,8 @@ impl<'a> WordCursor<'a> {
         None
     }
 
-    /// Get the next end boundary, and set the cursor position to the boundary found.
-    /// **Example:**
+    /// Get the next end boundary, and set the cursor position to the
+    /// boundary found. **Example:**
     ///
     /// ```rust
     /// # use floem_editor_core::word::WordCursor;
@@ -227,7 +240,7 @@ impl<'a> WordCursor<'a> {
     /// let mut cursor = WordCursor::new(&rope, 3);
     /// let end_boundary = cursor.end_boundary();
     /// assert_eq!(end_boundary, Some(5));
-    ///```
+    /// ```
     pub fn end_boundary(&mut self) -> Option<usize> {
         self.inner.next_codepoint();
         if let Some(ch) = self.inner.next_codepoint() {
@@ -247,8 +260,9 @@ impl<'a> WordCursor<'a> {
         None
     }
 
-    /// Get the first matching [`CharClassification::Other`] backward and set the cursor position to this location .
-    /// **Example:**
+    /// Get the first matching [`CharClassification::Other`] backward
+    /// and set the cursor position to this location . **Example:*
+    /// *
     ///
     /// ```rust
     /// # use floem_editor_core::word::WordCursor;
@@ -258,7 +272,7 @@ impl<'a> WordCursor<'a> {
     /// let mut cursor = WordCursor::new(&rope, 11);
     /// let position = cursor.prev_code_boundary();
     /// assert_eq!(&text[position..], "are\n blue");
-    ///```
+    /// ```
     pub fn prev_code_boundary(&mut self) -> usize {
         let mut candidate = self.inner.pos();
         while let Some(prev) = self.inner.prev_codepoint() {
@@ -271,8 +285,9 @@ impl<'a> WordCursor<'a> {
         candidate
     }
 
-    /// Get the first matching [`CharClassification::Other`] forward and set the cursor position to this location .
-    /// **Example:**
+    /// Get the first matching [`CharClassification::Other`] forward
+    /// and set the cursor position to this location . **Example:*
+    /// *
     ///
     /// ```rust
     /// # use floem_editor_core::word::WordCursor;
@@ -282,7 +297,7 @@ impl<'a> WordCursor<'a> {
     /// let mut cursor = WordCursor::new(&rope, 11);
     /// let position = cursor.next_code_boundary();
     /// assert_eq!(&text[position..], "\n blue");
-    ///```
+    /// ```
     pub fn next_code_boundary(&mut self) -> usize {
         let mut candidate = self.inner.pos();
         while let Some(prev) = self.inner.next_codepoint() {
@@ -295,9 +310,11 @@ impl<'a> WordCursor<'a> {
         candidate
     }
 
-    /// Looks for a matching pair character, either forward for opening chars (ex: `(`) or
-    /// backward for closing char (ex: `}`), and return the matched character position if found.
-    /// Will return `None` if the character under cursor is not matchable (see [`crate::util::matching_char`]).
+    /// Looks for a matching pair character, either forward for
+    /// opening chars (ex: `(`) or backward for closing char (ex:
+    /// `}`), and return the matched character position if found.
+    /// Will return `None` if the character under cursor is not
+    /// matchable (see [`crate::util::matching_char`]).
     ///
     /// **Example:**
     ///
@@ -309,7 +326,7 @@ impl<'a> WordCursor<'a> {
     /// let mut cursor = WordCursor::new(&rope, 2);
     /// let position = cursor.match_pairs();
     /// assert_eq!(position, Some(0));
-    ///```
+    /// ```
     pub fn match_pairs(&mut self) -> Option<usize> {
         let c = self.inner.peek_next_codepoint()?;
         let other = matching_char(c)?;
@@ -323,8 +340,8 @@ impl<'a> WordCursor<'a> {
         }
     }
 
-    /// Take a matchable character and look cforward for the first unmatched one
-    /// ignoring the encountered matched pairs.
+    /// Take a matchable character and look cforward for the first
+    /// unmatched one ignoring the encountered matched pairs.
     ///
     /// **Example**:
     /// ```rust
@@ -351,8 +368,8 @@ impl<'a> WordCursor<'a> {
         None
     }
 
-    /// Take a matchable character and look backward for the first unmatched one
-    /// ignoring the encountered matched pairs.
+    /// Take a matchable character and look backward for the first
+    /// unmatched one ignoring the encountered matched pairs.
     ///
     /// **Example**:
     ///
@@ -380,7 +397,8 @@ impl<'a> WordCursor<'a> {
         None
     }
 
-    /// Return the previous and end boundaries of the word under cursor.
+    /// Return the previous and end boundaries of the word under
+    /// cursor.
     ///
     /// **Example**:
     ///
@@ -392,7 +410,7 @@ impl<'a> WordCursor<'a> {
     /// let mut cursor = WordCursor::new(&rope, 9);
     /// let (start, end) = cursor.select_word();
     /// assert_eq!(&text[start..end], "are");
-    ///```
+    /// ```
     pub fn select_word(&mut self) -> (usize, usize) {
         let initial = self.inner.pos();
         let end = self.next_code_boundary();
@@ -414,15 +432,20 @@ impl<'a> WordCursor<'a> {
     /// let (start, end) = cursor.find_enclosing_pair().unwrap();
     /// assert_eq!(start, 7);
     /// assert_eq!(end, 13)
-    ///```
+    /// ```
     pub fn find_enclosing_pair(&mut self) -> Option<(usize, usize)> {
         let old_offset = self.inner.pos();
         while let Some(c) = self.inner.prev_codepoint() {
             if matching_pair_direction(c) == Some(true) {
                 let opening_bracket_offset = self.inner.pos();
                 if let Some(closing_bracket_offset) = self.match_pairs() {
-                    if (opening_bracket_offset..=closing_bracket_offset).contains(&old_offset) {
-                        return Some((opening_bracket_offset, closing_bracket_offset));
+                    if (opening_bracket_offset..=closing_bracket_offset)
+                        .contains(&old_offset)
+                    {
+                        return Some((
+                            opening_bracket_offset,
+                            closing_bracket_offset
+                        ));
                     } else {
                         self.inner.set(opening_bracket_offset);
                     }
@@ -456,7 +479,10 @@ pub fn get_char_property(codepoint: char) -> CharClassification {
     CharClassification::Other
 }
 
-fn classify_boundary(prev: CharClassification, next: CharClassification) -> WordBoundary {
+fn classify_boundary(
+    prev: CharClassification,
+    next: CharClassification
+) -> WordBoundary {
     use self::{CharClassification::*, WordBoundary::*};
     match (prev, next) {
         (Lf, Lf) => Start,
@@ -472,7 +498,7 @@ fn classify_boundary(prev: CharClassification, next: CharClassification) -> Word
         (_, Lf) => End,
         (Punctuation, Other) => Both,
         (Other, Punctuation) => Both,
-        _ => Interior,
+        _ => Interior
     }
 }
 

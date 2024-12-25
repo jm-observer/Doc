@@ -1,25 +1,32 @@
-use crate::lines::word::WordCursor;
-use floem::kurbo::Rect;
-use floem::views::editor::text::PreeditData;
-use floem::peniko::Color;
-use super::phantom_text::{PhantomText, PhantomTextKind};
-use super::layout::{LineExtraStyle, TextLayoutLine, TextLayout};
-use floem::reactive::SignalGet;
-use floem::views::editor::core::char_buffer::CharBuffer;
+use floem::{
+    kurbo::Rect,
+    peniko::Color,
+    reactive::SignalGet,
+    views::editor::{core::char_buffer::CharBuffer, text::PreeditData}
+};
 use log::error;
-use crate::EditorViewKind;
-use crate::lines::buffer::Buffer;
-use crate::lines::buffer::rope_text::RopeText;
-use crate::lines::line::VisualLine;
-use crate::lines::screen_lines::{ScreenLines, VisualLineInfo};
-use crate::syntax::Syntax;
+
+use super::{
+    layout::{LineExtraStyle, TextLayout, TextLayoutLine},
+    phantom_text::{PhantomText, PhantomTextKind}
+};
+use crate::{
+    EditorViewKind,
+    lines::{
+        buffer::{Buffer, rope_text::RopeText},
+        line::VisualLine,
+        screen_lines::{ScreenLines, VisualLineInfo},
+        word::WordCursor
+    },
+    syntax::Syntax
+};
 
 pub fn compute_screen_lines(
     view_kind: EditorViewKind,
     base: Rect,
     vline_infos: Vec<VisualLine>,
     line_height: usize,
-    y0: f64,
+    y0: f64
 ) -> ScreenLines {
     match view_kind {
         EditorViewKind::Normal => {
@@ -29,12 +36,13 @@ pub fn compute_screen_lines(
 
             for visual_line in vline_infos {
                 let visual_line_y = visual_line.line_index * line_height;
-                let folded_line_y = visual_line_y - visual_line.origin_folded_line_sub_index * line_height;
+                let folded_line_y = visual_line_y
+                    - visual_line.origin_folded_line_sub_index * line_height;
 
                 let visual_line_info = VisualLineInfo {
                     folded_line_y: folded_line_y as f64 - y0,
                     visual_line_y: visual_line_y as f64 - y0,
-                    visual_line,
+                    visual_line
                 };
                 visual_lines.push(visual_line_info);
             }
@@ -43,11 +51,11 @@ pub fn compute_screen_lines(
                 diff_sections: None,
                 base,
                 line_height: line_height as f64
-                ,
             }
-        }
+        },
         EditorViewKind::Diff(_diff_info) => {
-            // TODO: let lines in diff view be wrapped, possibly screen_lines should be impl'd
+            // TODO: let lines in diff view be wrapped, possibly
+            // screen_lines should be impl'd
             // on DiffEditorData
             todo!()
             // let mut y_idx = 0;
@@ -58,15 +66,15 @@ pub fn compute_screen_lines(
             // let mut changes = diff_info.changes.iter().peekable();
             // let is_right = diff_info.is_right;
             //
-            // let line_y = |info: VLineInfo<()>, vline_y: usize| -> usize {
-            //     vline_y.saturating_sub(info.rvline.line_index * line_height)
-            // };
+            // let line_y = |info: VLineInfo<()>, vline_y: usize| ->
+            // usize {     vline_y.saturating_sub(info.
+            // rvline.line_index * line_height) };
             //
             // while let Some(change) = changes.next() {
             //     match (is_right, change) {
             //         (true, DiffLines::Left(range)) => {
-            //             if let Some(DiffLines::Right(_)) = changes.peek() {
-            //             } else {
+            //             if let Some(DiffLines::Right(_)) =
+            // changes.peek() {             } else {
             //                 let len = range.len();
             //                 diff_sections.push(DiffSection {
             //                     y_idx,
@@ -77,10 +85,10 @@ pub fn compute_screen_lines(
             //             }
             //         }
             //         (false, DiffLines::Right(range)) => {
-            //             let len = if let Some(DiffLines::Left(r)) = last_change {
-            //                 range.len() - r.len().min(range.len())
-            //             } else {
-            //                 range.len()
+            //             let len = if let Some(DiffLines::Left(r)) =
+            // last_change {                 range.len() -
+            // r.len().min(range.len())             } else
+            // {                 range.len()
             //             };
             //             if len > 0 {
             //                 diff_sections.push(DiffSection {
@@ -93,8 +101,9 @@ pub fn compute_screen_lines(
             //         }
             //         (true, DiffLines::Right(range))
             //         | (false, DiffLines::Left(range)) => {
-            //             // TODO: count vline count in the range instead
-            //             let height = range.len();
+            //             // TODO: count vline count in the range
+            // instead             let height =
+            // range.len();
             //
             //             diff_sections.push(DiffSection {
             //                 y_idx,
@@ -112,17 +121,20 @@ pub fn compute_screen_lines(
             //
             //             if y_idx < min_vline.get() {
             //                 if is_right {
-            //                     if let Some(DiffLines::Left(r)) = last_change {
-            //                         // TODO: count vline count in the other editor since this is skipping an amount dependent on those vlines
-            //                         let len = r.len() - r.len().min(range.len());
-            //                         if len > 0 {
-            //                             diff_sections.push(DiffSection {
+            //                     if let Some(DiffLines::Left(r)) =
+            // last_change {                         //
+            // TODO: count vline count in the other editor since this
+            // is skipping an amount dependent on those vlines
+            //                         let len = r.len() -
+            // r.len().min(range.len());
+            // if len > 0 {
+            // diff_sections.push(DiffSection {
             //                                 y_idx,
             //                                 height: len,
-            //                                 kind: DiffSectionKind::NoCode,
-            //                             });
-            //                             y_idx += len;
-            //                         }
+            //                                 kind:
+            // DiffSectionKind::NoCode,
+            // });                             y_idx +=
+            // len;                         }
             //                     };
             //                 }
             //                 last_change = Some(change);
@@ -130,12 +142,13 @@ pub fn compute_screen_lines(
             //             }
             //
             //             let start_rvline =
-            //                 lines.rvline_of_line(text_prov, range.start);
+            //                 lines.rvline_of_line(text_prov,
+            // range.start);
             //
-            //             // TODO: this wouldn't need to produce vlines if screen lines didn't
-            //             // require them.
-            //             let iter = lines
-            //                 .iter_rvlines_init(
+            //             // TODO: this wouldn't need to produce
+            // vlines if screen lines didn't
+            // // require them.             let iter =
+            // lines                 .iter_rvlines_init(
             //                     text_prov,
             //                     cache_rev,
             //                     config_id,
@@ -153,15 +166,15 @@ pub fn compute_screen_lines(
             //                 }
             //
             //                 rvlines.push(rvline);
-            //                 let vline_y = (initial_y_idx + i) * line_height;
-            //                 info.insert(
+            //                 let vline_y = (initial_y_idx + i) *
+            // line_height;                 info.insert(
             //                     rvline,
             //                     LineInfo {
-            //                         y: line_y(rvline_info, vline_y) as f64 - y0,
-            //                         vline_y: vline_y as f64 - y0,
-            //                         vline_info: rvline_info,
-            //                     },
-            //                 );
+            //                         y: line_y(rvline_info, vline_y)
+            // as f64 - y0,
+            // vline_y: vline_y as f64 - y0,
+            // vline_info: rvline_info,
+            // },                 );
             //
             //                 if initial_y_idx + i > max_vline.0 {
             //                     break;
@@ -169,16 +182,19 @@ pub fn compute_screen_lines(
             //             }
             //
             //             if is_right {
-            //                 if let Some(DiffLines::Left(r)) = last_change {
-            //                     // TODO: count vline count in the other editor since this is skipping an amount dependent on those vlines
-            //                     let len = r.len() - r.len().min(range.len());
-            //                     if len > 0 {
-            //                         diff_sections.push(DiffSection {
+            //                 if let Some(DiffLines::Left(r)) =
+            // last_change {                     // TODO:
+            // count vline count in the other editor since this is
+            // skipping an amount dependent on those vlines
+            //                     let len = r.len() -
+            // r.len().min(range.len());
+            // if len > 0 {
+            // diff_sections.push(DiffSection {
             //                             y_idx,
             //                             height: len,
-            //                             kind: DiffSectionKind::NoCode,
-            //                         });
-            //                         y_idx += len;
+            //                             kind:
+            // DiffSectionKind::NoCode,
+            // });                         y_idx += len;
             //                     }
             //                 };
             //             }
@@ -191,18 +207,16 @@ pub fn compute_screen_lines(
             //             };
             //             let len = bothinfo.right.len();
             //             let diff_height = len
-            //                 - bothinfo
-            //                     .skip
-            //                     .as_ref()
-            //                     .map(|skip| skip.len().saturating_sub(1))
-            //                     .unwrap_or(0);
+            //                 - bothinfo .skip .as_ref() .map(|skip|
+            //                   skip.len().saturating_sub(1)) .unwrap_or(0);
             //             if y_idx + diff_height < min_vline.get() {
             //                 y_idx += diff_height;
             //                 last_change = Some(change);
             //                 continue;
             //             }
             //
-            //             let start_rvline = lines.rvline_of_line(text_prov, start);
+            //             let start_rvline =
+            // lines.rvline_of_line(text_prov, start);
             //
             //             let mut iter = lines
             //                 .iter_rvlines_init(
@@ -212,16 +226,19 @@ pub fn compute_screen_lines(
             //                     start_rvline,
             //                     false,
             //                 )
-            //                 .take_while(|info| info.rvline.line < start + len);
-            //             while let Some(rvline_info) = iter.next() {
+            //                 .take_while(|info| info.rvline.line <
+            // start + len);             while let
+            // Some(rvline_info) = iter.next() {
             //                 let line = rvline_info.rvline.line;
             //
             //                 // Skip over the lines
-            //                 if let Some(skip) = bothinfo.skip.as_ref() {
-            //                     if Some(skip.start) == line.checked_sub(start) {
+            //                 if let Some(skip) =
+            // bothinfo.skip.as_ref() {
+            // if Some(skip.start) == line.checked_sub(start) {
             //                         y_idx += 1;
             //                         // Skip by `skip` count
-            //                         for _ in 0..skip.len().saturating_sub(1) {
+            //                         for _ in
+            // 0..skip.len().saturating_sub(1) {
             //                             iter.next();
             //                         }
             //                         continue;
@@ -235,11 +252,11 @@ pub fn compute_screen_lines(
             //                     info.insert(
             //                         rvline_info.rvline,
             //                         LineInfo {
-            //                             y: line_y(rvline_info, vline_y) as f64 - y0,
-            //                             vline_y: vline_y as f64 - y0,
-            //                             vline_info: rvline_info,
-            //                         },
-            //                     );
+            //                             y: line_y(rvline_info,
+            // vline_y) as f64 - y0,
+            // vline_y: vline_y as f64 - y0,
+            // vline_info: rvline_info,
+            // },                     );
             //                 }
             //
             //                 y_idx += 1;
@@ -266,13 +283,13 @@ pub fn preedit_phantom(
     preedit: &PreeditData,
     buffer: &Buffer,
     under_line: Option<Color>,
-    line: usize,
+    line: usize
 ) -> Option<PhantomText> {
     let preedit = preedit.preedit.get_untracked()?;
 
     let Ok((ime_line, col)) = buffer.offset_to_line_col(preedit.offset) else {
         error!("{}", preedit.offset);
-        return None
+        return None;
     };
 
     if line != ime_line {
@@ -290,7 +307,7 @@ pub fn preedit_phantom(
         fg: None,
         bg: None,
         under_line,
-        col,
+        col
     })
 }
 
@@ -324,7 +341,7 @@ pub fn apply_layout_styles(layout_line: &mut TextLayoutLine) {
                 phantom.final_col + phantom.text.len(),
                 phantom.bg,
                 phantom.under_line,
-                None,
+                None
             );
             for style in iter {
                 layout_line.extra_style.push(style)
@@ -338,8 +355,8 @@ pub fn extra_styles_for_range(
     end: usize,
     bg_color: Option<Color>,
     under_line: Option<Color>,
-    wave_line: Option<Color>,
-) -> impl Iterator<Item=LineExtraStyle> + '_ {
+    wave_line: Option<Color>
+) -> impl Iterator<Item = LineExtraStyle> + '_ {
     let start_hit = text_layout.hit_position(start);
     let end_hit = text_layout.hit_position(end);
 
@@ -377,18 +394,18 @@ pub fn extra_styles_for_range(
                 height,
                 bg_color,
                 under_line,
-                wave_line,
+                wave_line
             })
         })
 }
 
-
-/// Get the previous unmatched character `c` from the `offset` using `syntax` if applicable
+/// Get the previous unmatched character `c` from the `offset` using
+/// `syntax` if applicable
 pub fn syntax_prev_unmatched(
     buffer: &Buffer,
     syntax: &Syntax,
     c: char,
-    offset: usize,
+    offset: usize
 ) -> Option<usize> {
     if syntax.layers.is_some() {
         syntax.find_tag(offset, true, &CharBuffer::new(c))

@@ -4,46 +4,46 @@ use std::{
     collections::BTreeSet,
     fmt::Display,
     sync::{
-        atomic::{self, AtomicU64},
         Arc,
-    },
+        atomic::{self, AtomicU64}
+    }
 };
 
+use floem::views::editor::core::{indent::IndentStyle, mode::Mode};
 use lapce_xi_rope::{
-    multiset::Subset,
-    tree::{Node, NodeInfo},
     Delta, DeltaBuilder, DeltaElement, Interval, Rope, RopeDelta,
+    multiset::Subset,
+    tree::{Node, NodeInfo}
 };
 
-use floem::views::editor::core::{
-    mode::Mode,
-};
 use crate::lines::line_ending::{LineEnding, LineEndingDetermination};
-use floem::views::editor::core::indent::IndentStyle;
 
 pub mod diff;
 pub mod rope_text;
 
 use rope_text::*;
-use crate::lines::cursor::CursorMode;
-use crate::lines::edit::EditType;
-use crate::lines::indent::{auto_detect_indent_style};
-use crate::lines::selection::Selection;
-use crate::lines::word::WordCursor;
+
+use crate::lines::{
+    cursor::CursorMode, edit::EditType, indent::auto_detect_indent_style,
+    selection::Selection, word::WordCursor
+};
 
 #[derive(Clone)]
 enum Contents {
     Edit {
-        /// Groups related edits together so that they are undone and re-done
-        /// together. For example, an auto-indent insertion would be un-done
-        /// along with the newline that triggered it.
+        /// Groups related edits together so that they are undone and
+        /// re-done together. For example, an auto-indent
+        /// insertion would be un-done along with the newline
+        /// that triggered it.
         undo_group: usize,
-        /// The subset of the characters of the union string from after this
-        /// revision that were added by this revision.
-        inserts: Subset,
-        /// The subset of the characters of the union string from after this
-        /// revision that were deleted by this revision.
-        deletes: Subset,
+        /// The subset of the characters of the union string from
+        /// after this revision that were added by this
+        /// revision.
+        inserts:    Subset,
+        /// The subset of the characters of the union string from
+        /// after this revision that were deleted by this
+        /// revision.
+        deletes:    Subset
     },
     Undo {
         /// The set of groups toggled between undone and done.
@@ -51,47 +51,47 @@ enum Contents {
         toggled_groups: BTreeSet<usize>, // set of undo_group id's
         /// Used to store a reversible difference between the old
         /// and new deletes_from_union
-        deletes_bitxor: Subset,
-    },
+        deletes_bitxor: Subset
+    }
 }
 
 #[derive(Clone)]
 struct Revision {
-    num: u64,
+    num:             u64,
     max_undo_so_far: usize,
-    edit: Contents,
-    cursor_before: Option<CursorMode>,
-    cursor_after: Option<CursorMode>,
+    edit:            Contents,
+    cursor_before:   Option<CursorMode>,
+    cursor_after:    Option<CursorMode>
 }
 
 #[derive(Debug, Clone)]
 pub struct InvalLines {
-    pub start_line: usize,
+    pub start_line:  usize,
     pub inval_count: usize,
-    pub new_count: usize,
-    pub old_text: Rope,
+    pub new_count:   usize,
+    pub old_text:    Rope
 }
 
 #[derive(Clone)]
 pub struct Buffer {
-    rev_counter: u64,
+    rev_counter:     u64,
     pristine_rev_id: u64,
-    atomic_rev: Arc<AtomicU64>,
+    atomic_rev:      Arc<AtomicU64>,
 
-    text: Rope,
-    revs: Vec<Revision>,
-    cur_undo: usize,
-    undos: BTreeSet<usize>,
-    undo_group_id: usize,
-    live_undos: Vec<usize>,
+    text:               Rope,
+    revs:               Vec<Revision>,
+    cur_undo:           usize,
+    undos:              BTreeSet<usize>,
+    undo_group_id:      usize,
+    live_undos:         Vec<usize>,
     deletes_from_union: Subset,
-    undone_groups: BTreeSet<usize>,
-    tombstones: Rope,
-    this_edit_type: EditType,
-    last_edit_type: EditType,
+    undone_groups:      BTreeSet<usize>,
+    tombstones:         Rope,
+    this_edit_type:     EditType,
+    last_edit_type:     EditType,
 
     indent_style: IndentStyle,
-    line_ending: LineEnding,
+    line_ending:  LineEnding
 }
 
 impl Display for Buffer {
@@ -104,11 +104,13 @@ impl Buffer {
     pub fn new(text: impl Into<Rope>) -> Self {
         let text = text.into();
 
-        // Determine the line ending of the text and adjust it if necessary
+        // Determine the line ending of the text and adjust it if
+        // necessary
         let line_ending = LineEndingDetermination::determine(&text);
         let line_ending = line_ending.unwrap_or(LineEnding::Lf);
 
-        // Get rid of lone Cr's as Rope does not treat them as line endings
+        // Get rid of lone Cr's as Rope does not treat them as line
+        // endings
         let text = line_ending.normalize_limited(&text);
 
         let len = text.len();
@@ -120,14 +122,14 @@ impl Buffer {
             atomic_rev: Arc::new(AtomicU64::new(0)),
 
             revs: vec![Revision {
-                num: 0,
+                num:             0,
                 max_undo_so_far: 0,
-                edit: Contents::Undo {
+                edit:            Contents::Undo {
                     toggled_groups: BTreeSet::new(),
-                    deletes_bitxor: Subset::new(0),
+                    deletes_bitxor: Subset::new(0)
                 },
-                cursor_before: None,
-                cursor_after: None,
+                cursor_before:   None,
+                cursor_after:    None
             }],
             cur_undo: 1,
             undos: BTreeSet::new(),
@@ -140,7 +142,7 @@ impl Buffer {
             this_edit_type: EditType::Other,
             last_edit_type: EditType::Other,
             indent_style: IndentStyle::DEFAULT_INDENT,
-            line_ending,
+            line_ending
         }
     }
 
@@ -209,13 +211,17 @@ impl Buffer {
                 new_rev,
                 new_text,
                 new_tombstones,
-                new_deletes_from_union,
+                new_deletes_from_union
             );
         }
         self.set_pristine();
     }
 
-    pub fn reload(&mut self, content: Rope, set_pristine: bool) -> (Rope, RopeDelta, InvalLines) {
+    pub fn reload(
+        &mut self,
+        content: Rope,
+        set_pristine: bool
+    ) -> (Rope, RopeDelta, InvalLines) {
         // Determine the line ending of the new text
         let line_ending = LineEndingDetermination::determine(&content);
         self.line_ending = line_ending.unwrap_or(self.line_ending);
@@ -233,14 +239,16 @@ impl Buffer {
     }
 
     pub fn detect_indent(&mut self, default: impl FnOnce() -> IndentStyle) {
-        self.indent_style = auto_detect_indent_style(&self.text).unwrap_or_else(default);
+        self.indent_style =
+            auto_detect_indent_style(&self.text).unwrap_or_else(default);
     }
 
     pub fn indent_style(&self) -> IndentStyle {
         self.indent_style
     }
 
-    // TODO: users of this function should often be using Styling::indent_style instead!
+    // TODO: users of this function should often be using
+    // Styling::indent_style instead!
     pub fn indent_unit(&self) -> &'static str {
         self.indent_style.as_str()
     }
@@ -262,13 +270,12 @@ impl Buffer {
     pub fn edit<'a, I, E, S>(
         &mut self,
         edits: I,
-        edit_type: EditType,
+        edit_type: EditType
     ) -> (Rope, RopeDelta, InvalLines)
     where
         I: IntoIterator<Item = E>,
         E: Borrow<(S, &'a str)>,
-        S: AsRef<Selection>,
-    {
+        S: AsRef<Selection> {
         let mut builder = DeltaBuilder::new(self.len());
         let mut interval_rope = Vec::new();
         for edit in edits {
@@ -288,11 +295,14 @@ impl Buffer {
             }
         });
         for (start, end, rope) in interval_rope.into_iter() {
-            // TODO(minor): normalizing line endings here technically has an edge-case where it
-            // could be that we put a `\r` at the end of a replacement, then a `\n` at the start of
-            // a replacement right after it, and then it becomes a double newline.
-            // A possible alternative that might be better overall (?) would be to get the range of
-            // the delta and normalize that area after applying the delta.
+            // TODO(minor): normalizing line endings here technically
+            // has an edge-case where it could be that we
+            // put a `\r` at the end of a replacement, then a `\n` at
+            // the start of a replacement right after it,
+            // and then it becomes a double newline.
+            // A possible alternative that might be better overall (?)
+            // would be to get the range of the delta and
+            // normalize that area after applying the delta.
             builder.replace(start..end, self.line_ending.normalize(&rope));
         }
         let delta = builder.build();
@@ -300,7 +310,9 @@ impl Buffer {
         self.add_delta(delta)
     }
 
-    pub fn normalize_line_endings(&mut self) -> Option<(Rope, RopeDelta, InvalLines)> {
+    pub fn normalize_line_endings(
+        &mut self
+    ) -> Option<(Rope, RopeDelta, InvalLines)> {
         let Some(delta) = self.line_ending.normalize_delta(&self.text) else {
             // There were no changes needed
             return None;
@@ -309,7 +321,8 @@ impl Buffer {
         Some(self.add_delta(delta))
     }
 
-    // TODO: don't clone the delta and return it, if the caller needs it then they can clone it
+    // TODO: don't clone the delta and return it, if the caller needs
+    // it then they can clone it
     /// Note: the delta's line-endings should be normalized.
     fn add_delta(&mut self, delta: RopeDelta) -> (Rope, RopeDelta, InvalLines) {
         let text = self.text.clone();
@@ -325,7 +338,7 @@ impl Buffer {
             new_rev,
             new_text,
             new_tombstones,
-            new_deletes_from_union,
+            new_deletes_from_union
         );
 
         (text, delta, inval_lines)
@@ -337,7 +350,7 @@ impl Buffer {
         new_rev: Revision,
         new_text: Rope,
         new_tombstones: Rope,
-        new_deletes_from_union: Subset,
+        new_deletes_from_union: Subset
     ) -> InvalLines {
         self.rev_counter += 1;
 
@@ -359,13 +372,14 @@ impl Buffer {
             start_line: logical_start_line,
             inval_count: old_hard_count,
             new_count: new_hard_count,
-            old_text,
+            old_text
         }
     }
 
     fn calculate_undo_group(&mut self) -> usize {
         let has_undos = !self.live_undos.is_empty();
-        let is_unbroken_group = !self.this_edit_type.breaks_undo_group(self.last_edit_type);
+        let is_unbroken_group =
+            !self.this_edit_type.breaks_undo_group(self.last_edit_type);
 
         if has_undos && is_unbroken_group {
             *self.live_undos.last().unwrap()
@@ -379,8 +393,13 @@ impl Buffer {
         }
     }
 
-    /// Returns `(Revision, new text, new tombstones, new deletes from union)`
-    fn mk_new_rev(&self, undo_group: usize, delta: RopeDelta) -> (Revision, Rope, Rope, Subset) {
+    /// Returns `(Revision, new text, new tombstones, new deletes from
+    /// union)`
+    fn mk_new_rev(
+        &self,
+        undo_group: usize,
+        delta: RopeDelta
+    ) -> (Revision, Rope, Rope, Subset) {
         let (ins_delta, deletes) = delta.factor();
 
         let deletes_at_rev = &self.deletes_from_union;
@@ -393,9 +412,11 @@ impl Buffer {
             new_deletes = new_deletes.transform_expand(&new_inserts);
         }
         let cur_deletes_from_union = &self.deletes_from_union;
-        let text_ins_delta = union_ins_delta.transform_shrink(cur_deletes_from_union);
+        let text_ins_delta =
+            union_ins_delta.transform_shrink(cur_deletes_from_union);
         let text_with_inserts = text_ins_delta.apply(&self.text);
-        let rebased_deletes_from_union = cur_deletes_from_union.transform_expand(&new_inserts);
+        let rebased_deletes_from_union =
+            cur_deletes_from_union.transform_expand(&new_inserts);
 
         let undone = self.undone_groups.contains(&undo_group);
         let new_deletes_from_union = {
@@ -407,7 +428,7 @@ impl Buffer {
             &text_with_inserts,
             &self.tombstones,
             &rebased_deletes_from_union,
-            &new_deletes_from_union,
+            &new_deletes_from_union
         );
 
         let head_rev = self.revs.last().unwrap();
@@ -415,19 +436,19 @@ impl Buffer {
             .store(self.rev_counter, atomic::Ordering::Release);
         (
             Revision {
-                num: self.rev_counter,
+                num:             self.rev_counter,
                 max_undo_so_far: std::cmp::max(undo_group, head_rev.max_undo_so_far),
-                edit: Contents::Edit {
+                edit:            Contents::Edit {
                     undo_group,
                     inserts: new_inserts,
-                    deletes: new_deletes,
+                    deletes: new_deletes
                 },
-                cursor_before: None,
-                cursor_after: None,
+                cursor_before:   None,
+                cursor_after:    None
             },
             new_text,
             new_tombstones,
-            new_deletes_from_union,
+            new_deletes_from_union
         )
     }
 
@@ -440,18 +461,24 @@ impl Buffer {
         for rev in &self.revs[rev_index + 1..] {
             if let Contents::Edit { ref inserts, .. } = rev.edit {
                 if !inserts.is_empty() {
-                    deletes_from_union = Cow::Owned(deletes_from_union.transform_union(inserts));
+                    deletes_from_union =
+                        Cow::Owned(deletes_from_union.transform_union(inserts));
                 }
             }
         }
         deletes_from_union
     }
 
-    fn deletes_from_union_before_index(&self, rev_index: usize, invert_undos: bool) -> Cow<Subset> {
+    fn deletes_from_union_before_index(
+        &self,
+        rev_index: usize,
+        invert_undos: bool
+    ) -> Cow<Subset> {
         let mut deletes_from_union = Cow::Borrowed(&self.deletes_from_union);
         let mut undone_groups = Cow::Borrowed(&self.undone_groups);
 
-        // invert the changes to deletes_from_union starting in the present and working backwards
+        // invert the changes to deletes_from_union starting in the
+        // present and working backwards
         for rev in self.revs[rev_index..].iter().rev() {
             deletes_from_union = match rev.edit {
                 Contents::Edit {
@@ -461,16 +488,17 @@ impl Buffer {
                     ..
                 } => {
                     if undone_groups.contains(undo_group) {
-                        // no need to un-delete undone inserts since we'll just shrink them out
+                        // no need to un-delete undone inserts since
+                        // we'll just shrink them out
                         Cow::Owned(deletes_from_union.transform_shrink(inserts))
                     } else {
                         let un_deleted = deletes_from_union.subtract(deletes);
                         Cow::Owned(un_deleted.transform_shrink(inserts))
                     }
-                }
+                },
                 Contents::Undo {
                     ref toggled_groups,
-                    ref deletes_bitxor,
+                    ref deletes_bitxor
                 } => {
                     if invert_undos {
                         let new_undone = undone_groups
@@ -482,13 +510,16 @@ impl Buffer {
                     } else {
                         deletes_from_union
                     }
-                }
+                },
             }
         }
         deletes_from_union
     }
 
-    fn find_first_undo_candidate_index(&self, toggled_groups: &BTreeSet<usize>) -> usize {
+    fn find_first_undo_candidate_index(
+        &self,
+        toggled_groups: &BTreeSet<usize>
+    ) -> usize {
         // find the lowest toggled undo group number
         if let Some(lowest_group) = toggled_groups.iter().cloned().next() {
             for (i, rev) in self.revs.iter().enumerate().rev() {
@@ -510,7 +541,8 @@ impl Buffer {
             .cloned()
             .collect();
         let first_candidate = self.find_first_undo_candidate_index(&toggled_groups);
-        // the `false` below: don't invert undos since our first_candidate is based on the current undo set, not past
+        // the `false` below: don't invert undos since our
+        // first_candidate is based on the current undo set, not past
         let mut deletes_from_union = self
             .deletes_from_union_before_index(first_candidate, false)
             .into_owned();
@@ -525,11 +557,13 @@ impl Buffer {
             {
                 if groups.contains(undo_group) {
                     if !inserts.is_empty() {
-                        deletes_from_union = deletes_from_union.transform_union(inserts);
+                        deletes_from_union =
+                            deletes_from_union.transform_union(inserts);
                     }
                 } else {
                     if !inserts.is_empty() {
-                        deletes_from_union = deletes_from_union.transform_expand(inserts);
+                        deletes_from_union =
+                            deletes_from_union.transform_expand(inserts);
                     }
                     if !deletes.is_empty() {
                         deletes_from_union = deletes_from_union.union(deletes);
@@ -548,7 +582,7 @@ impl Buffer {
             .get(first_candidate)
             .and_then(|rev| match &rev.edit {
                 Contents::Edit { undo_group, .. } => Some(undo_group),
-                Contents::Undo { .. } => None,
+                Contents::Undo { .. } => None
             })
             .and_then(|group| {
                 let mut cursor = None;
@@ -574,38 +608,38 @@ impl Buffer {
                 max_undo_so_far,
                 edit: Contents::Undo {
                     toggled_groups,
-                    deletes_bitxor,
+                    deletes_bitxor
                 },
                 cursor_before,
-                cursor_after,
+                cursor_after
             },
-            deletes_from_union,
+            deletes_from_union
         )
     }
 
     fn undo(
         &mut self,
-        groups: BTreeSet<usize>,
+        groups: BTreeSet<usize>
     ) -> (
         Rope,
         RopeDelta,
         InvalLines,
         Option<CursorMode>,
-        Option<CursorMode>,
+        Option<CursorMode>
     ) {
         let text = self.text.clone();
         let (new_rev, new_deletes_from_union) = self.compute_undo(&groups);
         let delta = Delta::synthesize(
             &self.tombstones,
             &self.deletes_from_union,
-            &new_deletes_from_union,
+            &new_deletes_from_union
         );
         let new_text = delta.apply(&self.text);
         let new_tombstones = shuffle_tombstones(
             &self.text,
             &self.tombstones,
             &self.deletes_from_union,
-            &new_deletes_from_union,
+            &new_deletes_from_union
         );
         self.undone_groups = groups;
 
@@ -617,13 +651,15 @@ impl Buffer {
             new_rev,
             new_text,
             new_tombstones,
-            new_deletes_from_union,
+            new_deletes_from_union
         );
 
         (text, delta, inval_lines, cursor_before, cursor_after)
     }
 
-    pub fn do_undo(&mut self) -> Option<(Rope, RopeDelta, InvalLines, Option<CursorMode>)> {
+    pub fn do_undo(
+        &mut self
+    ) -> Option<(Rope, RopeDelta, InvalLines, Option<CursorMode>)> {
         if self.cur_undo <= 1 {
             return None;
         }
@@ -637,7 +673,9 @@ impl Buffer {
         Some((text, delta, inval_lines, cursor_before))
     }
 
-    pub fn do_redo(&mut self) -> Option<(Rope, RopeDelta, InvalLines, Option<CursorMode>)> {
+    pub fn do_redo(
+        &mut self
+    ) -> Option<(Rope, RopeDelta, InvalLines, Option<CursorMode>)> {
         if self.cur_undo >= self.live_undos.len() {
             return None;
         }
@@ -680,15 +718,17 @@ fn shuffle_tombstones(
     text: &Rope,
     tombstones: &Rope,
     old_deletes_from_union: &Subset,
-    new_deletes_from_union: &Subset,
+    new_deletes_from_union: &Subset
 ) -> Rope {
-    // Taking the complement of deletes_from_union leads to an interleaving valid for swapped text and tombstones,
-    // allowing us to use the same method to insert the text into the tombstones.
+    // Taking the complement of deletes_from_union leads to an
+    // interleaving valid for swapped text and tombstones,
+    // allowing us to use the same method to insert the text into the
+    // tombstones.
     let inverse_tombstones_map = old_deletes_from_union.complement();
     let move_delta = Delta::synthesize(
         text,
         &inverse_tombstones_map,
-        &new_deletes_from_union.complement(),
+        &new_deletes_from_union.complement()
     );
     move_delta.apply(tombstones)
 }
@@ -697,10 +737,14 @@ fn shuffle(
     text: &Rope,
     tombstones: &Rope,
     old_deletes_from_union: &Subset,
-    new_deletes_from_union: &Subset,
+    new_deletes_from_union: &Subset
 ) -> (Rope, Rope) {
     // Delta that deletes the right bits from the text
-    let del_delta = Delta::synthesize(tombstones, old_deletes_from_union, new_deletes_from_union);
+    let del_delta = Delta::synthesize(
+        tombstones,
+        old_deletes_from_union,
+        new_deletes_from_union
+    );
     let new_text = del_delta.apply(text);
     (
         new_text,
@@ -708,30 +752,31 @@ fn shuffle(
             text,
             tombstones,
             old_deletes_from_union,
-            new_deletes_from_union,
-        ),
+            new_deletes_from_union
+        )
     )
 }
 
 pub struct DeltaValueRegion<'a, N: NodeInfo + 'a> {
     pub old_offset: usize,
     pub new_offset: usize,
-    pub len: usize,
-    pub node: &'a Node<N>,
+    pub len:        usize,
+    pub node:       &'a Node<N>
 }
 
-/// Modified version of `xi_rope::delta::InsertsIter` which includes the node
+/// Modified version of `xi_rope::delta::InsertsIter` which includes
+/// the node
 pub struct InsertsValueIter<'a, N: NodeInfo + 'a> {
-    pos: usize,
+    pos:      usize,
     last_end: usize,
-    els_iter: std::slice::Iter<'a, DeltaElement<N>>,
+    els_iter: std::slice::Iter<'a, DeltaElement<N>>
 }
 impl<'a, N: NodeInfo + 'a> InsertsValueIter<'a, N> {
     pub fn new(delta: &'a Delta<N>) -> InsertsValueIter<'a, N> {
         InsertsValueIter {
-            pos: 0,
+            pos:      0,
             last_end: 0,
-            els_iter: delta.els.iter(),
+            els_iter: delta.els.iter()
         }
     }
 }
@@ -744,13 +789,13 @@ impl<'a, N: NodeInfo> Iterator for InsertsValueIter<'a, N> {
                 DeltaElement::Copy(b, e) => {
                     self.pos += e - b;
                     self.last_end = e;
-                }
+                },
                 DeltaElement::Insert(ref n) => {
                     let result = Some(DeltaValueRegion {
                         old_offset: self.last_end,
                         new_offset: self.pos,
-                        len: n.len(),
-                        node: n,
+                        len:        n.len(),
+                        node:       n
                     });
                     self.pos += n.len();
                     self.last_end += n.len();

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
+
 use floem::peniko::Color;
 use lsp_types::DiagnosticSeverity;
 use serde::{Deserialize, Serialize};
 
 pub const SCALE_OR_SIZE_LIMIT: f64 = 5.0;
-
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq)]
 pub enum WrapStyle {
@@ -16,7 +16,7 @@ pub enum WrapStyle {
     // /// Wrap at the wrap-column
     // WrapColumn,
     /// Wrap at a specific width
-    WrapWidth,
+    WrapWidth
 }
 impl WrapStyle {
     pub fn as_str(&self) -> &'static str {
@@ -24,7 +24,7 @@ impl WrapStyle {
             WrapStyle::None => "none",
             WrapStyle::EditorWidth => "editor-width",
             // WrapStyle::WrapColumn => "wrap-column",
-            WrapStyle::WrapWidth => "wrap-width",
+            WrapStyle::WrapWidth => "wrap-width"
         }
     }
 
@@ -34,7 +34,7 @@ impl WrapStyle {
             "editor-width" => Some(WrapStyle::EditorWidth),
             // "wrap-column" => Some(WrapStyle::WrapColumn),
             "wrap-width" => Some(WrapStyle::WrapWidth),
-            _ => None,
+            _ => None
         }
     }
 }
@@ -47,40 +47,39 @@ impl std::fmt::Display for WrapStyle {
     }
 }
 
-
 #[derive(Debug, Clone, Deserialize, Serialize, Default, Eq, PartialEq)]
 pub struct EditorConfig {
-    pub font_family: String,
-    pub font_size: usize,
-    pub line_height: usize,
-    pub enable_inlay_hints: bool,
-    pub inlay_hint_font_size: usize,
-    pub enable_error_lens: bool,
-    pub error_lens_end_of_line: bool,
-    pub error_lens_multiline: bool,
-    pub error_lens_font_size: usize,
-    pub enable_completion_lens: bool,
-    pub enable_inline_completion: bool,
+    pub font_family:               String,
+    pub font_size:                 usize,
+    pub line_height:               usize,
+    pub enable_inlay_hints:        bool,
+    pub inlay_hint_font_size:      usize,
+    pub enable_error_lens:         bool,
+    pub error_lens_end_of_line:    bool,
+    pub error_lens_multiline:      bool,
+    pub error_lens_font_size:      usize,
+    pub enable_completion_lens:    bool,
+    pub enable_inline_completion:  bool,
     pub completion_lens_font_size: usize,
     pub only_render_error_styling: bool,
 
     pub auto_closing_matching_pairs: bool,
-    pub auto_surround: bool,
+    pub auto_surround:               bool,
 
     pub diagnostic_error: Color,
-    pub diagnostic_warn: Color,
-    pub inlay_hint_fg: Color,
-    pub inlay_hint_bg: Color,
+    pub diagnostic_warn:  Color,
+    pub inlay_hint_fg:    Color,
+    pub inlay_hint_bg:    Color,
 
-    pub error_lens_error_foreground: Color,
+    pub error_lens_error_foreground:   Color,
     pub error_lens_warning_foreground: Color,
-    pub error_lens_other_foreground: Color,
+    pub error_lens_other_foreground:   Color,
 
     pub completion_lens_foreground: Color,
 
     pub editor_foreground: Color,
 
-    pub syntax: HashMap<String, Color>,
+    pub syntax: HashMap<String, Color>
 }
 
 impl EditorConfig {
@@ -126,20 +125,26 @@ impl EditorConfig {
     //     self.blink_interval.max(200)
     // }
 
-    pub fn color_of_diagnostic(&self, diagnostic_severity: DiagnosticSeverity) -> Option<Color> {
+    pub fn color_of_diagnostic(
+        &self,
+        diagnostic_severity: DiagnosticSeverity
+    ) -> Option<Color> {
         use DiagnosticSeverity;
         match diagnostic_severity {
             DiagnosticSeverity::ERROR => Some(self.diagnostic_error),
             DiagnosticSeverity::WARNING => Some(self.diagnostic_warn),
-            _=> None
+            _ => None
         }
     }
 
-    pub fn color_of_error_lens(&self, diagnostic_severity: DiagnosticSeverity) -> Color {
+    pub fn color_of_error_lens(
+        &self,
+        diagnostic_severity: DiagnosticSeverity
+    ) -> Color {
         match diagnostic_severity {
             DiagnosticSeverity::ERROR => self.error_lens_error_foreground,
             DiagnosticSeverity::WARNING => self.error_lens_warning_foreground,
-            _=> self.error_lens_other_foreground,
+            _ => self.error_lens_other_foreground
         }
     }
 
@@ -152,5 +157,3 @@ impl EditorConfig {
         }
     }
 }
-
-

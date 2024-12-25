@@ -1,14 +1,21 @@
-use floem::views::editor::core::chars::{char_is_line_ending, char_is_whitespace};
-use floem::views::editor::core::indent::IndentStyle;
-use lapce_xi_rope::Rope;
 use anyhow::Result;
+use floem::views::editor::core::{
+    chars::{char_is_line_ending, char_is_whitespace},
+    indent::IndentStyle
+};
+use lapce_xi_rope::Rope;
 use log::error;
 
-use crate::{
-    lines::{buffer::{rope_text::RopeText, Buffer}, selection::Selection},
+use crate::lines::{
+    buffer::{Buffer, rope_text::RopeText},
+    selection::Selection
 };
 
-pub fn create_edit<'s>(buffer: &Buffer, offset: usize, indent: &'s str) -> Result<(Selection, &'s str)> {
+pub fn create_edit<'s>(
+    buffer: &Buffer,
+    offset: usize,
+    indent: &'s str
+) -> Result<(Selection, &'s str)> {
     let indent = if indent.starts_with('\t') {
         indent
     } else {
@@ -21,10 +28,10 @@ pub fn create_edit<'s>(buffer: &Buffer, offset: usize, indent: &'s str) -> Resul
 pub fn create_outdent<'s>(
     buffer: &Buffer,
     offset: usize,
-    indent: &'s str,
+    indent: &'s str
 ) -> Option<(Selection, &'s str)> {
     let (_, col) = match buffer.offset_to_line_col(offset) {
-        Ok(rs) => {rs}
+        Ok(rs) => rs,
         Err(err) => {
             error!("{err:?}");
             return None;
@@ -59,12 +66,13 @@ pub fn auto_detect_indent_style(document_text: &Rope) -> Option<IndentStyle> {
         let mut prev_line_is_tabs = false;
         let mut prev_line_leading_count = 0usize;
 
-        // Loop through the lines, checking for and recording indentation
-        // increases as we go.
-        let Ok(offset) = document_text
-            .offset_of_line(document_text.line_of_offset(document_text.len()).min(1000)) else {
+        // Loop through the lines, checking for and recording
+        // indentation increases as we go.
+        let Ok(offset) = document_text.offset_of_line(
+            document_text.line_of_offset(document_text.len()).min(1000)
+        ) else {
             error!("offset_of_line fail");
-          return None
+            return None;
         };
         'outer: for line in document_text.lines(..offset) {
             let mut c_iter = line.chars();
@@ -92,26 +100,30 @@ pub fn auto_detect_indent_style(document_text: &Rope) -> Option<IndentStyle> {
                     '\t' if is_tabs && !count_is_done => leading_count += 1,
                     ' ' if !is_tabs && !count_is_done => leading_count += 1,
 
-                    // We stop counting if we hit whitespace that doesn't
-                    // qualify as indent or doesn't match the leading
-                    // whitespace, but we don't exit the loop yet because
-                    // we still want to determine if the line is blank.
+                    // We stop counting if we hit whitespace that
+                    // doesn't qualify as indent
+                    // or doesn't match the leading
+                    // whitespace, but we don't exit the loop yet
+                    // because we still want to
+                    // determine if the line is blank.
                     c if char_is_whitespace(c) => count_is_done = true,
 
                     // Ignore blank lines.
                     c if char_is_line_ending(c) => continue 'outer,
 
-                    _ => break,
+                    _ => break
                 }
 
-                // Bound the worst-case execution time for weird text files.
+                // Bound the worst-case execution time for weird text
+                // files.
                 if leading_count > 256 {
                     continue 'outer;
                 }
             }
 
-            // If there was an increase in indentation over the previous
-            // line, update the histogram with that increase.
+            // If there was an increase in indentation over the
+            // previous line, update the histogram with
+            // that increase.
             if (prev_line_is_tabs == is_tabs || prev_line_leading_count == 0)
                 && prev_line_leading_count < leading_count
             {
@@ -138,8 +150,8 @@ pub fn auto_detect_indent_style(document_text: &Rope) -> Option<IndentStyle> {
         histogram
     };
 
-    // Find the most frequent indent, its frequency, and the frequency of
-    // the next-most frequent indent.
+    // Find the most frequent indent, its frequency, and the frequency
+    // of the next-most frequent indent.
     let indent = histogram
         .iter()
         .enumerate()
@@ -155,12 +167,12 @@ pub fn auto_detect_indent_style(document_text: &Rope) -> Option<IndentStyle> {
         .max()
         .unwrap();
 
-    // Return the auto-detected result if we're confident enough in its
-    // accuracy, based on some heuristics.
+    // Return the auto-detected result if we're confident enough in
+    // its accuracy, based on some heuristics.
     if indent_freq >= 1 && (indent_freq_2 as f64 / indent_freq as f64) < 0.66 {
         Some(match indent {
             0 => IndentStyle::Tabs,
-            _ => IndentStyle::Spaces(indent as u8),
+            _ => IndentStyle::Spaces(indent as u8)
         })
     } else {
         None

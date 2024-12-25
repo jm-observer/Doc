@@ -1,10 +1,11 @@
 use lsp_types::Position;
+
 use crate::lines::fold::{FoldingDisplayItem, FoldingRange};
 
 pub enum UpdateFolding {
     UpdateByItem(FoldingDisplayItem),
     UpdateByPhantom(Position),
-    New(Vec<FoldingRange>),
+    New(Vec<FoldingRange>)
 }
 
 impl From<FoldingDisplayItem> for UpdateFolding {

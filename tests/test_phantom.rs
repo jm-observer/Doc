@@ -1,5 +1,9 @@
 use log::debug;
-use crate::lines_util::{check_line_final_col, check_lines_col, folded_v1, folded_v2, init_main, init_main_2};
+
+use crate::lines_util::{
+    check_line_final_col, check_lines_col, folded_v1, folded_v2, init_main,
+    init_main_2
+};
 
 mod lines_util;
 
@@ -13,9 +17,12 @@ fn test_folded_line_1() {
             &line2.text_layout.phantom_text.text,
             line2.text_layout.phantom_text.final_text_len,
             "    if true {\r\n    } else {\r\n",
-            "    if true {...} else {\r\n",
+            "    if true {...} else {\r\n"
         );
-        check_line_final_col(&line2.text_layout.phantom_text, "    if true {...} else {\r\n");
+        check_line_final_col(
+            &line2.text_layout.phantom_text,
+            "    if true {...} else {\r\n"
+        );
     }
     {
         let let_line = &_lines.visual_lines[4];
@@ -26,7 +33,7 @@ fn test_folded_line_1() {
             &let_line.text_layout.phantom_text.text,
             let_line.text_layout.phantom_text.final_text_len,
             "    let a = A;\r\n",
-            expect_str,
+            expect_str
         );
         check_line_final_col(&let_line.text_layout.phantom_text, expect_str);
     }
@@ -43,8 +50,11 @@ fn test_folded_line_1_5() {
             &line2.text_layout.phantom_text.text,
             line2.text_layout.phantom_text.final_text_len,
             "    if true {\r\n    } else {\r\n    }\r\n",
-            "    if true {...} else {...}\r\n",
+            "    if true {...} else {...}\r\n"
         );
-        check_line_final_col(&line2.text_layout.phantom_text, "    if true {...} else {...}\r\n");
+        check_line_final_col(
+            &line2.text_layout.phantom_text,
+            "    if true {...} else {...}\r\n"
+        );
     }
 }

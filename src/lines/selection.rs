@@ -1,20 +1,23 @@
-use std::cmp::{max, min, Ordering};
+use std::cmp::{Ordering, max, min};
 
 use lapce_xi_rope::{RopeDelta, Transformer};
 use serde::{Deserialize, Serialize};
 
 use crate::lines::cursor::ColPosition;
 
-/// Indicate whether a delta should be applied inside, outside non-caret selection or
-/// after a caret selection (see [`Selection::apply_delta`].
+/// Indicate whether a delta should be applied inside, outside
+/// non-caret selection or after a caret selection (see
+/// [`Selection::apply_delta`].
 #[derive(Copy, Clone)]
 pub enum InsertDrift {
-    /// Indicates this edit should happen within any (non-caret) selections if possible.
+    /// Indicates this edit should happen within any (non-caret)
+    /// selections if possible.
     Inside,
-    /// Indicates this edit should happen outside any selections if possible.
+    /// Indicates this edit should happen outside any selections if
+    /// possible.
     Outside,
     /// Indicates to do whatever the `after` bool says to do
-    Default,
+    Default
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
@@ -22,17 +25,18 @@ pub struct SelRegion {
     /// Region start offset
     pub start: usize,
     /// Region end offset
-    pub end: usize,
+    pub end:   usize,
     /// Horizontal rules for multiple selection
-    pub horiz: Option<ColPosition>,
+    pub horiz: Option<ColPosition>
 }
 
 /// A selection holding one or more [`SelRegion`].
-/// Regions are kept in order from the leftmost selection to the rightmost selection.
+/// Regions are kept in order from the leftmost selection to the
+/// rightmost selection.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Selection {
-    regions: Vec<SelRegion>,
-    last_inserted: usize,
+    regions:       Vec<SelRegion>,
+    last_inserted: usize
 }
 
 impl AsRef<Selection> for Selection {
@@ -48,16 +52,18 @@ impl SelRegion {
     }
 
     /// Creates a caret [`SelRegion`],
-    /// i.e. `start` and `end` position are both set to `offset` value.
+    /// i.e. `start` and `end` position are both set to `offset`
+    /// value.
     pub fn caret(offset: usize) -> SelRegion {
         SelRegion {
             start: offset,
-            end: offset,
-            horiz: None,
+            end:   offset,
+            horiz: None
         }
     }
 
-    /// Return the minimum value between region's start and end position
+    /// Return the minimum value between region's start and end
+    /// position
     ///
     /// **Example:**
     ///
@@ -72,7 +78,8 @@ impl SelRegion {
         min(self.start, self.end)
     }
 
-    /// Return the maximum value between region's start and end position.
+    /// Return the maximum value between region's start and end
+    /// position.
     ///
     /// **Example:**
     ///
@@ -87,7 +94,8 @@ impl SelRegion {
         max(self.start, self.end)
     }
 
-    /// A [`SelRegion`] is considered to be a caret when its start and end position are equal.
+    /// A [`SelRegion`] is considered to be a caret when its start and
+    /// end position are equal.
     ///
     /// **Example:**
     ///
@@ -136,38 +144,41 @@ impl Selection {
     /// Creates a new empty [`Selection`]
     pub fn new() -> Selection {
         Selection {
-            regions: Vec::new(),
-            last_inserted: 0,
+            regions:       Vec::new(),
+            last_inserted: 0
         }
     }
 
-    /// Creates a caret [`Selection`], i.e. a selection with a single caret [`SelRegion`]
+    /// Creates a caret [`Selection`], i.e. a selection with a single
+    /// caret [`SelRegion`]
     pub fn caret(offset: usize) -> Selection {
         Selection {
-            regions: vec![SelRegion::caret(offset)],
-            last_inserted: 0,
+            regions:       vec![SelRegion::caret(offset)],
+            last_inserted: 0
         }
     }
 
-    /// Creates a region [`Selection`], i.e. a selection with a single [`SelRegion`]
-    /// from `start` to `end` position
+    /// Creates a region [`Selection`], i.e. a selection with a single
+    /// [`SelRegion`] from `start` to `end` position
     pub fn region(start: usize, end: usize) -> Self {
         Self::sel_region(SelRegion {
             start,
             end,
-            horiz: None,
+            horiz: None
         })
     }
 
-    /// Creates a [`Selection`], with a single [`SelRegion`] equal to `region`.
+    /// Creates a [`Selection`], with a single [`SelRegion`] equal to
+    /// `region`.
     pub fn sel_region(region: SelRegion) -> Self {
         Self {
-            regions: vec![region],
-            last_inserted: 0,
+            regions:       vec![region],
+            last_inserted: 0
         }
     }
 
-    /// Returns whether this [`Selection`], contains the given `offset` position or not.
+    /// Returns whether this [`Selection`], contains the given
+    /// `offset` position or not.
     ///
     /// **Example:**
     ///
@@ -198,8 +209,8 @@ impl Selection {
         &mut self.regions
     }
 
-    /// Returns a copy of [`self`] with all regions converted to caret region at their respective
-    /// [`SelRegion::min`] offset.
+    /// Returns a copy of [`self`] with all regions converted to caret
+    /// region at their respective [`SelRegion::min`] offset.
     ///
     /// **Examples:**
     ///
@@ -234,12 +245,14 @@ impl Selection {
         self.regions.get(self.len() - 1)
     }
 
-    /// Get the last inserted [`SelRegion`] in this selection if present.
+    /// Get the last inserted [`SelRegion`] in this selection if
+    /// present.
     pub fn last_inserted(&self) -> Option<&SelRegion> {
         self.regions.get(self.last_inserted)
     }
 
-    /// Get a mutable reference to the last inserted [`SelRegion`] in this selection if present.
+    /// Get a mutable reference to the last inserted [`SelRegion`] in
+    /// this selection if present.
     pub fn last_inserted_mut(&mut self) -> Option<&mut SelRegion> {
         self.regions.get_mut(self.last_inserted)
     }
@@ -260,7 +273,8 @@ impl Selection {
         self.len() == 0
     }
 
-    /// Returns the minimal offset across all region of this selection.
+    /// Returns the minimal offset across all region of this
+    /// selection.
     ///
     /// This function panics if the selection is empty.
     ///
@@ -282,7 +296,8 @@ impl Selection {
         offset
     }
 
-    /// Returns the maximal offset across all region of this selection.
+    /// Returns the maximal offset across all region of this
+    /// selection.
     ///
     /// This function panics if the selection is empty.
     ///
@@ -304,8 +319,8 @@ impl Selection {
         offset
     }
 
-    /// Returns regions in [`self`] overlapping or fully enclosed in the provided
-    /// `start` to `end` range.
+    /// Returns regions in [`self`] overlapping or fully enclosed in
+    /// the provided `start` to `end` range.
     ///
     /// **Example:**
     ///
@@ -332,7 +347,8 @@ impl Selection {
         &self.regions[first..last]
     }
 
-    /// Returns regions in [`self`] starting between `start` to `end` range.
+    /// Returns regions in [`self`] starting between `start` to `end`
+    /// range.
     ///
     /// **Example:**
     ///
@@ -358,7 +374,8 @@ impl Selection {
         &self.regions[first..last]
     }
 
-    /// Deletes regions in [`self`] overlapping or enclosing in `start` to `end` range.
+    /// Deletes regions in [`self`] overlapping or enclosing in
+    /// `start` to `end` range.
     ///
     /// **Example:**
     ///
@@ -387,8 +404,9 @@ impl Selection {
         remove_n_at(&mut self.regions, first, last - first);
     }
 
-    /// Add a regions to [`self`]. Note that if provided region overlap
-    /// on of the selection regions they will be merged in a single region.
+    /// Add a regions to [`self`]. Note that if provided region
+    /// overlap on of the selection regions they will be merged in
+    /// a single region.
     ///
     /// **Example:**
     ///
@@ -425,7 +443,9 @@ impl Selection {
             }
             end_ix += 1;
         }
-        while end_ix < self.regions.len() && region.should_merge(self.regions[end_ix]) {
+        while end_ix < self.regions.len()
+            && region.should_merge(self.regions[end_ix])
+        {
             region = self.regions[end_ix].merge_with(region);
             end_ix += 1;
         }
@@ -438,13 +458,16 @@ impl Selection {
         }
     }
 
-    /// Add a region to the selection. This method does not merge regions and does not allow
-    /// ambiguous regions (regions that overlap).
+    /// Add a region to the selection. This method does not merge
+    /// regions and does not allow ambiguous regions (regions that
+    /// overlap).
     ///
-    /// On ambiguous regions, the region with the lower start position wins. That is, in such a
-    /// case, the new region is either not added at all, because there is an ambiguous region with
-    /// a lower start position, or existing regions that intersect with the new region but do
-    /// not start before the new region, are deleted.
+    /// On ambiguous regions, the region with the lower start position
+    /// wins. That is, in such a case, the new region is either
+    /// not added at all, because there is an ambiguous region with
+    /// a lower start position, or existing regions that intersect
+    /// with the new region but do not start before the new
+    /// region, are deleted.
     pub fn add_range_distinct(&mut self, region: SelRegion) -> (usize, usize) {
         let mut ix = self.search(region.min());
 
@@ -453,10 +476,12 @@ impl Selection {
         }
 
         if ix < self.regions.len() {
-            // in case of ambiguous regions the region closer to the left wins
+            // in case of ambiguous regions the region closer to the
+            // left wins
             let occ = &self.regions[ix];
             let is_eq = occ.min() == region.min() && occ.max() == region.max();
-            let is_intersect_before = region.min() >= occ.min() && occ.max() > region.min();
+            let is_intersect_before =
+                region.min() >= occ.min() && occ.max() > region.min();
             if is_eq || is_intersect_before {
                 return (occ.min(), occ.max());
             }
@@ -479,34 +504,45 @@ impl Selection {
     }
 
     /// Apply [`lapce_xi_rope::RopeDelta`] to this selection.
-    /// Typically used to apply an edit to a buffer and update its selections
-    /// **Parameters*:*
+    /// Typically used to apply an edit to a buffer and update its
+    /// selections **Parameters*:*
     /// - `delta`[`lapce_xi_rope::RopeDelta`]
-    /// - `after` parameter indicate if the delta should be applied before or after the selection
+    /// - `after` parameter indicate if the delta should be applied before or
+    ///   after the selection
     /// - `drift` see [`InsertDrift`]
-    pub fn apply_delta(&self, delta: &RopeDelta, after: bool, drift: InsertDrift) -> Selection {
+    pub fn apply_delta(
+        &self,
+        delta: &RopeDelta,
+        after: bool,
+        drift: InsertDrift
+    ) -> Selection {
         let mut result = Selection::new();
         let mut transformer = Transformer::new(delta);
         for region in self.regions() {
             let is_region_forward = region.start < region.end;
 
             let (start_after, end_after) = match (drift, region.is_caret()) {
-                (InsertDrift::Inside, false) => (!is_region_forward, is_region_forward),
-                (InsertDrift::Outside, false) => (is_region_forward, !is_region_forward),
-                _ => (after, after),
+                (InsertDrift::Inside, false) => {
+                    (!is_region_forward, is_region_forward)
+                },
+                (InsertDrift::Outside, false) => {
+                    (is_region_forward, !is_region_forward)
+                },
+                _ => (after, after)
             };
 
             let new_region = SelRegion::new(
                 transformer.transform(region.start, start_after),
                 transformer.transform(region.end, end_after),
-                None,
+                None
             );
             result.add_region(new_region);
         }
         result
     }
 
-    /// Returns cursor position, which corresponds to last inserted region `end` offset,
+    /// Returns cursor position, which corresponds to last inserted
+    /// region `end` offset,
     pub fn get_cursor_offset(&self) -> usize {
         if self.is_empty() {
             return 0;
@@ -514,7 +550,8 @@ impl Selection {
         self.regions[self.last_inserted].end
     }
 
-    /// Replaces last inserted [`SelRegion`] of this selection with the provided one.
+    /// Replaces last inserted [`SelRegion`] of this selection with
+    /// the provided one.
     pub fn replace_last_inserted_region(&mut self, region: SelRegion) {
         if self.is_empty() {
             self.add_region(region);
@@ -531,7 +568,7 @@ impl Selection {
         }
         match self.regions.binary_search_by(|r| r.max().cmp(&offset)) {
             Ok(ix) => ix,
-            Err(ix) => ix,
+            Err(ix) => ix
         }
     }
 
@@ -544,7 +581,7 @@ impl Selection {
             .binary_search_by(|r| r.min().cmp(&(offset + 1)))
         {
             Ok(ix) => ix,
-            Err(ix) => ix,
+            Err(ix) => ix
         }
     }
 }
@@ -559,11 +596,11 @@ fn remove_n_at<T>(v: &mut Vec<T>, index: usize, n: usize) {
     match n.cmp(&1) {
         Ordering::Equal => {
             v.remove(index);
-        }
+        },
         Ordering::Greater => {
             v.drain(index..index + n);
-        }
-        _ => (),
+        },
+        _ => ()
     };
 }
 
@@ -572,7 +609,7 @@ mod test {
     use crate::lines::{
         buffer::Buffer,
         edit::EditType,
-        selection::{InsertDrift, SelRegion, Selection},
+        selection::{InsertDrift, SelRegion, Selection}
     };
 
     #[test]
@@ -641,10 +678,10 @@ mod test {
         let mut selection = Selection::new();
         selection.add_region(SelRegion::new(1, 3, None));
         selection.add_region(SelRegion::new(4, 6, None));
-        assert_eq!(
-            selection.min().regions,
-            vec![SelRegion::caret(1), SelRegion::caret(4)]
-        );
+        assert_eq!(selection.min().regions, vec![
+            SelRegion::caret(1),
+            SelRegion::caret(4)
+        ]);
     }
 
     #[test]
@@ -687,14 +724,11 @@ mod test {
 
         let regions = selection.regions_in_range(5, 10);
 
-        assert_eq!(
-            regions,
-            vec![
-                SelRegion::new(3, 6, None),
-                SelRegion::new(7, 8, None),
-                SelRegion::new(9, 11, None),
-            ]
-        );
+        assert_eq!(regions, vec![
+            SelRegion::new(3, 6, None),
+            SelRegion::new(7, 8, None),
+            SelRegion::new(9, 11, None),
+        ]);
     }
 
     #[test]
@@ -707,10 +741,10 @@ mod test {
 
         let regions = selection.full_regions_in_range(5, 10);
 
-        assert_eq!(
-            regions,
-            vec![SelRegion::new(7, 8, None), SelRegion::new(9, 11, None),]
-        );
+        assert_eq!(regions, vec![
+            SelRegion::new(7, 8, None),
+            SelRegion::new(9, 11, None),
+        ]);
     }
 
     #[test]
@@ -729,10 +763,10 @@ mod test {
         let mut selection = Selection::new();
         selection.add_region(SelRegion::new(0, 3, None));
         selection.add_region(SelRegion::new(3, 6, None));
-        assert_eq!(
-            selection.regions(),
-            vec![SelRegion::new(0, 3, None), SelRegion::new(3, 6, None),]
-        );
+        assert_eq!(selection.regions(), vec![
+            SelRegion::new(0, 3, None),
+            SelRegion::new(3, 6, None),
+        ]);
     }
 
     #[test]

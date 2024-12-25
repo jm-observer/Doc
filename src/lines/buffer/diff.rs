@@ -2,9 +2,9 @@ use std::{
     borrow::Cow,
     ops::Range,
     sync::{
-        atomic::{self, AtomicU64},
         Arc,
-    },
+        atomic::{self, AtomicU64}
+    }
 };
 
 use lapce_xi_rope::Rope;
@@ -13,42 +13,44 @@ use lapce_xi_rope::Rope;
 pub enum DiffResult<T> {
     Left(T),
     Both(T, T),
-    Right(T),
+    Right(T)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiffBothInfo {
-    pub left: Range<usize>,
+    pub left:  Range<usize>,
     pub right: Range<usize>,
-    pub skip: Option<Range<usize>>,
+    pub skip:  Option<Range<usize>>
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DiffLines {
     Left(Range<usize>),
     Both(DiffBothInfo),
-    Right(Range<usize>),
+    Right(Range<usize>)
 }
 
 pub enum DiffExpand {
     Up(usize),
     Down(usize),
-    All,
+    All
 }
 
 pub fn expand_diff_lines(
     diff_lines: &mut [DiffLines],
     line: usize,
     expand: DiffExpand,
-    is_right: bool,
+    is_right: bool
 ) {
     for diff_line in diff_lines.iter_mut() {
         if let DiffLines::Both(info) = diff_line {
-            if (is_right && info.right.start == line) || (!is_right && info.left.start == line) {
+            if (is_right && info.right.start == line)
+                || (!is_right && info.left.start == line)
+            {
                 match expand {
                     DiffExpand::All => {
                         info.skip = None;
-                    }
+                    },
                     DiffExpand::Up(n) => {
                         if let Some(skip) = &mut info.skip {
                             if n >= skip.len() {
@@ -57,7 +59,7 @@ pub fn expand_diff_lines(
                                 skip.start += n;
                             }
                         }
-                    }
+                    },
                     DiffExpand::Down(n) => {
                         if let Some(skip) = &mut info.skip {
                             if n >= skip.len() {
@@ -66,7 +68,7 @@ pub fn expand_diff_lines(
                                 skip.end -= n;
                             }
                         }
-                    }
+                    },
                 }
                 break;
             }
@@ -79,7 +81,7 @@ pub fn rope_diff(
     right_rope: Rope,
     rev: u64,
     atomic_rev: Arc<AtomicU64>,
-    context_lines: Option<usize>,
+    context_lines: Option<usize>
 ) -> Option<Vec<DiffLines>> {
     let left_lines = left_rope.lines(..).collect::<Vec<Cow<str>>>();
     let right_lines = right_rope.lines(..).collect::<Vec<Cow<str>>>();
@@ -162,9 +164,9 @@ pub fn rope_diff(
     let mut right_line = 0;
     if leading_equals > 0 {
         changes.push(DiffLines::Both(DiffBothInfo {
-            left: 0..leading_equals,
+            left:  0..leading_equals,
             right: 0..leading_equals,
-            skip: None,
+            skip:  None
         }))
     }
     left_line += leading_equals;
@@ -178,29 +180,29 @@ pub fn rope_diff(
             DiffResult::Left(_) => {
                 match changes.last_mut() {
                     Some(DiffLines::Left(r)) => r.end = left_line + 1,
-                    _ => changes.push(DiffLines::Left(left_line..left_line + 1)),
+                    _ => changes.push(DiffLines::Left(left_line..left_line + 1))
                 }
                 left_line += 1;
-            }
+            },
             DiffResult::Both(_, _) => {
                 match changes.last_mut() {
                     Some(DiffLines::Both(info)) => {
                         info.left.end = left_line + 1;
                         info.right.end = right_line + 1;
-                    }
+                    },
                     _ => changes.push(DiffLines::Both(DiffBothInfo {
-                        left: left_line..left_line + 1,
+                        left:  left_line..left_line + 1,
                         right: right_line..right_line + 1,
-                        skip: None,
-                    })),
+                        skip:  None
+                    }))
                 }
                 left_line += 1;
                 right_line += 1;
-            }
+            },
             DiffResult::Right(_) => {
                 match changes.last_mut() {
                     Some(DiffLines::Right(r)) => r.end = right_line + 1,
-                    _ => changes.push(DiffLines::Right(right_line..right_line + 1)),
+                    _ => changes.push(DiffLines::Right(right_line..right_line + 1))
                 }
                 right_line += 1;
             }
@@ -209,9 +211,9 @@ pub fn rope_diff(
 
     if trailing_equals > 0 {
         changes.push(DiffLines::Both(DiffBothInfo {
-            left: left_count - trailing_equals..left_count,
+            left:  left_count - trailing_equals..left_count,
             right: right_count - trailing_equals..right_count,
-            skip: None,
+            skip:  None
         }));
     }
     if let Some(context_lines) = context_lines {
@@ -225,13 +227,15 @@ pub fn rope_diff(
                     if i == 0 || i == changes_last {
                         if info.right.len() > context_lines {
                             if i == 0 {
-                                info.skip = Some(0..info.right.len() - context_lines);
+                                info.skip =
+                                    Some(0..info.right.len() - context_lines);
                             } else {
                                 info.skip = Some(context_lines..info.right.len());
                             }
                         }
                     } else if info.right.len() > context_lines * 2 {
-                        info.skip = Some(context_lines..info.right.len() - context_lines);
+                        info.skip =
+                            Some(context_lines..info.right.len() - context_lines);
                     }
                 }
             }

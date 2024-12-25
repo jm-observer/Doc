@@ -1,10 +1,10 @@
 use std::{borrow::Cow, ops::Range};
 
-use lapce_xi_rope::{interval::IntervalBounds, rope::ChunkIter, Cursor, Rope};
-
-use floem::views::editor::core::{mode::Mode};
-use crate::lines::{word::WordCursor, paragraph::ParagraphCursor};
 use anyhow::Result;
+use floem::views::editor::core::mode::Mode;
+use lapce_xi_rope::{Cursor, Rope, interval::IntervalBounds, rope::ChunkIter};
+
+use crate::lines::{paragraph::ParagraphCursor, word::WordCursor};
 
 pub trait RopeText {
     fn text(&self) -> &Rope;
@@ -23,7 +23,8 @@ pub trait RopeText {
     }
 
     /// Get the offset into the rope of the start of the given line.
-    /// If the line it out of bounds, then the last offset (the len) is returned.
+    /// If the line it out of bounds, then the last offset (the len)
+    /// is returned.
     fn offset_of_line(&self, line: usize) -> Result<usize> {
         let last_line = self.last_line();
         let line = line.min(last_line + 1);
@@ -58,9 +59,9 @@ pub trait RopeText {
     }
 
     /// Get the offset for a specific line and column.  
-    /// This should be preferred over simply adding the column to the line offset, because it
-    /// validates better and avoids returning newlines.
-    /// ```rust
+    /// This should be preferred over simply adding the column to the
+    /// line offset, because it validates better and avoids
+    /// returning newlines. ```rust
     /// # use floem_editor_core::xi_rope::Rope;
     /// # use floem_editor_core::buffer::rope_text::{RopeText, RopeTextRef};
     /// let text = Rope::from("hello\nworld");
@@ -68,18 +69,18 @@ pub trait RopeText {
     /// assert_eq!(text.offset_of_line_col(0, 0), 0);  // "h"
     /// assert_eq!(text.offset_of_line_col(0, 4), 4);  // "o"
     /// assert_eq!(text.offset_of_line_col(0, 5), 5);  // "\n"
-    /// assert_eq!(text.offset_of_line_col(0, 6), 5);  // "\n", avoids newline
-    /// assert_eq!(text.offset_of_line_col(1, 0), 6);  // "w"
-    /// assert_eq!(text.offset_of_line_col(1, 4), 10); // "d"
+    /// assert_eq!(text.offset_of_line_col(0, 6), 5);  // "\n", avoids
+    /// newline assert_eq!(text.offset_of_line_col(1, 0), 6);  //
+    /// "w" assert_eq!(text.offset_of_line_col(1, 4), 10); // "d"
     /// let text = Rope::from("hello\r\nworld");
     /// let text = RopeTextRef::new(&text);
     /// assert_eq!(text.offset_of_line_col(0, 0), 0);  // "h"
     /// assert_eq!(text.offset_of_line_col(0, 4), 4);  // "o"
     /// assert_eq!(text.offset_of_line_col(0, 5), 5);  // "\r"
-    /// assert_eq!(text.offset_of_line_col(0, 6), 5);  // "\r", avoids being in the middle
-    /// assert_eq!(text.offset_of_line_col(1, 0), 7);  // "w"
-    /// assert_eq!(text.offset_of_line_col(1, 4), 11); // "d"
-    /// ````
+    /// assert_eq!(text.offset_of_line_col(0, 6), 5);  // "\r", avoids
+    /// being in the middle assert_eq!(text.offset_of_line_col(1,
+    /// 0), 7);  // "w" assert_eq!(text.offset_of_line_col(1, 4),
+    /// 11); // "d" ````
     fn offset_of_line_col(&self, line: usize, col: usize) -> Result<usize> {
         let mut pos = 0;
         let mut offset = self.offset_of_line(line)?;
@@ -110,10 +111,10 @@ pub trait RopeText {
         Ok(offset - line_start)
     }
 
-    /// Get the offset of the end of the line. The caret decides whether it is after the last
-    /// character, or before it.
-    /// If the line is out of bounds, then the last offset (the len) is returned.  
-    /// ```rust
+    /// Get the offset of the end of the line. The caret decides
+    /// whether it is after the last character, or before it.
+    /// If the line is out of bounds, then the last offset (the len)
+    /// is returned. ```rust
     /// # use floem_editor_core::xi_rope::Rope;
     /// # use floem_editor_core::buffer::rope_text::{RopeText, RopeTextRef};
     /// let text = Rope::from("hello\nworld");
@@ -142,15 +143,22 @@ pub trait RopeText {
     }
 
     /// Returns the content of the given line.
-    /// Includes the line ending if it exists. (-> the last line won't have a line ending)
-    /// Lines past the end of the document will return an empty string.
-    fn line_content(&self, line: usize) -> Result<Cow<'_, str> >{
-        Ok(self.text()
-            .slice_to_cow(self.offset_of_line(line)?..self.offset_of_line(line + 1)?))
+    /// Includes the line ending if it exists. (-> the last line won't
+    /// have a line ending) Lines past the end of the document
+    /// will return an empty string.
+    fn line_content(&self, line: usize) -> Result<Cow<'_, str>> {
+        Ok(self.text().slice_to_cow(
+            self.offset_of_line(line)?..self.offset_of_line(line + 1)?
+        ))
     }
 
     /// Get the offset of the previous grapheme cluster.
-    fn prev_grapheme_offset(&self, offset: usize, count: usize, limit: usize) -> usize {
+    fn prev_grapheme_offset(
+        &self,
+        offset: usize,
+        count: usize,
+        limit: usize
+    ) -> usize {
         let offset = offset.min(self.len());
         let mut cursor = Cursor::new(self.text(), offset);
         let mut new_offset = offset;
@@ -168,7 +176,12 @@ pub trait RopeText {
         new_offset
     }
 
-    fn next_grapheme_offset(&self, offset: usize, count: usize, limit: usize) -> usize {
+    fn next_grapheme_offset(
+        &self,
+        offset: usize,
+        count: usize,
+        limit: usize
+    ) -> usize {
         let offset = if offset > self.len() {
             self.len()
         } else {
@@ -198,14 +211,16 @@ pub trait RopeText {
         WordCursor::new(self.text(), offset).next_code_boundary()
     }
 
-    /// Return the previous and end boundaries of the word under cursor.
+    /// Return the previous and end boundaries of the word under
+    /// cursor.
     fn select_word(&self, offset: usize) -> (usize, usize) {
         WordCursor::new(self.text(), offset).select_word()
     }
 
-    /// Returns the offset of the first non-blank character on the given line.
-    /// If the line is one past the last line, then the offset at the end of the rope is returned.
-    /// If the line is further past that, then it defaults to the last line.
+    /// Returns the offset of the first non-blank character on the
+    /// given line. If the line is one past the last line, then
+    /// the offset at the end of the rope is returned. If the line
+    /// is further past that, then it defaults to the last line.
     fn first_non_blank_character_on_line(&self, line: usize) -> Result<usize> {
         let last_line = self.last_line();
         let line = if line > last_line + 1 {
@@ -219,34 +234,41 @@ pub trait RopeText {
 
     fn indent_on_line(&self, line: usize) -> Result<String> {
         let line_start_offset = self.text().offset_of_line(line)?;
-        let word_boundary = WordCursor::new(self.text(), line_start_offset).next_non_blank_char();
+        let word_boundary =
+            WordCursor::new(self.text(), line_start_offset).next_non_blank_char();
         let indent = self.text().slice_to_cow(line_start_offset..word_boundary);
         Ok(indent.to_string())
     }
 
-    /// Get the content of the rope as a Cow string, for 'nice' ranges (small, and at the right
-    /// offsets) this will be a reference to the rope's data. Otherwise, it allocates a new string.
-    /// You should be somewhat wary of requesting large parts of the rope, as it will allocate
-    /// a new string since it isn't contiguous in memory for large chunks.
+    /// Get the content of the rope as a Cow string, for 'nice' ranges
+    /// (small, and at the right offsets) this will be a reference
+    /// to the rope's data. Otherwise, it allocates a new string.
+    /// You should be somewhat wary of requesting large parts of the
+    /// rope, as it will allocate a new string since it isn't
+    /// contiguous in memory for large chunks.
     fn slice_to_cow(&self, range: Range<usize>) -> Cow<'_, str> {
         self.text()
             .slice_to_cow(range.start.min(self.len())..range.end.min(self.len()))
     }
 
-    // TODO(minor): Once you can have an `impl Trait` return type in a trait, this could use that.
+    // TODO(minor): Once you can have an `impl Trait` return type in a
+    // trait, this could use that.
     /// Iterate over (utf8_offset, char) values in the given range
     #[allow(clippy::type_complexity)]
-    /// This uses `iter_chunks` and so does not allocate, compared to `slice_to_cow` which can
+    /// This uses `iter_chunks` and so does not allocate, compared to
+    /// `slice_to_cow` which can
     fn char_indices_iter<'a, T: IntervalBounds>(
         &'a self,
-        range: T,
+        range: T
     ) -> CharIndicesJoin<
         std::str::CharIndices<'a>,
-        std::iter::Map<ChunkIter<'a>, fn(&str) -> std::str::CharIndices<'_>>,
+        std::iter::Map<ChunkIter<'a>, fn(&str) -> std::str::CharIndices<'_>>
     > {
         let iter: ChunkIter<'a> = self.text().iter_chunks(range);
-        let iter: std::iter::Map<ChunkIter<'a>, fn(&str) -> std::str::CharIndices<'_>> =
-            iter.map(str::char_indices);
+        let iter: std::iter::Map<
+            ChunkIter<'a>,
+            fn(&str) -> std::str::CharIndices<'_>
+        > = iter.map(str::char_indices);
         CharIndicesJoin::new(iter)
     }
 
@@ -260,7 +282,8 @@ pub trait RopeText {
         Ok(self.offset_of_line(line + 1)? - self.offset_of_line(line)?)
     }
 
-    /// Returns `true` if the given line contains no non-whitespace characters.
+    /// Returns `true` if the given line contains no non-whitespace
+    /// characters.
     fn is_line_whitespace(&self, line: usize) -> Result<bool> {
         let line_start_offset = self.text().offset_of_line(line)?;
         let mut word_cursor = WordCursor::new(self.text(), line_start_offset);
@@ -273,8 +296,8 @@ pub trait RopeText {
             Some('\r') => {
                 let c = word_cursor.inner.next_codepoint();
                 c.is_some_and(|c| c == '\n')
-            }
-            _ => false,
+            },
+            _ => false
         })
     }
 
@@ -299,10 +322,14 @@ pub trait RopeText {
         Ok(self.next_grapheme_offset(offset, count, max_offset))
     }
 
-    fn find_nth_paragraph<F>(&self, offset: usize, mut count: usize, mut find_next: F) -> usize
+    fn find_nth_paragraph<F>(
+        &self,
+        offset: usize,
+        mut count: usize,
+        mut find_next: F
+    ) -> usize
     where
-        F: FnMut(&mut ParagraphCursor) -> Option<usize>,
-    {
+        F: FnMut(&mut ParagraphCursor) -> Option<usize> {
         let mut cursor = ParagraphCursor::new(self.text(), offset);
         let mut new_offset = offset;
         while count != 0 {
@@ -325,17 +352,21 @@ pub trait RopeText {
         self.find_nth_paragraph(offset, count, |cursor| cursor.prev_boundary())
     }
 
-    /// Find the nth (`count`) word starting at `offset` in either direction
-    /// depending on `find_next`.
+    /// Find the nth (`count`) word starting at `offset` in either
+    /// direction depending on `find_next`.
     ///
-    /// A `WordCursor` is created and given to the `find_next` function for the
-    /// search.  The `find_next` function should return None when there is no
-    /// more word found.  Despite the name, `find_next` can search in either
-    /// direction.
-    fn find_nth_word<F>(&self, offset: usize, mut count: usize, mut find_next: F) -> usize
+    /// A `WordCursor` is created and given to the `find_next`
+    /// function for the search.  The `find_next` function should
+    /// return None when there is no more word found.  Despite the
+    /// name, `find_next` can search in either direction.
+    fn find_nth_word<F>(
+        &self,
+        offset: usize,
+        mut count: usize,
+        mut find_next: F
+    ) -> usize
     where
-        F: FnMut(&mut WordCursor) -> Option<usize>,
-    {
+        F: FnMut(&mut WordCursor) -> Option<usize> {
         let mut cursor = WordCursor::new(self.text(), offset);
         let mut new_offset = offset;
         while count != 0 {
@@ -354,15 +385,26 @@ pub trait RopeText {
         self.find_nth_word(offset, count, |cursor| cursor.next_boundary())
     }
 
-    fn move_n_wordends_forward(&self, offset: usize, count: usize, inserting: bool) -> usize {
-        let mut new_offset = self.find_nth_word(offset, count, |cursor| cursor.end_boundary());
+    fn move_n_wordends_forward(
+        &self,
+        offset: usize,
+        count: usize,
+        inserting: bool
+    ) -> usize {
+        let mut new_offset =
+            self.find_nth_word(offset, count, |cursor| cursor.end_boundary());
         if !inserting && new_offset != self.len() {
             new_offset = self.prev_grapheme_offset(new_offset, 1, 0);
         }
         new_offset
     }
 
-    fn move_n_words_backward(&self, offset: usize, count: usize, mode: Mode) -> usize {
+    fn move_n_words_backward(
+        &self,
+        offset: usize,
+        count: usize,
+        mode: Mode
+    ) -> usize {
         self.find_nth_word(offset, count, |cursor| cursor.prev_boundary(mode))
     }
 
@@ -373,7 +415,7 @@ pub trait RopeText {
 
 #[derive(Clone)]
 pub struct RopeTextVal {
-    pub text: Rope,
+    pub text: Rope
 }
 impl RopeTextVal {
     pub fn new(text: Rope) -> Self {
@@ -392,7 +434,7 @@ impl From<Rope> for RopeTextVal {
 }
 #[derive(Copy, Clone)]
 pub struct RopeTextRef<'a> {
-    pub text: &'a Rope,
+    pub text: &'a Rope
 }
 impl<'a> RopeTextRef<'a> {
     pub fn new(text: &'a Rope) -> Self {
@@ -410,63 +452,78 @@ impl<'a> From<&'a Rope> for RopeTextRef<'a> {
     }
 }
 
-/// Joins an iterator of iterators over char indices `(usize, char)` into one
-/// as if they were from a single long string
+/// Joins an iterator of iterators over char indices `(usize, char)`
+/// into one as if they were from a single long string
 /// Assumes the iterators end after the first `None` value
 #[derive(Clone)]
-pub struct CharIndicesJoin<I: Iterator<Item = (usize, char)>, O: Iterator<Item = I>> {
+pub struct CharIndicesJoin<I: Iterator<Item = (usize, char)>, O: Iterator<Item = I>>
+{
     /// Our iterator of iterators
-    main_iter: O,
+    main_iter:       O,
     /// Our current working iterator of indices
     current_indices: Option<I>,
     /// The amount we should shift future offsets
-    current_base: usize,
-    /// The latest base, since we don't know when the `current_indices` iterator will end
-    latest_base: usize,
+    current_base:    usize,
+    /// The latest base, since we don't know when the
+    /// `current_indices` iterator will end
+    latest_base:     usize
 }
 
-impl<I: Iterator<Item = (usize, char)>, O: Iterator<Item = I>> CharIndicesJoin<I, O> {
+impl<I: Iterator<Item = (usize, char)>, O: Iterator<Item = I>>
+    CharIndicesJoin<I, O>
+{
     pub fn new(main_iter: O) -> CharIndicesJoin<I, O> {
         CharIndicesJoin {
             main_iter,
             current_indices: None,
             current_base: 0,
-            latest_base: 0,
+            latest_base: 0
         }
     }
 }
 
-impl<I: Iterator<Item = (usize, char)>, O: Iterator<Item = I>> Iterator for CharIndicesJoin<I, O> {
+impl<I: Iterator<Item = (usize, char)>, O: Iterator<Item = I>> Iterator
+    for CharIndicesJoin<I, O>
+{
     type Item = (usize, char);
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(current) = &mut self.current_indices {
             if let Some((next_offset, next_ch)) = current.next() {
-                // Shift by the current base offset, which is the accumulated offset from previous
-                // iterators, which makes so the offset produced looks like it is from one long str
+                // Shift by the current base offset, which is the
+                // accumulated offset from previous
+                // iterators, which makes so the offset produced looks
+                // like it is from one long str
                 let next_offset = self.current_base + next_offset;
-                // Store the latest base offset, because we don't know when the current iterator
-                // will end (though technically the str iterator impl does)
+                // Store the latest base offset, because we don't know
+                // when the current iterator
+                // will end (though technically the str iterator impl
+                // does)
                 self.latest_base = next_offset + next_ch.len_utf8();
                 return Some((next_offset, next_ch));
             }
         }
 
-        // Otherwise, if we didn't return something above, then we get a next iterator
+        // Otherwise, if we didn't return something above, then we get
+        // a next iterator
         if let Some(next_current) = self.main_iter.next() {
             // Update our current working iterator
             self.current_indices = Some(next_current);
-            // Update the current base offset with the previous iterators latest offset base
-            // This is what we are shifting by
+            // Update the current base offset with the previous
+            // iterators latest offset base This is what
+            // we are shifting by
             self.current_base = self.latest_base;
 
             // Get the next item without new current iterator
-            // As long as main_iter and the iterators it produces aren't infinite then this
-            // recursion won't be infinite either
-            // and even the non-recursion version would be infinite if those were infinite
+            // As long as main_iter and the iterators it produces
+            // aren't infinite then this recursion won't
+            // be infinite either and even the
+            // non-recursion version would be infinite if those were
+            // infinite
             self.next()
         } else {
-            // We didn't get anything from the main iter, so we're completely done.
+            // We didn't get anything from the main iter, so we're
+            // completely done.
             None
         }
     }
@@ -474,12 +531,13 @@ impl<I: Iterator<Item = (usize, char)>, O: Iterator<Item = I>> Iterator for Char
 
 #[cfg(test)]
 mod tests {
-    use lapce_xi_rope::Rope;
     use anyhow::Result;
+    use lapce_xi_rope::Rope;
+
     use super::{RopeText, RopeTextVal};
 
     #[test]
-    fn test_line_content() -> Result<()>{
+    fn test_line_content() -> Result<()> {
         let text = Rope::from("");
         let text = RopeTextVal::new(text);
 
@@ -541,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn test_offset_of_line_col() -> Result<()>{
+    fn test_offset_of_line_col() -> Result<()> {
         let text = Rope::from("abc\ndef\nghi");
         let text = RopeTextVal::new(text);
 

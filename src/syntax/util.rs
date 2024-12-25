@@ -1,8 +1,8 @@
-use lapce_xi_rope::{rope::ChunkIter, Rope};
+use lapce_xi_rope::{Rope, rope::ChunkIter};
 use tree_sitter::TextProvider;
 
 pub struct RopeChunksIterBytes<'a> {
-    chunks: ChunkIter<'a>,
+    chunks: ChunkIter<'a>
 }
 impl<'a> Iterator for RopeChunksIterBytes<'a> {
     type Item = &'a [u8];
@@ -12,8 +12,8 @@ impl<'a> Iterator for RopeChunksIterBytes<'a> {
     }
 }
 
-/// This allows tree-sitter to iterate over our Rope without us having to convert it into
-/// a contiguous byte-list.
+/// This allows tree-sitter to iterate over our Rope without us having
+/// to convert it into a contiguous byte-list.
 pub struct RopeProvider<'a>(pub &'a Rope);
 impl<'a> TextProvider<&'a [u8]> for RopeProvider<'a> {
     type I = RopeChunksIterBytes<'a>;

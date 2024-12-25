@@ -1,28 +1,39 @@
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use floem::kurbo::Rect;
-use floem::reactive::{RwSignal, Scope};
-use floem::views::editor::EditorStyle;
-use doc::lines::buffer::Buffer;
-use doc::lines::buffer::rope_text::RopeText;
+use std::{
+    fs::File,
+    path::{Path, PathBuf}
+};
+
+use anyhow::Result;
+use doc::{
+    DiagnosticData, EditorViewKind,
+    config::EditorConfig,
+    language::LapceLanguage,
+    lines::{
+        DocLines, RopeTextPosition,
+        buffer::{Buffer, rope_text::RopeText},
+        fold::{FoldingDisplayItem, FoldingDisplayType, FoldingRange}
+    },
+    syntax::{BracketParser, Syntax}
+};
+use floem::{
+    kurbo::Rect,
+    reactive::{RwSignal, Scope, SignalUpdate},
+    views::editor::EditorStyle
+};
 use itertools::Itertools;
-use lapce_xi_rope::Interval;
-use lapce_xi_rope::spans::{Spans, SpansBuilder};
+use lapce_xi_rope::{
+    Interval,
+    spans::{Spans, SpansBuilder}
+};
 use log::info;
 use lsp_types::{Diagnostic, InlayHint, Position};
-use doc::config::EditorConfig;
-use doc::{DiagnosticData, EditorViewKind};
-use doc::language::LapceLanguage;
-use doc::lines::fold::{FoldingDisplayItem, FoldingDisplayType, FoldingRange};
-use doc::lines::{DocLines, RopeTextPosition};
-use doc::syntax::{BracketParser, Syntax};
+
 use crate::lines_util::init_semantic_2;
-use floem::reactive::SignalUpdate;
-use anyhow::Result;
 
 fn _init_lsp_folding_range() -> Vec<FoldingRange> {
     let folding_range = r#"[{"startLine":0,"startCharacter":10,"endLine":7,"endCharacter":1},{"startLine":1,"startCharacter":12,"endLine":3,"endCharacter":5},{"startLine":3,"startCharacter":11,"endLine":5,"endCharacter":5}]"#;
-    let folding_range: Vec<lsp_types::FoldingRange> = serde_json::from_str(folding_range).unwrap();
+    let folding_range: Vec<lsp_types::FoldingRange> =
+        serde_json::from_str(folding_range).unwrap();
 
     folding_range
         .into_iter()
@@ -33,7 +44,8 @@ fn _init_lsp_folding_range() -> Vec<FoldingRange> {
 
 fn _init_lsp_folding_range_2() -> Vec<FoldingRange> {
     let folding_range = r#"[{"startLine":0,"startCharacter":10,"endLine":7,"endCharacter":1},{"startLine":1,"startCharacter":12,"endLine":3,"endCharacter":5},{"startLine":3,"startCharacter":11,"endLine":5,"endCharacter":5},{"startLine":10,"startCharacter":10,"endLine":27,"endCharacter":1}]"#;
-    let folding_range: Vec<lsp_types::FoldingRange> = serde_json::from_str(folding_range).unwrap();
+    let folding_range: Vec<lsp_types::FoldingRange> =
+        serde_json::from_str(folding_range).unwrap();
 
     folding_range
         .into_iter()
@@ -50,34 +62,31 @@ fn _init_inlay_hint(buffer: &Buffer) -> Result<Spans<InlayHint>> {
     let mut hints_span = SpansBuilder::new(len);
     for hint in hints {
         let offset = buffer.offset_of_position(&hint.position)?.min(len);
-        hints_span.add_span(
-            Interval::new(offset, (offset + 1).min(len)),
-            hint,
-        );
+        hints_span.add_span(Interval::new(offset, (offset + 1).min(len)), hint);
     }
     Ok(hints_span.build())
 }
 
 fn _init_code(file: PathBuf) -> (String, Buffer) {
-    // let code = "pub fn main() {\r\n    if true {\r\n        println!(\"startss\");\r\n    } else {\r\n        println!(\"startss\");\r\n    }\r\n    let a = A;\r\n}\r\nstruct A;\r\n";
+    // let code = "pub fn main() {\r\n    if true {\r\n
+    // println!(\"startss\");\r\n    } else {\r\n
+    // println!(\"startss\");\r\n    }\r\n    let a =
+    // A;\r\n}\r\nstruct A;\r\n";
     let code = load_code(&file);
-    let buffer = Buffer::new(
-        code.as_str()
-    );
+    let buffer = Buffer::new(code.as_str());
     info!("line_ending {:?} len={}", buffer.line_ending(), code.len());
     (code, buffer)
 }
-
 
 ///  2|   if true {...} else {\r\n
 pub fn folded_v1() -> FoldingDisplayItem {
     FoldingDisplayItem {
         position: Position {
-            line: 1,
-            character: 12,
+            line:      1,
+            character: 12
         },
-        y: 0,
-        ty: FoldingDisplayType::UnfoldStart,
+        y:        0,
+        ty:       FoldingDisplayType::UnfoldStart
     }
 }
 
@@ -85,15 +94,19 @@ pub fn folded_v1() -> FoldingDisplayItem {
 pub fn folded_v2() -> FoldingDisplayItem {
     FoldingDisplayItem {
         position: Position {
-            line: 5,
-            character: 5,
+            line:      5,
+            character: 5
         },
-        y: 0,
-        ty: FoldingDisplayType::UnfoldEnd,
+        y:        0,
+        ty:       FoldingDisplayType::UnfoldEnd
     }
 }
 
-fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String, Buffer), folding: Vec<FoldingRange>) -> Result<(DocLines, EditorConfig)> {
+fn _init_lines(
+    folded: Option<Vec<FoldingDisplayItem>>,
+    (code, buffer): (String, Buffer),
+    folding: Vec<FoldingRange>
+) -> Result<(DocLines, EditorConfig)> {
     // let folding = _init_lsp_folding_range();
     let hints = _init_inlay_hint(&buffer)?;
 
@@ -101,30 +114,36 @@ fn _init_lines(folded: Option<Vec<FoldingDisplayItem>>, (code, buffer): (String,
     let config: EditorConfig = serde_json::from_str(config_str).unwrap();
     let cx = Scope::new();
     let diagnostics = DiagnosticData {
-        expanded: cx.create_rw_signal(false),
-        diagnostics: cx.create_rw_signal(im::Vector::new()),
-        diagnostics_span: cx.create_rw_signal(Spans::default()),
+        expanded:         cx.create_rw_signal(false),
+        diagnostics:      cx.create_rw_signal(im::Vector::new()),
+        diagnostics_span: cx.create_rw_signal(Spans::default())
     };
-    // { x0: 0.0, y0: 0.0, x1: 591.1680297851563, y1: 538.1586303710938 }
+    // { x0: 0.0, y0: 0.0, x1: 591.1680297851563, y1:
+    // 538.1586303710938 }
     let view = Rect::new(0.0, 0.0, 591.0, 538.0);
     let editor_style = EditorStyle::default();
     let kind = cx.create_rw_signal(EditorViewKind::Normal);
     let language = LapceLanguage::Rust;
-    let grammars_dir: PathBuf = "C:\\Users\\36225\\AppData\\Local\\lapce\\Lapce-Debug\\data\\grammars".into();
+    let grammars_dir: PathBuf = "C:\\Users\\36225\\AppData\\Local\\lapce\\\
+                                 Lapce-Debug\\data\\grammars"
+        .into();
 
-
-    let queries_directory: PathBuf = "C:\\Users\\36225\\AppData\\Roaming\\lapce\\Lapce-Debug\\config\\queries".into();
+    let queries_directory: PathBuf = "C:\\Users\\36225\\AppData\\Roaming\\lapce\\\
+                                      Lapce-Debug\\config\\queries"
+        .into();
 
     let syntax = Syntax::from_language(language, &grammars_dir, &queries_directory);
     let parser = BracketParser::new(code.to_string(), true, 30000);
     let mut lines = DocLines::new(
         cx,
-        diagnostics, syntax, parser,
+        diagnostics,
+        syntax,
+        parser,
         view,
         editor_style,
         config.clone(),
         buffer,
-        kind,
+        kind
     )?;
     lines.update_folding_ranges(folding.into())?;
     lines.set_inlay_hints(hints)?;
@@ -141,7 +160,7 @@ fn load_code(file: &Path) -> String {
 }
 
 /// main_2.rs
-fn init_diag_2() -> im::Vector<Diagnostic>{
+fn init_diag_2() -> im::Vector<Diagnostic> {
     let mut diags = im::Vector::new();
     diags.push_back(serde_json::from_str(r#"{"range":{"start":{"line":6,"character":8},"end":{"line":6,"character":9}},"severity":2,"code":"unused_variables","source":"rustc","message":"unused variable: `a`\n`#[warn(unused_variables)]` on by default","relatedInformation":[{"location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":6,"character":8},"end":{"line":6,"character":9}}},"message":"if this is intentional, prefix it with an underscore: `_a`"}],"tags":[1],"data":{"rendered":"warning: unused variable: `a`\n --> src/main.rs:7:9\n  |\n7 |     let a = A;\n  |         ^ help: if this is intentional, prefix it with an underscore: `_a`\n  |\n  = note: `#[warn(unused_variables)]` on by default\n\n"}}"#).unwrap());
     diags.push_back(serde_json::from_str(r#"{"range":{"start":{"line":6,"character":8},"end":{"line":6,"character":9}},"severity":4,"code":"unused_variables","source":"rustc","message":"if this is intentional, prefix it with an underscore: `_a`","relatedInformation":[{"location":{"uri":"file:///d:/git/check/src/main.rs","range":{"start":{"line":6,"character":8},"end":{"line":6,"character":9}}},"message":"original diagnostic"}]}"#).unwrap());
@@ -164,10 +183,7 @@ pub fn init_main_2() -> Result<DocLines> {
     let mut styles_span = SpansBuilder::new(lines.buffer().len());
     for style in semantic.styles {
         if let Some(fg) = style.style.fg_color {
-            styles_span.add_span(
-                Interval::new(style.start, style.end),
-                fg,
-            );
+            styles_span.add_span(Interval::new(style.start, style.end), fg);
         }
     }
     let styles = styles_span.build();

@@ -1,27 +1,30 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * This Source Code Form is subject to the terms of the Mozilla
+ * Public License, v. 2.0. If a copy of the MPL was not distributed
+ * with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * Much of the code in this file is modified from [helix](https://github.com/helix-editor/helix)'s implementation of their syntax highlighting, which is under the MPL.
  */
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque, hash_map::Entry},
     hash::{Hash, Hasher},
     mem,
     path::Path,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{Arc, atomic::AtomicUsize}
 };
 
 use ahash::RandomState;
-use floem::views::editor::core::util::{matching_bracket_general, matching_pair_direction};
+use anyhow::Result;
+use floem::views::editor::core::util::{
+    matching_bracket_general, matching_pair_direction
+};
 use hashbrown::raw::RawTable;
 use itertools::Itertools;
 use lapce_xi_rope::{
-    spans::{Spans, SpansBuilder},
     Interval, Rope,
+    spans::{Spans, SpansBuilder}
 };
 use log::error;
 use slotmap::{DefaultKey as LayerId, HopSlotMap};
@@ -31,18 +34,19 @@ use tree_sitter::{Node, Parser, Point, QueryCursor, Tree};
 use self::{
     edit::SyntaxEdit,
     highlight::{
-        get_highlight_config, intersect_ranges, Highlight, HighlightConfiguration,
-        HighlightEvent, HighlightIter, HighlightIterLayer, IncludedChildren,
-        LocalScope,
+        Highlight, HighlightConfiguration, HighlightEvent, HighlightIter,
+        HighlightIterLayer, IncludedChildren, LocalScope, get_highlight_config,
+        intersect_ranges
     },
-    util::RopeProvider,
+    util::RopeProvider
 };
-use crate::{language::{self, LapceLanguage}, LineStyle, syntax::highlight::InjectionLanguageMarker};
-use crate::lens::{Lens, LensBuilder};
-use crate::lines::buffer::Buffer;
-use crate::lines::buffer::rope_text::RopeText;
-use crate::syntax::highlight::SCOPES;
-use anyhow::Result;
+use crate::{
+    LineStyle,
+    language::{self, LapceLanguage},
+    lens::{Lens, LensBuilder},
+    lines::buffer::{Buffer, rope_text::RopeText},
+    syntax::highlight::{InjectionLanguageMarker, SCOPES}
+};
 
 pub mod edit;
 pub mod highlight;
@@ -50,11 +54,12 @@ pub mod util;
 
 const TREE_SITTER_MATCH_LIMIT: u32 = 256;
 
-// Uses significant portions Helix's implementation, and on tree-sitter's highlighter implementation
+// Uses significant portions Helix's implementation, and on
+// tree-sitter's highlighter implementation
 
 pub struct TsParser {
-    parser: tree_sitter::Parser,
-    pub cursors: Vec<QueryCursor>,
+    parser:      tree_sitter::Parser,
+    pub cursors: Vec<QueryCursor>
 }
 
 thread_local! {
@@ -74,7 +79,7 @@ pub enum Error {
     #[error("Invalid language")]
     InvalidLanguage,
     #[error("Unknown error")]
-    Unknown,
+    Unknown
 }
 
 #[derive(Clone, Debug)]
@@ -87,7 +92,7 @@ pub enum NodeType {
     RightCurly,
     Pair,
     Code,
-    Dummy,
+    Dummy
 }
 
 impl NodeType {
@@ -99,7 +104,7 @@ impl NodeType {
             NodeType::RightBracket => Some("]".to_string()),
             NodeType::LeftCurly => Some("{".to_string()),
             NodeType::RightCurly => Some("}".to_string()),
-            NodeType::Pair | NodeType::Code | NodeType::Dummy => None,
+            NodeType::Pair | NodeType::Code | NodeType::Dummy => None
         }
     }
 }
@@ -107,24 +112,24 @@ impl NodeType {
 #[derive(Clone, Debug)]
 pub enum BracketParserMode {
     Parsing,
-    NoParsing,
+    NoParsing
 }
 
 #[derive(Clone, Debug)]
 pub struct ASTNode {
-    pub tt: NodeType,
-    pub len: usize,
+    pub tt:       NodeType,
+    pub len:      usize,
     pub children: Vec<ASTNode>,
-    pub level: usize,
+    pub level:    usize
 }
 
 impl ASTNode {
     pub fn new() -> Self {
         Self {
-            tt: NodeType::Dummy,
-            len: 0,
+            tt:       NodeType::Dummy,
+            len:      0,
             children: vec![],
-            level: 0,
+            level:    0
         }
     }
 
@@ -133,7 +138,7 @@ impl ASTNode {
             tt,
             len,
             children: vec![],
-            level: 0,
+            level: 0
         }
     }
 }
@@ -146,15 +151,15 @@ impl Default for ASTNode {
 
 #[derive(Clone, Debug)]
 pub struct BracketParser {
-    pub code: Vec<char>,
-    pub cur: usize,
-    pub ast: ASTNode,
-    bracket_set: HashMap<char, ASTNode>,
+    pub code:        Vec<char>,
+    pub cur:         usize,
+    pub ast:         ASTNode,
+    bracket_set:     HashMap<char, ASTNode>,
     pub bracket_pos: HashMap<usize, Vec<LineStyle>>,
-    mode: BracketParserMode,
+    mode:            BracketParserMode,
     noparsing_token: Vec<char>,
-    pub active: bool,
-    pub limit: u64,
+    pub active:      bool,
+    pub limit:       u64
 }
 
 impl BracketParser {
@@ -169,13 +174,13 @@ impl BracketParser {
                 ('{', ASTNode::new_with_type(NodeType::LeftCurly, 1)),
                 ('}', ASTNode::new_with_type(NodeType::RightCurly, 1)),
                 ('[', ASTNode::new_with_type(NodeType::LeftBracket, 1)),
-                (']', ASTNode::new_with_type(NodeType::RightBracket, 1)),
+                (']', ASTNode::new_with_type(NodeType::RightBracket, 1))
             ]),
             bracket_pos: HashMap::new(),
             mode: BracketParserMode::Parsing,
             noparsing_token: vec!['\'', '"', '`'],
             active,
-            limit,
+            limit
         }
     }
 
@@ -187,7 +192,11 @@ impl BracketParser {
         *(self.active.borrow_mut()) = false;
     }*/
 
-    pub fn update_code(&mut self, buffer: &Buffer, syntax: Option<&Syntax>) -> Result<()> {
+    pub fn update_code(
+        &mut self,
+        buffer: &Buffer,
+        syntax: Option<&Syntax>
+    ) -> Result<()> {
         let palette = vec![
             "bracket.color.1".to_string(),
             "bracket.color.2".to_string(),
@@ -212,7 +221,7 @@ impl BracketParser {
                             &mut 0,
                             &mut 0,
                             &mut bracket_pos,
-                            &palette,
+                            &palette
                         );
                         self.bracket_pos = bracket_pos;
                     }
@@ -227,7 +236,7 @@ impl BracketParser {
                     &mut pos_vec,
                     &mut 0usize,
                     &mut 0usize,
-                    &palette,
+                    &palette
                 );
                 if buffer.is_empty() {
                     return Ok(());
@@ -235,16 +244,16 @@ impl BracketParser {
                 for (offset, color, bracket) in pos_vec.into_iter() {
                     let (line, col) = buffer.offset_to_line_col(offset)?;
                     let line_style = LineStyle {
-                        start: col,
-                        end: col + 1,
-                            fg_color: Some(color.clone()),
-                        text: bracket,
+                        start:    col,
+                        end:      col + 1,
+                        fg_color: Some(color.clone()),
+                        text:     bracket
                     };
                     match self.bracket_pos.entry(line) {
                         Entry::Vacant(v) => _ = v.insert(vec![line_style.clone()]),
                         Entry::Occupied(mut o) => {
                             o.get_mut().push(line_style.clone())
-                        }
+                        },
                     }
                 }
             }
@@ -338,8 +347,8 @@ impl BracketParser {
                     NodeType::Pair => {
                         Self::patch_len(n);
                         len += n.len;
-                    }
-                    _ => break,
+                    },
+                    _ => break
                 }
             }
             ast.len = len;
@@ -351,7 +360,7 @@ impl BracketParser {
         pos_vec: &mut Vec<(usize, String, Option<String>)>,
         index: &mut usize,
         level: &mut usize,
-        palette: &Vec<String>,
+        palette: &Vec<String>
     ) {
         if !ast.children.is_empty() {
             for n in ast.children.iter() {
@@ -362,11 +371,11 @@ impl BracketParser {
                         pos_vec.push((
                             *index,
                             palette[*level % palette.len()].clone(),
-                            n.tt.bracket(),
+                            n.tt.bracket()
                         ));
                         *level += 1;
                         *index += 1;
-                    }
+                    },
                     NodeType::RightCurly
                     | NodeType::RightParen
                     | NodeType::RightBracket => {
@@ -375,23 +384,23 @@ impl BracketParser {
                             pos_vec.push((
                                 *index,
                                 "bracket.unpaired".to_string(),
-                                n.tt.bracket(),
+                                n.tt.bracket()
                             ));
                         } else {
                             *level = new_level;
                             pos_vec.push((
                                 *index,
                                 palette[*level % palette.len()].clone(),
-                                n.tt.bracket(),
+                                n.tt.bracket()
                             ));
                         }
                         *index += 1;
-                    }
+                    },
                     NodeType::Code => *index += n.len,
                     NodeType::Pair => {
                         Self::highlight_pos(n, pos_vec, index, level, palette)
-                    }
-                    _ => break,
+                    },
+                    _ => break
                 }
             }
         }
@@ -402,18 +411,18 @@ impl BracketParser {
 pub struct LanguageLayer {
     // mode
     // grammar
-    pub config: Arc<HighlightConfiguration>,
+    pub config:      Arc<HighlightConfiguration>,
     pub(crate) tree: Option<Tree>,
-    pub ranges: Vec<tree_sitter::Range>,
-    pub depth: usize,
-    _parent: Option<LayerId>,
-    rev: u64,
+    pub ranges:      Vec<tree_sitter::Range>,
+    pub depth:       usize,
+    _parent:         Option<LayerId>,
+    rev:             u64
 }
 
 /// This PartialEq implementation only checks if that
-/// two layers are theoretically identical (meaning they highlight the same text range with the same language).
-/// It does not check whether the layers have the same internal treesitter
-/// state.
+/// two layers are theoretically identical (meaning they highlight the
+/// same text range with the same language). It does not check whether
+/// the layers have the same internal treesitter state.
 impl PartialEq for LanguageLayer {
     fn eq(&self, other: &Self) -> bool {
         self.depth == other.depth
@@ -442,7 +451,7 @@ impl LanguageLayer {
         parser: &mut Parser,
         source: &Rope,
         had_edits: bool,
-        cancellation_flag: &AtomicUsize,
+        cancellation_flag: &AtomicUsize
     ) -> Result<(), Error> {
         parser
             .set_included_ranges(&self.ranges)
@@ -466,7 +475,7 @@ impl LanguageLayer {
                         &[]
                     }
                 },
-                had_edits.then_some(()).and(self.tree.as_ref()),
+                had_edits.then_some(()).and(self.tree.as_ref())
             )
             .ok_or(Error::Cancelled)?;
         self.tree = Some(tree);
@@ -477,29 +486,35 @@ impl LanguageLayer {
 #[derive(Clone)]
 pub struct SyntaxLayers {
     layers: HopSlotMap<LayerId, LanguageLayer>,
-    root: LayerId,
+    root:   LayerId
 }
 impl SyntaxLayers {
-    pub fn new_empty(config: Arc<HighlightConfiguration>, grammars_directory: &Path, queries_directory: &Path) -> SyntaxLayers {
+    pub fn new_empty(
+        config: Arc<HighlightConfiguration>,
+        grammars_directory: &Path,
+        queries_directory: &Path
+    ) -> SyntaxLayers {
         Self::new(None, config, grammars_directory, queries_directory)
     }
 
     pub fn new(
         source: Option<&Rope>,
-        config: Arc<HighlightConfiguration>, grammars_directory: &Path, queries_directory: &Path
+        config: Arc<HighlightConfiguration>,
+        grammars_directory: &Path,
+        queries_directory: &Path
     ) -> SyntaxLayers {
         let root_layer = LanguageLayer {
             tree: None,
             config,
             depth: 0,
             ranges: vec![tree_sitter::Range {
-                start_byte: 0,
-                end_byte: usize::MAX,
+                start_byte:  0,
+                end_byte:    usize::MAX,
                 start_point: Point::new(0, 0),
-                end_point: Point::new(usize::MAX, usize::MAX),
+                end_point:   Point::new(usize::MAX, usize::MAX)
             }],
             _parent: None,
-            rev: 0,
+            rev: 0
         };
 
         let mut layers = HopSlotMap::default();
@@ -509,7 +524,15 @@ impl SyntaxLayers {
 
         let cancel_flag = AtomicUsize::new(0);
         if let Some(source) = source {
-            if let Err(err) = syntax.update(0, 0, source, None, &cancel_flag, grammars_directory, queries_directory) {
+            if let Err(err) = syntax.update(
+                0,
+                0,
+                source,
+                None,
+                &cancel_flag,
+                grammars_directory,
+                queries_directory
+            ) {
                 error!("{:?}", err);
             }
         }
@@ -524,7 +547,9 @@ impl SyntaxLayers {
         new_rev: u64,
         source: &Rope,
         syntax_edits: Option<&[SyntaxEdit]>,
-        cancellation_flag: &AtomicUsize, grammars_directory: &Path, queries_directory: &Path
+        cancellation_flag: &AtomicUsize,
+        grammars_directory: &Path,
+        queries_directory: &Path
     ) -> Result<(), Error> {
         let mut queue = VecDeque::new();
         queue.push_back(self.root);
@@ -533,14 +558,16 @@ impl SyntaxLayers {
             let language = match language {
                 InjectionLanguageMarker::Name(name) => {
                     LapceLanguage::from_name(name)
-                }
+                },
                 InjectionLanguageMarker::Filename(path) => {
                     LapceLanguage::from_path_raw(path)
-                }
-                InjectionLanguageMarker::Shebang(id) => LapceLanguage::from_name(id),
+                },
+                InjectionLanguageMarker::Shebang(id) => LapceLanguage::from_name(id)
             };
             language
-                .map(|x| get_highlight_config(x, grammars_directory, queries_directory))
+                .map(|x| {
+                    get_highlight_config(x, grammars_directory, queries_directory)
+                })
                 .unwrap_or(Err(highlight::HighlightIssue::NotAvailable))
         };
 
@@ -555,10 +582,12 @@ impl SyntaxLayers {
 
         // This table allows inverse indexing of `layers`.
         // That is by hashing a `Layer` you can find
-        // the `LayerId` of an existing equivalent `Layer` in `layers`.
+        // the `LayerId` of an existing equivalent `Layer` in
+        // `layers`.
         //
-        // It is used to determine if a new layer exists for an injection
-        // or if an existing layer needs to be updated.
+        // It is used to determine if a new layer exists for an
+        // injection or if an existing layer needs to be
+        // updated.
         let mut layers_table = RawTable::with_capacity(self.layers.len());
         let layers_hasher = RandomState::new();
         // Use the edits to update all layers markers
@@ -578,7 +607,8 @@ impl SyntaxLayers {
         }
 
         for (layer_id, layer) in self.layers.iter_mut() {
-            // The root layer always covers the whole range (0..usize::MAX)
+            // The root layer always covers the whole range
+            // (0..usize::MAX)
             if layer.depth == 0 {
                 continue;
             }
@@ -591,17 +621,19 @@ impl SyntaxLayers {
 
                         // if edit is after range, skip
                         if edit.start_byte > range.end_byte {
-                            // TODO: || (is_noop && edit.start_byte == range.end_byte)
+                            // TODO: || (is_noop && edit.start_byte ==
+                            // range.end_byte)
                             continue;
                         }
 
-                        // if edit is before range, shift entire range by len
+                        // if edit is before range, shift entire range
+                        // by len
                         if edit.old_end_byte < range.start_byte {
                             range.start_byte = edit.new_end_byte
                                 + (range.start_byte - edit.old_end_byte);
                             range.start_point = point_add(
                                 edit.new_end_position,
-                                point_sub(range.start_point, edit.old_end_position),
+                                point_sub(range.start_point, edit.old_end_position)
                             );
 
                             range.end_byte = edit
@@ -609,10 +641,11 @@ impl SyntaxLayers {
                                 .saturating_add(range.end_byte - edit.old_end_byte);
                             range.end_point = point_add(
                                 edit.new_end_position,
-                                point_sub(range.end_point, edit.old_end_position),
+                                point_sub(range.end_point, edit.old_end_position)
                             );
                         }
-                        // if the edit starts in the space before and extends into the range
+                        // if the edit starts in the space before and
+                        // extends into the range
                         else if edit.start_byte < range.start_byte {
                             range.start_byte = edit.new_end_byte;
                             range.start_point = edit.new_end_position;
@@ -623,10 +656,11 @@ impl SyntaxLayers {
                                 .saturating_add(edit.new_end_byte);
                             range.end_point = point_add(
                                 edit.new_end_position,
-                                point_sub(range.end_point, edit.old_end_position),
+                                point_sub(range.end_point, edit.old_end_position)
                             );
                         }
-                        // If the edit is an insertion at the start of the tree, shift
+                        // If the edit is an insertion at the start of
+                        // the tree, shift
                         else if edit.start_byte == range.start_byte
                             && is_pure_insertion
                         {
@@ -639,7 +673,7 @@ impl SyntaxLayers {
                                 .saturating_add(edit.new_end_byte);
                             range.end_point = point_add(
                                 edit.new_end_position,
-                                point_sub(range.end_point, edit.old_end_position),
+                                point_sub(range.end_point, edit.old_end_position)
                             );
                         }
                     }
@@ -647,9 +681,10 @@ impl SyntaxLayers {
             }
 
             let hash = layers_hasher.hash_one(layer);
-            // Safety: insert_no_grow is unsafe because it assumes that the table
-            // has enough capacity to hold additional elements.
-            // This is always the case as we reserved enough capacity above.
+            // Safety: insert_no_grow is unsafe because it assumes
+            // that the table has enough capacity to hold
+            // additional elements. This is always the
+            // case as we reserved enough capacity above.
             unsafe { layers_table.insert_no_grow(hash, layer_id) };
         }
 
@@ -684,7 +719,7 @@ impl SyntaxLayers {
                     &mut ts_parser.parser,
                     source,
                     had_edits,
-                    cancellation_flag,
+                    cancellation_flag
                 )?;
                 layer.rev = new_rev;
 
@@ -696,7 +731,7 @@ impl SyntaxLayers {
                     let matches = cursor.matches(
                         &layer.config.injections_query,
                         tree.root_node(),
-                        RopeProvider(source),
+                        RopeProvider(source)
                     );
                     let mut combined_injections =
                         vec![
@@ -706,21 +741,21 @@ impl SyntaxLayers {
                     let mut injections = Vec::new();
                     let mut last_injection_end = 0;
                     for mat in matches {
-
                         let (injection_capture, content_node, included_children) =
-                           match layer.config.injection_for_match(
-                               &layer.config.injections_query,
-                               &mat,
-                               source,
-                           ) {
-                               Ok(rs) => rs,
-                               Err(err) => {
-                                   error!("{err:?}");
-                                   continue;
-                               }
-                           };
+                            match layer.config.injection_for_match(
+                                &layer.config.injections_query,
+                                &mat,
+                                source
+                            ) {
+                                Ok(rs) => rs,
+                                Err(err) => {
+                                    error!("{err:?}");
+                                    continue;
+                                }
+                            };
 
-                        // in case this is a combined injection save it for more processing later
+                        // in case this is a combined injection save
+                        // it for more processing later
                         if let Some(combined_injection_idx) = layer
                             .config
                             .combined_injections_patterns
@@ -742,11 +777,13 @@ impl SyntaxLayers {
                             continue;
                         }
 
-                        // Explicitly remove this match so that none of its other captures will remain
+                        // Explicitly remove this match so that none
+                        // of its other captures will remain
                         // in the stream of captures.
                         mat.remove();
 
-                        // If a language is found with the given name, then add a new language layer
+                        // If a language is found with the given name,
+                        // then add a new language layer
                         // to the highlighted document.
                         if let (Some(injection_capture), Some(content_node)) =
                             (injection_capture, content_node)
@@ -756,7 +793,7 @@ impl SyntaxLayers {
                                     let ranges = intersect_ranges(
                                         &layer.ranges,
                                         &[content_node],
-                                        included_children,
+                                        included_children
                                     );
 
                                     if !ranges.is_empty() {
@@ -768,7 +805,7 @@ impl SyntaxLayers {
                                         last_injection_end = content_node.end_byte();
                                         injections.push((config, ranges));
                                     }
-                                }
+                                },
                                 Err(err) => {
                                     error!("{:?}", err);
                                 }
@@ -787,12 +824,12 @@ impl SyntaxLayers {
                                     let ranges = intersect_ranges(
                                         &layer.ranges,
                                         &content_nodes,
-                                        included_children,
+                                        included_children
                                     );
                                     if !ranges.is_empty() {
                                         injections.push((config, ranges));
                                     }
-                                }
+                                },
                                 Err(err) => {
                                     error!("{:?}", err);
                                 }
@@ -801,7 +838,8 @@ impl SyntaxLayers {
                     }
 
                     let depth = layer.depth + 1;
-                    // TODO: can't inline this since matches borrows self.layers
+                    // TODO: can't inline this since matches borrows
+                    // self.layers
                     for (config, ranges) in injections {
                         let new_layer = LanguageLayer {
                             tree: None,
@@ -809,7 +847,7 @@ impl SyntaxLayers {
                             depth,
                             ranges,
                             _parent: Some(layer_id),
-                            rev: 0,
+                            rev: 0
                         };
 
                         // Find an identical existing layer
@@ -827,8 +865,9 @@ impl SyntaxLayers {
                     }
                 }
 
-                // TODO: pre-process local scopes at this time, rather than highlight?
-                // would solve problems with locals not working across boundaries
+                // TODO: pre-process local scopes at this time, rather
+                // than highlight? would solve
+                // problems with locals not working across boundaries
             }
 
             // Return the cursor back in the pool.
@@ -845,12 +884,13 @@ impl SyntaxLayers {
         self.layers[self.root].try_tree()
     }
 
-    /// Iterate over the highlighted regions for a given slice of source code.
+    /// Iterate over the highlighted regions for a given slice of
+    /// source code.
     pub fn highlight_iter<'a>(
         &'a self,
         source: &'a Rope,
         range: Option<std::ops::Range<usize>>,
-        cancellation_flag: Option<&'a AtomicUsize>,
+        cancellation_flag: Option<&'a AtomicUsize>
     ) -> impl Iterator<Item = Result<HighlightEvent, Error>> + 'a {
         let mut layers = self
             .layers
@@ -864,14 +904,12 @@ impl SyntaxLayers {
                     highlighter.cursors.pop().unwrap_or_default()
                 });
 
-                // The `captures` iterator borrows the `Tree` and the `QueryCursor`, which
-                // prevents them from being moved. But both of these values are really just
-                // pointers, so it's actually ok to move them.
+                // The `captures` iterator borrows the `Tree` and the `QueryCursor`,
+                // which prevents them from being moved. But both of
+                // these values are really just pointers, so it's
+                // actually ok to move them.
                 let cursor_ref = unsafe {
-                    mem::transmute::<
-                        &mut QueryCursor,
-                        &mut QueryCursor,
-                    >(&mut cursor)
+                    mem::transmute::<&mut QueryCursor, &mut QueryCursor>(&mut cursor)
                 };
 
                 // if reusing cursors & no range this resets to whole range
@@ -882,7 +920,7 @@ impl SyntaxLayers {
                     .captures(
                         &layer.config.query,
                         layer.try_tree()?.root_node(),
-                        RopeProvider(source),
+                        RopeProvider(source)
                     )
                     .peekable();
 
@@ -892,15 +930,15 @@ impl SyntaxLayers {
                 Some(HighlightIterLayer {
                     highlight_end_stack: Vec::new(),
                     scope_stack: vec![LocalScope {
-                        inherits: false,
-                        range: 0..usize::MAX,
-                        local_defs: Vec::new(),
+                        inherits:   false,
+                        range:      0..usize::MAX,
+                        local_defs: Vec::new()
                     }],
                     cursor,
                     _tree: None,
                     captures: RefCell::new(captures),
                     config: layer.config.as_ref(), // TODO: just reuse `layer`
-                    depth: layer.depth,            // TODO: just reuse `layer`
+                    depth: layer.depth             // TODO: just reuse `layer`
                 })
             })
             .collect::<Vec<_>>();
@@ -914,7 +952,7 @@ impl SyntaxLayers {
             iter_count: 0,
             layers,
             next_event: None,
-            last_highlight_range: None,
+            last_highlight_range: None
         };
         result.sort_layers();
         result
@@ -923,16 +961,16 @@ impl SyntaxLayers {
 
 #[derive(Clone)]
 pub struct Syntax {
-    pub rev: u64,
-    pub language: LapceLanguage,
-    pub text: Rope,
-    pub layers: Option<SyntaxLayers>,
-    pub lens: Lens,
+    pub rev:          u64,
+    pub language:     LapceLanguage,
+    pub text:         Rope,
+    pub layers:       Option<SyntaxLayers>,
+    pub lens:         Lens,
     pub normal_lines: Vec<usize>,
-    pub line_height: usize,
-    pub lens_height: usize,
-    pub styles: Option<Spans<String>>,
-    pub cancel_flag: Arc<AtomicUsize>,
+    pub line_height:  usize,
+    pub lens_height:  usize,
+    pub styles:       Option<Spans<String>>,
+    pub cancel_flag:  Arc<AtomicUsize>
 }
 
 impl std::fmt::Debug for Syntax {
@@ -950,28 +988,44 @@ impl std::fmt::Debug for Syntax {
 }
 
 impl Syntax {
-    pub fn init(path: &Path, grammars_directory: &Path, queries_directory: &Path) -> Syntax {
+    pub fn init(
+        path: &Path,
+        grammars_directory: &Path,
+        queries_directory: &Path
+    ) -> Syntax {
         let language = LapceLanguage::from_path(path);
         Syntax::from_language(language, grammars_directory, queries_directory)
     }
 
     pub fn plaintext(grammars_directory: &Path, queries_directory: &Path) -> Syntax {
-        Self::from_language(LapceLanguage::PlainText, grammars_directory, queries_directory)
+        Self::from_language(
+            LapceLanguage::PlainText,
+            grammars_directory,
+            queries_directory
+        )
     }
 
-    pub fn from_language(language: LapceLanguage, grammars_directory: &Path, queries_directory: &Path) -> Syntax {
-        let highlight = get_highlight_config(language, grammars_directory, queries_directory).ok();
+    pub fn from_language(
+        language: LapceLanguage,
+        grammars_directory: &Path,
+        queries_directory: &Path
+    ) -> Syntax {
+        let highlight =
+            get_highlight_config(language, grammars_directory, queries_directory)
+                .ok();
         Syntax {
             rev: 0,
             language,
             text: Rope::from(""),
-            layers: highlight.map(|x| SyntaxLayers::new_empty(x, grammars_directory, queries_directory)),
+            layers: highlight.map(|x| {
+                SyntaxLayers::new_empty(x, grammars_directory, queries_directory)
+            }),
             lens: Self::lens_from_normal_lines(0, 0, 0, &Vec::new()),
             line_height: 0,
             lens_height: 0,
             normal_lines: Vec::new(),
             styles: None,
-            cancel_flag: Arc::new(AtomicUsize::new(0)),
+            cancel_flag: Arc::new(AtomicUsize::new(0))
         }
     }
 
@@ -979,16 +1033,24 @@ impl Syntax {
         &mut self,
         new_rev: u64,
         new_text: Rope,
-        edits: Option<&[SyntaxEdit]>, grammars_directory: &Path, queries_directory: &Path
+        edits: Option<&[SyntaxEdit]>,
+        grammars_directory: &Path,
+        queries_directory: &Path
     ) {
         let layers = match &mut self.layers {
             Some(layers) => layers,
-            None => return,
+            None => return
         };
         let edits = edits.filter(|edits| new_rev == self.rev + edits.len() as u64);
-        if let Err(err) =
-            layers.update(self.rev, new_rev, &new_text, edits, &self.cancel_flag, grammars_directory, queries_directory)
-        {
+        if let Err(err) = layers.update(
+            self.rev,
+            new_rev,
+            &new_text,
+            edits,
+            &self.cancel_flag,
+            grammars_directory,
+            queries_directory
+        ) {
             error!("{:?}", err);
         }
         let tree = layers.try_tree();
@@ -998,12 +1060,13 @@ impl Syntax {
             let mut highlights: SpansBuilder<String> =
                 SpansBuilder::new(new_text.len());
 
-            // TODO: Should we be ignoring highlight errors via flattening them?
+            // TODO: Should we be ignoring highlight errors via
+            // flattening them?
             for highlight in layers
                 .highlight_iter(
                     &new_text,
                     Some(0..new_text.len()),
-                    Some(&self.cancel_flag),
+                    Some(&self.cancel_flag)
                 )
                 .flatten()
             {
@@ -1017,11 +1080,11 @@ impl Syntax {
                                 );
                             }
                         }
-                    }
+                    },
                     HighlightEvent::HighlightStart(hl) => {
                         current_hl = Some(hl);
-                    }
-                    HighlightEvent::HighlightEnd => current_hl = None,
+                    },
+                    HighlightEvent::HighlightEnd => current_hl = None
                 }
             }
 
@@ -1043,7 +1106,7 @@ impl Syntax {
             new_text.line_of_offset(new_text.len()) + 1,
             self.line_height,
             self.lens_height,
-            &normal_lines,
+            &normal_lines
         );
 
         self.rev = new_rev;
@@ -1058,7 +1121,7 @@ impl Syntax {
             self.text.line_of_offset(self.text.len()) + 1,
             line_height,
             lens_height,
-            &self.normal_lines,
+            &self.normal_lines
         );
         self.line_height = line_height;
         self.lens_height = lens_height;
@@ -1068,7 +1131,7 @@ impl Syntax {
         total_lines: usize,
         line_height: usize,
         lens_height: usize,
-        normal_lines: &[usize],
+        normal_lines: &[usize]
     ) -> Lens {
         let mut builder = LensBuilder::new();
         let mut current_line = 0;
@@ -1116,7 +1179,7 @@ impl Syntax {
         &self,
         offset: usize,
         previous: bool,
-        tag: &str,
+        tag: &str
     ) -> Option<usize> {
         let tree = self.layers.as_ref()?.try_tree()?;
         let node = tree
@@ -1145,7 +1208,7 @@ impl Syntax {
         &self,
         node: Node,
         previous: bool,
-        tag: &str,
+        tag: &str
     ) -> Option<usize> {
         let mut node = node;
         while let Some(sibling) = if previous {
@@ -1194,7 +1257,7 @@ impl Syntax {
 
     pub fn find_enclosing_parentheses(
         &self,
-        offset: usize,
+        offset: usize
     ) -> Option<(usize, usize)> {
         if offset >= self.text.len() {
             return None;
@@ -1229,7 +1292,8 @@ impl Syntax {
 
     pub fn find_enclosing_pair(&self, offset: usize) -> Option<(usize, usize)> {
         if self.language == LapceLanguage::Markdown {
-            // TODO: fix the issue that sometimes node.prev_sibling can stuck for markdown
+            // TODO: fix the issue that sometimes node.prev_sibling
+            // can stuck for markdown
             return None;
         }
 

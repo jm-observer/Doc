@@ -70,9 +70,11 @@ mod motion {
         assert_eq!(buffer.move_n_words_backward(end, 2, Mode::Insert), 8);
         assert_eq!(buffer.move_n_words_backward(end, 3, Mode::Insert), 4);
 
-        // FIXME: see #501 for possible issues in WordCursor::next_boundary()
+        // FIXME: see #501 for possible issues in
+        // WordCursor::next_boundary()
         //
-        // Trying to move beyond the buffer end.  The cursor will stay there.
+        // Trying to move beyond the buffer end.  The cursor will stay
+        // there.
         for offset in 0..end {
             assert_eq!(buffer.move_n_words_forward(offset, 100), end + 1);
         }

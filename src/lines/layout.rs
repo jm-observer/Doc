@@ -1,19 +1,26 @@
 use std::ops::Range;
-use cosmic_text::{Affinity, BufferLine, Cursor, FontSystem, LayoutCursor, LayoutGlyph, LayoutLine, LineEnding, Metrics, Scroll, ShapeBuffer, Shaping, Wrap};
-use floem::kurbo::{Point, Size};
-use floem::peniko::Color;
-use floem::text::{AttrsList, FONT_SYSTEM, HitPoint, HitPosition, LayoutRun};
+
+use cosmic_text::{
+    Affinity, BufferLine, Cursor, FontSystem, LayoutCursor, LayoutGlyph, LayoutLine,
+    LineEnding, Metrics, Scroll, ShapeBuffer, Shaping, Wrap
+};
+use floem::{
+    kurbo::{Point, Size},
+    peniko::Color,
+    text::{AttrsList, FONT_SYSTEM, HitPoint, HitPosition, LayoutRun}
+};
 use unicode_segmentation::UnicodeSegmentation;
+
 use crate::lines::phantom_text::PhantomTextMultiLine;
 #[derive(Clone, Debug)]
 pub struct LineExtraStyle {
-    pub x: f64,
-    pub y: f64,
-    pub width: Option<f64>,
-    pub height: f64,
-    pub bg_color: Option<Color>,
+    pub x:          f64,
+    pub y:          f64,
+    pub width:      Option<f64>,
+    pub height:     f64,
+    pub bg_color:   Option<Color>,
     pub under_line: Option<Color>,
-    pub wave_line: Option<Color>,
+    pub wave_line:  Option<Color>
 }
 
 /// --以原始文本行为单位，的相关--
@@ -24,28 +31,32 @@ pub struct TextLayoutLine {
     /// Extra styling that should be applied to the text
     /// (x0, x1 or line display end, style)
     /// todo?暂时没有数据，下划线等？
-    pub extra_style: Vec<LineExtraStyle>,
+    pub extra_style:  Vec<LineExtraStyle>,
     // 文本：包含折叠行的文本、幽灵文本，及其所有的样式（背景色等）
-    pub text: TextLayout,
+    pub text:         TextLayout,
     // ?
-    pub whitespaces: Option<Vec<(char, (f64, f64))>>,
+    pub whitespaces:  Option<Vec<(char, (f64, f64))>>,
     // 缩进?
-    pub indent: f64,
+    pub indent:       f64,
     // 幽灵文本相关信息
-    pub phantom_text: PhantomTextMultiLine,
+    pub phantom_text: PhantomTextMultiLine
 }
 
 impl TextLayoutLine {
-    // /// The number of line breaks in the text layout. Always at least `1`.
+    // /// The number of line breaks in the text layout. Always at
+    // least `1`.
     pub fn line_count(&self) -> usize {
         self.text.line_layout().len()
     }
+
     //
     // /// Iterate over all the layouts that are nonempty.
-    // /// Note that this may be empty if the line is completely empty, like the last line
-    // pub fn relevant_layouts(&self) -> impl Iterator<Item = &'_ LayoutLine> + '_ {
-    //     // Even though we only have one hard line (and thus only one `lines` entry) typically, for
-    //     // normal buffer lines, we can have more than one due to multiline phantom text. So we have
+    // /// Note that this may be empty if the line is completely
+    // empty, like the last line pub fn relevant_layouts(&self) ->
+    // impl Iterator<Item = &'_ LayoutLine> + '_ {     // Even
+    // though we only have one hard line (and thus only one `lines`
+    // entry) typically, for     // normal buffer lines, we can
+    // have more than one due to multiline phantom text. So we have
     //     // to sum over all of the entries line counts.
     //     self.text
     //         .lines().layout_opt().into_iter()
@@ -53,8 +64,8 @@ impl TextLayoutLine {
     //         .filter(|l| !l.glyphs.is_empty())
     // }
 
-    // /// Iterator over the (start, end) columns of the relevant layouts.
-    // pub fn layout_cols<'a>(
+    // /// Iterator over the (start, end) columns of the relevant
+    // layouts. pub fn layout_cols<'a>(
     //     &'a self,
     //     _text_prov: &'a Editor,
     //     _line: usize,
@@ -64,42 +75,46 @@ impl TextLayoutLine {
     //         let line_start = self.text.lines_range.start;
     //         if let Some(layouts) = self.text.line().layout_opt() {
     //             // Do we need to require !layouts.is_empty()?
-    //             if !layouts.is_empty() && layouts.iter().all(|l| l.glyphs.is_empty()) {
-    //                 // We assume the implicit glyph start is zero
-    //                 prefix = Some((line_start, line_start));
-    //             }
+    //             if !layouts.is_empty() && layouts.iter().all(|l|
+    // l.glyphs.is_empty()) {                 // We assume the
+    // implicit glyph start is zero                 prefix =
+    // Some((line_start, line_start));             }
     //         }
     //
     //     // let line_v = line;
     //     let iter = self
     //         .text
     //         .line().layout_opt().into_iter().map(|x| (self
-    //                                                                     .text
-    //                                                                     .line(), self.text.lines_range(), x))
-    //         .flat_map(|(line, line_range, ls)| ls.iter().map(move |l| (line, line_range, l)))
-    //         .filter(|(_, _, l)| !l.glyphs.is_empty())
-    //         .map(move |(tl_line, line_range, l)| {
-    //             let line_start = line_range.start;
-    //             tl_line.align();
+    //
+    // .text
+    // .line(), self.text.lines_range(), x))
+    //         .flat_map(|(line, line_range, ls)| ls.iter().map(move
+    // |l| (line, line_range, l)))         .filter(|(_, _, l)|
+    // !l.glyphs.is_empty())         .map(move |(tl_line,
+    // line_range, l)| {             let line_start =
+    // line_range.start;             tl_line.align();
     //
     //             // todo????
     //             let start = line_start + l.glyphs[0].start;
-    //             let end = line_start + l.glyphs.last().unwrap().end;
+    //             let end = line_start +
+    // l.glyphs.last().unwrap().end;
     //
     //             // let text = text_prov.rope_text();
-    //             // // We can't just use the original end, because the *true* last glyph on the line
-    //             // // may be a space, but it isn't included in the layout! Though this only happens
-    //             // // for single spaces, for some reason.
-    //             // let pre_end = text_prov.before_phantom_col(line_v, end);
+    //             // // We can't just use the original end, because
+    // the *true* last glyph on the line             // // may be
+    // a space, but it isn't included in the layout! Though this only
+    // happens             // // for single spaces, for some
+    // reason.             // let pre_end =
+    // text_prov.before_phantom_col(line_v, end);             //
     //             //
-    //             //
-    //             // // TODO(minor): We don't really need the entire line, just the two characters after
-    //             // let line_end = text.line_end_col(line, true);
-    //             //
+    //             // // TODO(minor): We don't really need the entire
+    // line, just the two characters after             // let
+    // line_end = text.line_end_col(line, true);             //
     //             // let end = if pre_end <= line_end {
     //             //     let line_offset = text.offset_of_line(line);
-    //             //     let after = text.slice_to_cow(line_offset + pre_end..line_offset + line_end);
-    //             //     if after.starts_with(' ') && !after.starts_with("  ") {
+    //             //     let after = text.slice_to_cow(line_offset +
+    // pre_end..line_offset + line_end);             //     if
+    // after.starts_with(' ') && !after.starts_with("  ") {
     //             //         end + 1
     //             //     } else {
     //             //         end
@@ -133,7 +148,7 @@ impl TextLayoutLine {
         self.text.layout_runs().nth(nth).map(|run| {
             (
                 run.glyphs.first().map(|g| g.x).unwrap_or(0.0),
-                run.glyphs.last().map(|g| g.x + g.w).unwrap_or(0.0),
+                run.glyphs.last().map(|g| g.x + g.w).unwrap_or(0.0)
             )
         })
     }
@@ -142,74 +157,75 @@ impl TextLayoutLine {
         self.phantom_text.last_line
     }
 
-    pub fn adjust(&mut self, line_delta: fn(&mut usize), offset_delta: fn(&mut usize)) {
+    pub fn adjust(
+        &mut self,
+        line_delta: fn(&mut usize),
+        offset_delta: fn(&mut usize)
+    ) {
         self.phantom_text.adjust(line_delta, offset_delta);
     }
 }
-
-
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct TextLayout {
     // only for tracing
-    line: usize,
-    buffer: BufferLine,
+    line:            usize,
+    buffer:          BufferLine,
     // ?
     pub lines_range: Range<usize>,
-    width_opt: Option<f32>,
-    height_opt: Option<f32>,
+    width_opt:       Option<f32>,
+    height_opt:      Option<f32>,
 
-    metrics: Metrics,
-    scroll: Scroll,
+    metrics:         Metrics,
+    scroll:          Scroll,
     /// True if a redraw is requires. Set to false after processing
-    redraw: bool,
-    wrap: Wrap,
+    redraw:          bool,
+    wrap:            Wrap,
     monospace_width: Option<f32>,
-    tab_width: u16,
+    tab_width:       u16,
     /// Scratch buffer for shaping and laying out.
-    scratch: ShapeBuffer,
+    scratch:         ShapeBuffer
 }
 
 impl Clone for TextLayout {
     fn clone(&self) -> Self {
         Self {
-            line: self.line,
-            buffer: self.buffer.clone(),
-            metrics: self.metrics,
-            width_opt: self.width_opt,
-            height_opt: self.height_opt,
-            scroll: self.scroll,
-            redraw: self.redraw,
-            wrap: self.wrap,
+            line:            self.line,
+            buffer:          self.buffer.clone(),
+            metrics:         self.metrics,
+            width_opt:       self.width_opt,
+            height_opt:      self.height_opt,
+            scroll:          self.scroll,
+            redraw:          self.redraw,
+            wrap:            self.wrap,
             monospace_width: self.monospace_width,
-            tab_width: self.tab_width,
-            scratch: ShapeBuffer::default(),
-            lines_range: self.lines_range.clone(),
+            tab_width:       self.tab_width,
+            scratch:         ShapeBuffer::default(),
+            lines_range:     self.lines_range.clone()
         }
     }
 }
 
 impl TextLayout {
-
     pub fn new(text: &str, attrs_list: AttrsList) -> Self {
         let mut font_system = FONT_SYSTEM.lock();
         Self::new_with_font_system(0, text, attrs_list, &mut font_system)
     }
 
-    pub fn new_with_font_system(line: usize, text: &str, attrs_list: AttrsList, font_system: &mut FontSystem) -> Self {
+    pub fn new_with_font_system(
+        line: usize,
+        text: &str,
+        attrs_list: AttrsList,
+        font_system: &mut FontSystem
+    ) -> Self {
         let ending = LineEnding::None;
         let mut text_layout = Self {
             line,
-            buffer: BufferLine::new(
-                text,
-                ending,
-                attrs_list.0,
-                Shaping::Advanced,
-            ),
+            buffer: BufferLine::new(text, ending, attrs_list.0, Shaping::Advanced),
             lines_range: Range {
                 start: 0,
-                end: text.len(),
+                end:   text.len()
             },
             width_opt: None,
             height_opt: None,
@@ -219,7 +235,7 @@ impl TextLayout {
             wrap: Wrap::WordOrGlyph,
             monospace_width: None,
             tab_width: 8,
-            scratch: Default::default(),
+            scratch: Default::default()
         };
 
         text_layout.shape_until_scroll(font_system, false);
@@ -228,7 +244,7 @@ impl TextLayout {
 
     pub fn line_layout_with_font_system(
         &mut self,
-        font_system: &mut FontSystem,
+        font_system: &mut FontSystem
     ) -> &[LayoutLine] {
         self.buffer.layout(
             font_system,
@@ -236,17 +252,13 @@ impl TextLayout {
             self.width_opt,
             self.wrap,
             self.monospace_width,
-            self.tab_width,
+            self.tab_width
         )
     }
 
-    pub fn line_layout(
-        &self,
-    ) -> &[LayoutLine] {
+    pub fn line_layout(&self) -> &[LayoutLine] {
         self.buffer.layout_opt().as_ref().expect("layout_opt empty")
     }
-
-
 
     /// Shape lines until scroll
     pub fn shape_until_scroll(&mut self, font_system: &mut FontSystem, prune: bool) {
@@ -254,22 +266,25 @@ impl TextLayout {
         let old_scroll = self.scroll;
 
         loop {
-            // Adjust scroll.layout to be positive by moving scroll.line backwards
+            // Adjust scroll.layout to be positive by moving
+            // scroll.line backwards
             while self.scroll.vertical < 0.0 {
                 if self.scroll.line > 0 {
                     let line_i = self.scroll.line - 1;
                     let layout = self.line_layout_with_font_system(font_system);
                     let mut layout_height = 0.0;
                     for layout_line in layout.iter() {
-                        layout_height +=
-                            layout_line.line_height_opt.unwrap_or(metrics.line_height);
+                        layout_height += layout_line
+                            .line_height_opt
+                            .unwrap_or(metrics.line_height);
                     }
                     self.scroll.line = line_i;
                     self.scroll.vertical += layout_height;
                     // } else {
-                    //     // If layout is missing, just assume line height
-                    //     self.scroll.line = line_i;
-                    //     self.scroll.vertical += metrics.line_height;
+                    //     // If layout is missing, just assume line
+                    // height     self.scroll.line
+                    // = line_i;     self.scroll.
+                    // vertical += metrics.line_height;
                     // }
                 } else {
                     self.scroll.vertical = 0.0;
@@ -298,17 +313,19 @@ impl TextLayout {
                 }
 
                 let mut layout_height = 0.0;
-                let layout = self
-                    .line_layout_with_font_system(font_system);
+                let layout = self.line_layout_with_font_system(font_system);
                 for layout_line in layout.iter() {
-                    let line_height = layout_line.line_height_opt.unwrap_or(metrics.line_height);
+                    let line_height =
+                        layout_line.line_height_opt.unwrap_or(metrics.line_height);
                     layout_height += line_height;
                     total_height += line_height;
                 }
 
-                // Adjust scroll.vertical to be smaller by moving scroll.line forwards
-                //TODO: do we want to adjust it exactly to a layout line?
-                if line_i == self.scroll.line && layout_height < self.scroll.vertical {
+                // Adjust scroll.vertical to be smaller by moving
+                // scroll.line forwards TODO: do we
+                // want to adjust it exactly to a layout line?
+                if line_i == self.scroll.line && layout_height < self.scroll.vertical
+                {
                     self.scroll.line += 1;
                     self.scroll.vertical -= layout_height;
                 }
@@ -346,7 +363,8 @@ impl TextLayout {
         if tab_width != self.tab_width {
             self.tab_width = tab_width;
             // Shaping must be reset when tab width is changed
-            if self.buffer.shape_opt().is_some() && self.buffer.text().contains('\t') {
+            if self.buffer.shape_opt().is_some() && self.buffer.text().contains('\t')
+            {
                 self.buffer.reset_shaping();
             }
             self.redraw = true;
@@ -358,7 +376,12 @@ impl TextLayout {
         let mut font_system = FONT_SYSTEM.lock();
         self.width_opt = Some(width);
         self.height_opt = Some(height);
-        self.set_metrics_and_size(&mut font_system, self.metrics, self.width_opt, self.height_opt);
+        self.set_metrics_and_size(
+            &mut font_system,
+            self.metrics,
+            self.width_opt,
+            self.height_opt
+        );
     }
 
     pub fn set_metrics_and_size(
@@ -366,11 +389,13 @@ impl TextLayout {
         font_system: &mut FontSystem,
         metrics: Metrics,
         width_opt: Option<f32>,
-        height_opt: Option<f32>,
+        height_opt: Option<f32>
     ) {
         let clamped_width_opt = width_opt.map(|width| width.max(0.0));
         let clamped_height_opt = height_opt.map(|height| height.max(0.0));
-        // println!("set_metrics_and_size {width_opt:?} {height_opt:?} {} {}", metrics != self.metrics, clamped_width_opt != self.width_opt);
+        // println!("set_metrics_and_size {width_opt:?} {height_opt:?}
+        // {} {}", metrics != self.metrics, clamped_width_opt !=
+        // self.width_opt);
 
         if metrics != self.metrics
             || clamped_width_opt != self.width_opt
@@ -392,7 +417,6 @@ impl TextLayout {
     pub fn lines_range(&self) -> &Range<usize> {
         &self.lines_range
     }
-
 
     pub fn layout_runs(&self) -> LayoutRunIter {
         LayoutRunIter::new(self)
@@ -417,12 +441,11 @@ impl TextLayout {
                 self.width_opt,
                 self.wrap,
                 self.monospace_width,
-                self.tab_width,
+                self.tab_width
             );
         }
 
         self.redraw = true;
-
     }
 
     pub fn hit_position(&self, idx: usize) -> HitPosition {
@@ -431,10 +454,10 @@ impl TextLayout {
         let mut offset = 0;
         let mut last_glyph_width = 0.0;
         let mut last_position = HitPosition {
-            line: 0,
-            point: Point::ZERO,
-            glyph_ascent: 0.0,
-            glyph_descent: 0.0,
+            line:          0,
+            point:         Point::ZERO,
+            glyph_ascent:  0.0,
+            glyph_descent: 0.0
         };
         for (line, run) in self.layout_runs().enumerate() {
             if run.line_i > last_line {
@@ -452,7 +475,7 @@ impl TextLayout {
                     line,
                     point: Point::new(glyph.x as f64, run.line_y as f64),
                     glyph_ascent: run.max_ascent as f64,
-                    glyph_descent: run.max_descent as f64,
+                    glyph_descent: run.max_descent as f64
                 };
                 if (glyph.start + offset..glyph.end + offset).contains(&idx) {
                     return last_position;
@@ -466,10 +489,10 @@ impl TextLayout {
         }
 
         HitPosition {
-            line: 0,
-            point: Point::ZERO,
-            glyph_ascent: 0.0,
-            glyph_descent: 0.0,
+            line:          0,
+            point:         Point::ZERO,
+            glyph_ascent:  0.0,
+            glyph_descent: 0.0
         }
     }
 
@@ -480,13 +503,13 @@ impl TextLayout {
             HitPoint {
                 line: cursor.line,
                 index: cursor.index,
-                is_inside,
+                is_inside
             }
         } else {
             HitPoint {
-                line: 0,
-                index: 0,
-                is_inside: false,
+                line:      0,
+                index:     0,
+                is_inside: false
             }
         }
     }
@@ -533,7 +556,8 @@ impl TextLayout {
 
                                 let right_half = x >= egc_x + egc_w / 2.0;
                                 if right_half != glyph.level.is_rtl() {
-                                    // If clicking on last half of glyph, move cursor past glyph
+                                    // If clicking on last half of
+                                    // glyph, move cursor past glyph
                                     new_cursor_char += egc.len();
                                     new_cursor_affinity = Affinity::Before;
                                 }
@@ -544,7 +568,8 @@ impl TextLayout {
 
                         let right_half = x >= glyph.x + glyph.w / 2.0;
                         if right_half != glyph.level.is_rtl() {
-                            // If clicking on last half of glyph, move cursor past glyph
+                            // If clicking on last half of glyph, move
+                            // cursor past glyph
                             new_cursor_char = cluster.len();
                             new_cursor_affinity = Affinity::Before;
                         }
@@ -559,7 +584,7 @@ impl TextLayout {
                         // Position at glyph
                         new_cursor.index = glyph.start + new_cursor_char;
                         new_cursor.affinity = new_cursor_affinity;
-                    }
+                    },
                     None => {
                         if let Some(glyph) = run.glyphs.last() {
                             // Position at end of line
@@ -596,35 +621,42 @@ impl TextLayout {
                     std::cmp::Ordering::Equal => {
                         if glyph.start > col {
                             return HitPosition {
-                                line: last_line,
-                                point: Point::new(
-                                    last_glyph.map(|g| (g.x + g.w) as f64).unwrap_or(0.0),
-                                    last_line_y as f64,
+                                line:          last_line,
+                                point:         Point::new(
+                                    last_glyph
+                                        .map(|g| (g.x + g.w) as f64)
+                                        .unwrap_or(0.0),
+                                    last_line_y as f64
                                 ),
-                                glyph_ascent: last_glyph_ascent as f64,
-                                glyph_descent: last_glyph_descent as f64,
+                                glyph_ascent:  last_glyph_ascent as f64,
+                                glyph_descent: last_glyph_descent as f64
                             };
                         }
                         if (glyph.start..glyph.end).contains(&col) {
                             return HitPosition {
-                                line: current_line,
-                                point: Point::new(glyph.x as f64, run.line_y as f64),
-                                glyph_ascent: run.max_ascent as f64,
-                                glyph_descent: run.max_descent as f64,
+                                line:          current_line,
+                                point:         Point::new(
+                                    glyph.x as f64,
+                                    run.line_y as f64
+                                ),
+                                glyph_ascent:  run.max_ascent as f64,
+                                glyph_descent: run.max_descent as f64
                             };
                         }
-                    }
+                    },
                     std::cmp::Ordering::Greater => {
                         return HitPosition {
-                            line: last_line,
-                            point: Point::new(
-                                last_glyph.map(|g| (g.x + g.w) as f64).unwrap_or(0.0),
-                                last_line_y as f64,
+                            line:          last_line,
+                            point:         Point::new(
+                                last_glyph
+                                    .map(|g| (g.x + g.w) as f64)
+                                    .unwrap_or(0.0),
+                                last_line_y as f64
                             ),
-                            glyph_ascent: last_glyph_ascent as f64,
-                            glyph_descent: last_glyph_descent as f64,
+                            glyph_ascent:  last_glyph_ascent as f64,
+                            glyph_descent: last_glyph_descent as f64
                         };
-                    }
+                    },
                     std::cmp::Ordering::Less => {}
                 };
                 last_glyph = Some(glyph);
@@ -636,13 +668,13 @@ impl TextLayout {
         }
 
         HitPosition {
-            line: last_line,
-            point: Point::new(
+            line:          last_line,
+            point:         Point::new(
                 last_glyph.map(|g| (g.x + g.w) as f64).unwrap_or(0.0),
-                last_line_y as f64,
+                last_line_y as f64
             ),
-            glyph_ascent: last_glyph_ascent as f64,
-            glyph_descent: last_glyph_descent as f64,
+            glyph_ascent:  last_glyph_ascent as f64,
+            glyph_descent: last_glyph_descent as f64
         }
     }
 
@@ -665,16 +697,14 @@ impl TextLayout {
     }
 }
 
-
-
 /// An iterator of visible text lines, see [`LayoutRun`]
 #[derive(Debug)]
 pub struct LayoutRunIter<'b> {
-    text_layout: &'b TextLayout,
-    line_i: usize,
-    layout_i: usize,
+    text_layout:  &'b TextLayout,
+    line_i:       usize,
+    layout_i:     usize,
     total_height: f32,
-    line_top: f32,
+    line_top:     f32
 }
 
 impl<'b> LayoutRunIter<'b> {
@@ -684,7 +714,7 @@ impl<'b> LayoutRunIter<'b> {
             line_i: 0,
             layout_i: 0,
             total_height: 0.0,
-            line_top: 0.0,
+            line_top: 0.0
         }
     }
 }
@@ -703,9 +733,7 @@ impl<'b> Iterator for LayoutRunIter<'b> {
         while let Some(layout_line) = layout.get(self.layout_i) {
             self.layout_i += 1;
 
-            let line_height = layout_line
-                .line_height_opt
-                .unwrap();
+            let line_height = layout_line.line_height_opt.unwrap();
             self.total_height += line_height;
 
             let line_top = self.line_top;
@@ -732,11 +760,10 @@ impl<'b> Iterator for LayoutRunIter<'b> {
                 line_y,
                 line_top,
                 line_height,
-                line_w: layout_line.w,
+                line_w: layout_line.w
             });
         }
         self.line_i += 1;
         None
     }
 }
-

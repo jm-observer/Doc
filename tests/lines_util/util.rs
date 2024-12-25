@@ -1,11 +1,11 @@
+use doc::lines::phantom_text::{PhantomTextMultiLine, Text, combine_with_text};
 use smallvec::SmallVec;
-use doc::lines::phantom_text::{combine_with_text, PhantomTextMultiLine, Text};
 
 pub fn check_lines_col(
     lines: &SmallVec<[Text; 6]>,
     final_text_len: usize,
     origin: &str,
-    expect: &str,
+    expect: &str
 ) {
     let rs = combine_with_text(lines, origin);
     assert_eq!(expect, rs.as_str());
