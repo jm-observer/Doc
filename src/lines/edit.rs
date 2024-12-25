@@ -3,7 +3,7 @@ use std::{collections::HashSet, iter, ops::Range};
 use itertools::Itertools;
 use lapce_xi_rope::{DeltaElement, Rope, RopeDelta};
 
-use floem::prelude::editor::{
+use floem::views::editor::{
     core::command::EditCommand,
     core::mode::{Mode, MotionMode, VisualMode},
     core::register::{Clipboard, Register, RegisterData, RegisterKind},

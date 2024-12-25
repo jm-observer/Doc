@@ -16,7 +16,7 @@ use std::{
 };
 
 use ahash::RandomState;
-use floem::prelude::editor::core::util::{matching_bracket_general, matching_pair_direction};
+use floem::views::editor::core::util::{matching_bracket_general, matching_pair_direction};
 use hashbrown::raw::RawTable;
 use itertools::Itertools;
 use lapce_xi_rope::{

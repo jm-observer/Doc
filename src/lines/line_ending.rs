@@ -106,6 +106,11 @@ impl LineEnding {
             LineEnding::Lf => 1,
         }
     }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

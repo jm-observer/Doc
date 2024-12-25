@@ -1,5 +1,5 @@
-use floem::prelude::editor::core::mode::Mode;
-use floem::prelude::editor::core::util::{matching_char, matching_pair_direction};
+use floem::views::editor::core::mode::Mode;
+use floem::views::editor::core::util::{matching_char, matching_pair_direction};
 use lapce_xi_rope::{Cursor, Rope, RopeInfo};
 
 /// Describe char classifications used to compose word boundaries
