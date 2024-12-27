@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct NewLineStyle {
     pub origin_line:              usize,
     pub origin_line_offset_start: usize,
-    pub origin_line_offset_end:   usize,
+    pub len:   usize,
     pub start_of_buffer:          usize,
     pub end_of_buffer:            usize,
     pub fg_color:                 Color,

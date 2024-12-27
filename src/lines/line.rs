@@ -29,7 +29,7 @@ pub struct OriginLine {
     pub line_index:        usize,
     /// [start_offset...end_offset)
     pub start_offset:      usize,
-    pub end_offset:        usize,
+    pub len:        usize,
     pub phantom:           PhantomTextLine,
     pub semantic_styles:   Vec<NewLineStyle>,
     pub diagnostic_styles: Vec<NewLineStyle>
@@ -42,7 +42,6 @@ impl OriginLine {
             .map(|x| {
                 let mut x = x.clone();
                 x.origin_line_offset_start += delta;
-                x.origin_line_offset_end += delta;
                 x
             })
             .collect()
@@ -54,7 +53,6 @@ impl OriginLine {
             .map(|x| {
                 let mut x = x.clone();
                 x.origin_line_offset_start += delta;
-                x.origin_line_offset_end += delta;
                 x
             })
             .collect()

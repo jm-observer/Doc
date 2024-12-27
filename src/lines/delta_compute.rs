@@ -1,5 +1,5 @@
 use floem::views::editor::core::xi_rope::Interval;
-use lapce_xi_rope::{DeltaElement, Rope, RopeDelta, RopeInfo};
+use lapce_xi_rope::{DeltaElement, Rope, RopeDelta};
 use crate::lines::buffer::InvalLines;
 use anyhow::Result;
 
@@ -105,7 +105,7 @@ fn resolve_line_delta(
         let copy_line_start_info = resolve_line_complete_by_start_offset(rope, offset_delta_compute.copy_end.start)?;
         let copy_line_end_info = resolve_line_complete_by_end_offset(rope, offset_delta_compute.copy_end.end)?;
         if copy_line_end_info.0 > copy_line_start_info.0 {
-            offset_end += (copy_line_start_info.1 - offset_delta_compute.copy_end.start);
+            offset_end += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
             let recompute_last_line = copy_line_end_info.2;
             let copy_line = Interval::new(copy_line_start_info.0, copy_line_end_info.0);
             copy_line_end = CopyEndDelta {
@@ -196,7 +196,7 @@ fn resolve_delta_compute(
                 for delta in iter {
                     match delta {
                         DeltaElement::Copy(start, end) => {
-                            rs.internal_len += (*end - *start);
+                            rs.internal_len += *end - *start;
                         }
                         DeltaElement::Insert(val) => {
                             rs.internal_len += val.len();

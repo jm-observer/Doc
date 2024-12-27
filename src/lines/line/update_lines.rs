@@ -1,4 +1,4 @@
-use crate::lines::{DocLines, LineDelta};
+use crate::lines::{DocLines};
 use crate::lines::buffer::rope_text::RopeText;
 use crate::lines::delta_compute::{origin_lines_delta, OriginLinesDelta};
 use crate::lines::line::OriginLine;
@@ -16,7 +16,6 @@ impl DocLines {
         let mut start_offset = 0;
         if recompute_first_line {
             let line = self.init_origin_line(0)?;
-            start_offset = line.end_offset;
             origin_lines.push(line);
         }
         if !copy_line_start.is_empty() {

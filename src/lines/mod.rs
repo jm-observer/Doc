@@ -27,7 +27,7 @@ use floem::{
     }
 };
 use itertools::Itertools;
-use lapce_xi_rope::{DeltaElement, Interval, Rope, RopeDelta, Transformer, spans::{Spans, SpansBuilder}, RopeInfo};
+use lapce_xi_rope::{DeltaElement, Interval, Rope, RopeDelta, Transformer, spans::{Spans, SpansBuilder}};
 use layout::{TextLayout, TextLayoutLine};
 use line::{OriginFoldedLine, VisualLine};
 use log::{debug, error, info, warn};
@@ -747,7 +747,7 @@ impl DocLines {
         Ok(OriginLine {
             line_index: current_line,
             start_offset,
-            end_offset,
+            len: end_offset - start_offset,
             phantom: phantom_text,
             semantic_styles,
             diagnostic_styles
@@ -783,7 +783,7 @@ impl DocLines {
                     Some(NewLineStyle {
                         origin_line,
                         origin_line_offset_start: start - line_start,
-                        origin_line_offset_end: end - line_start,
+                        len: end - start,
                         start_of_buffer: start,
                         end_of_buffer: end,
                         fg_color: color,
@@ -1800,7 +1800,7 @@ impl DocLines {
     ) {
         for NewLineStyle {
             origin_line_offset_start,
-            origin_line_offset_end,
+            len,
             fg_color,
             ..
         } in semantic_styles.iter()
@@ -1808,7 +1808,7 @@ impl DocLines {
             // for (start, end, color) in styles.into_iter() {
             let (Some(start), Some(end)) = (
                 phantom_text.col_at(*origin_line_offset_start),
-                phantom_text.col_at(*origin_line_offset_end)
+                phantom_text.col_at(*origin_line_offset_start + *len)
             ) else {
                 continue;
             };
@@ -1826,7 +1826,7 @@ impl DocLines {
         // 暂不考虑
         for NewLineStyle {
             origin_line_offset_start: start,
-            origin_line_offset_end: end,
+            len,
             fg_color,
             ..
         } in line_styles
@@ -1836,10 +1836,10 @@ impl DocLines {
             // col_at(end)可以为空，因为end是不包含的
             let (Some(start), Some(end)) = (
                 phantom_text.col_at(*start),
-                phantom_text.col_at((*end).max(1) - 1)
+                phantom_text.col_at((*start + *len).max(1) - 1)
             ) else {
                 warn!(
-                    "line={} start={start}, end={end}, color={fg_color:?} col_at \
+                    "line={} start={start}, len={len}, color={fg_color:?} col_at \
                      empty",
                     phantom_text.line
                 );
@@ -2005,7 +2005,7 @@ impl DocLines {
                                 Some(NewLineStyle {
                                     origin_line,
                                     origin_line_offset_start: start - start_offset,
-                                    origin_line_offset_end: end - start_offset,
+                                    len: end - start,
                                     start_of_buffer: start_offset,
                                     end_of_buffer: end_offset,
                                     fg_color: color,
