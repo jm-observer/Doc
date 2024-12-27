@@ -2,6 +2,45 @@ use floem::views::editor::core::xi_rope::Interval;
 use lapce_xi_rope::{DeltaElement, Rope, RopeDelta};
 use crate::lines::buffer::InvalLines;
 use anyhow::Result;
+#[derive(Copy, Clone, Debug, Default)]
+pub enum Offset {
+    #[default]
+    None,
+    Add(usize),
+    Minus(usize),
+}
+
+impl Offset {
+    pub fn new(origin: usize, new: usize) -> Self {
+        if origin > new {
+            Self::minus(origin - new)
+        } else {
+            Self::add(new - origin)
+        }
+    }
+    pub fn add(offset: usize) -> Self {
+        if offset == 0 {
+            Self::None
+        } else {
+            Self::Add(offset)
+        }
+    }
+    pub fn minus(offset: usize) -> Self {
+        if offset == 0 {
+            Self::None
+        } else {
+            Self::Minus(offset)
+        }
+    }
+
+    pub fn adjust(&self, num: &mut usize) {
+        match self {
+            Offset::None => {}
+            Offset::Add(offset) => { *num += *offset}
+            Offset::Minus(offset) => {*num -= offset}
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 struct OffsetDelta {
@@ -44,12 +83,16 @@ pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Inter
 
 #[derive(Copy, Clone, Debug)]
 pub struct CopyStartDelta {
+    /// 首行如果不完整则需要重新计算
     pub recompute_first_line: bool,
+    /// 相对的旧buffer的偏移
+    pub offset: Offset,
     pub internal_len: usize,
     pub copy_line: Interval,
 }
 #[derive(Copy, Clone, Debug)]
 pub struct CopyEndDelta {
+    pub offset: Offset,
     pub recompute_last_line: bool,
     pub copy_line: Interval,
 }
@@ -68,6 +111,7 @@ fn resolve_line_delta(
     let mut copy_line_start= CopyStartDelta {
         recompute_first_line: true,
         internal_len: 0,
+        offset: Offset::None,
         copy_line: Interval::new(0, 0),
     };
     let mut offset_end = 0;
@@ -87,6 +131,7 @@ fn resolve_line_delta(
             }
             copy_line_start = CopyStartDelta {
                 recompute_first_line,
+                offset: Offset::minus(offset_delta_compute.copy_start.start),
                 internal_len,
                 copy_line,
             };
@@ -99,6 +144,7 @@ fn resolve_line_delta(
     offset_end += offset_delta_compute.internal_len;
     let mut copy_line_end= CopyEndDelta {
         recompute_last_line: true,
+        offset: Offset::None,
         copy_line: Interval::new(0, 0),
     };
     if !offset_delta_compute.copy_end.is_empty() {
@@ -109,6 +155,7 @@ fn resolve_line_delta(
             let recompute_last_line = copy_line_end_info.2;
             let copy_line = Interval::new(copy_line_start_info.0, copy_line_end_info.0);
             copy_line_end = CopyEndDelta {
+                offset: Offset::new(offset_delta_compute.copy_end.start, offset_end),
                 copy_line,
                 recompute_last_line,
             };
