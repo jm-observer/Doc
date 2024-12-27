@@ -1,3 +1,5 @@
+mod update_lines;
+
 use std::{
     cmp::Ordering,
     fmt::{Debug, Formatter},
@@ -69,6 +71,7 @@ pub struct OriginFoldedLine {
     pub origin_line_end:   usize,
     pub origin_interval:   Interval,
     pub text_layout:       TextLayoutLine,
+    // 不易于更新迭代？
     pub semantic_styles:   Vec<NewLineStyle>,
     pub diagnostic_styles: Vec<NewLineStyle>
 }

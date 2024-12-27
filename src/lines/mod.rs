@@ -4,6 +4,7 @@ use std::{
     ops::{AddAssign, Range},
     sync::{Arc, atomic, atomic::AtomicUsize}
 };
+use std::fmt::{Debug, Formatter};
 
 use anyhow::{Result, anyhow, bail};
 use floem::{
@@ -26,13 +27,10 @@ use floem::{
     }
 };
 use itertools::Itertools;
-use lapce_xi_rope::{
-    DeltaElement, Interval, Rope, RopeDelta, Transformer,
-    spans::{Spans, SpansBuilder}
-};
+use lapce_xi_rope::{DeltaElement, Interval, Rope, RopeDelta, Transformer, spans::{Spans, SpansBuilder}, RopeInfo};
 use layout::{TextLayout, TextLayoutLine};
 use line::{OriginFoldedLine, VisualLine};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use lsp_types::{DiagnosticSeverity, InlayHint, InlayHintLabel, Location, Position};
 use phantom_text::{
     PhantomText, PhantomTextKind, PhantomTextLine, PhantomTextMultiLine
@@ -81,6 +79,7 @@ mod signal;
 mod style;
 pub mod util;
 pub mod word;
+mod delta_compute;
 
 // /// Minimum width that we'll allow the view to be wrapped at.
 // const MIN_WRAPPED_WIDTH: f32 = 100.0;
@@ -2219,6 +2218,7 @@ impl DocLines {
         &self,
         (rope, delta, _inval): &(Rope, RopeDelta, InvalLines)
     ) -> Result<(Option<LineDelta>, Option<LineDelta>)> {
+        debug!("{delta:?}");
         let single_change_end = rope.len();
         match delta.els.len() {
             1 => {
@@ -2331,7 +2331,6 @@ impl DocLines {
         deltas: &[(Rope, RopeDelta, InvalLines)]
     ) -> Result<(Option<LineDelta>, Option<LineDelta>)> {
         let rs = self._compute_change_lines(deltas);
-        info!("{:?}", rs);
         rs
     }
 
@@ -2617,12 +2616,47 @@ pub enum EditBuffer<'a> {
         after_cursor:  CursorMode
     }
 }
+
+impl Debug for EditBuffer<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EditBuffer::Init(val) => {
+                write!(f, "EditBuffer::Init {:?}", val)
+            }
+            EditBuffer::SetLineEnding(val) => {
+                write!(f, "EditBuffer::SetLineEnding {:?}", val)
+            }
+            EditBuffer::EditBuffer { iter, edit_type, .. } => {
+                write!(f, "EditBuffer::Init iter {:?} edit_type{edit_type:?}", iter, )
+            }
+            EditBuffer::SetPristine(val) => {
+                write!(f, "EditBuffer::SetPristine {:?}", val)
+            }
+            EditBuffer::Reload { content, set_pristine, .. } => {
+                write!(f, "EditBuffer::Reload set_pristine {set_pristine:?} content={content:?}")
+            }
+            EditBuffer::ExecuteMotionMode { cursor, motion_mode, range, is_vertical, .. } => {
+                write!(f, "EditBuffer::ExecuteMotionMode {cursor:?} {motion_mode:?} range={range:?}, is_vertical={is_vertical}")
+            }
+            EditBuffer::DoEditBuffer { cursor, cmd, modal, smart_tab, .. } => {
+                write!(f, "EditBuffer::DoEditBuffer {cursor:?} {cmd:?} modal={modal} smart_tab={smart_tab}")
+            }
+            EditBuffer::DoInsertBuffer { cursor, s, .. } => {
+                write!(f, "EditBuffer::DoInsertBuffer {cursor:?} s={s:?}")
+            }
+            EditBuffer::SetCursor { before_cursor, after_cursor } => {
+                write!(f, "EditBuffer::SetCursor before_cursor {before_cursor:?} after_cursor={after_cursor:?}")
+            }
+        }
+    }
+}
 impl PubUpdateLines {
     pub fn init_buffer(&mut self, content: Rope) -> Result<bool> {
         self.buffer_edit(EditBuffer::Init(content))
     }
 
     pub fn buffer_edit(&mut self, edit: EditBuffer) -> Result<bool> {
+        debug!("buffer_edit {edit:?}");
         let mut line_delta = (None, None);
         match edit {
             EditBuffer::Init(content) => {
@@ -2640,6 +2674,7 @@ impl PubUpdateLines {
                 response
             } => {
                 let rs = self.buffer_mut().edit(iter, edit_type);
+                debug!("buffer_edit EditBuffer {:?} {:?}", rs.1, rs.2);
                 self.apply_delta(&rs.1)?;
                 line_delta = self._compute_change_lines_one(&rs)?;
                 response.push(rs);
@@ -2660,8 +2695,9 @@ impl PubUpdateLines {
                 response
             } => {
                 let rs = self.buffer_mut().reload(content, set_pristine);
+                debug!("buffer_edit Reload {:?} {:?}", rs.1, rs.2);
                 self.apply_delta(&rs.1)?;
-                line_delta = self._compute_change_lines_one(&rs)?;
+                // line_delta = self._compute_change_lines_one(&rs)?;
                 response.push(rs);
             },
             EditBuffer::ExecuteMotionMode {
@@ -2693,10 +2729,6 @@ impl PubUpdateLines {
                 smart_tab,
                 response
             } => {
-                info!(
-                    "do_edit_buffer cursor={cursor:?} cmd={cmd:?} modal={modal} \
-                     smart_tab={smart_tab}"
-                );
                 let syntax = &self.syntax;
                 let mut clipboard = SystemClipboard::new();
                 let old_cursor = cursor.mode().clone();
@@ -2722,7 +2754,6 @@ impl PubUpdateLines {
                     }
                 }
                 line_delta = self.compute_change_lines(&*response)?;
-                // deltas;
             },
             EditBuffer::DoInsertBuffer {
                 cursor,
