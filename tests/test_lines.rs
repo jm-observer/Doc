@@ -14,7 +14,7 @@ use floem::{
     kurbo::{Point, Rect},
     reactive::SignalUpdate
 };
-use floem_editor_core::{command::EditCommand, register::Register};
+use floem::views::editor::core::{command::EditCommand, register::Register};
 use lapce_xi_rope::{DeltaElement, Interval, RopeInfo, spans::SpansBuilder};
 use log::info;
 use lsp_types::Position;

@@ -79,7 +79,7 @@ mod signal;
 mod style;
 pub mod util;
 pub mod word;
-mod delta_compute;
+pub mod delta_compute;
 
 // /// Minimum width that we'll allow the view to be wrapped at.
 // const MIN_WRAPPED_WIDTH: f32 = 100.0;

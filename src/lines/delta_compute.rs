@@ -1,7 +1,8 @@
-use floem::views::editor::core::xi_rope::Interval;
+use lapce_xi_rope::Interval;
 use lapce_xi_rope::{DeltaElement, Rope, RopeDelta};
-use crate::lines::buffer::InvalLines;
 use anyhow::Result;
+use log::debug;
+
 #[derive(Copy, Clone, Debug, Default)]
 pub enum Offset {
     #[default]
@@ -69,14 +70,14 @@ pub struct OriginLinesDelta {
 }
 
 impl OriginLinesDelta {
-    pub fn delta(&self) -> (bool, Interval, usize, usize, Interval, bool) {
-        (self.copy_line_start.recompute_first_line, self.copy_line_start.copy_line, self.recompute_line_start, self.recompute_offset_end, self.copy_line_end.copy_line, self.copy_line_end.recompute_last_line)
+    pub fn delta(&self) -> (bool, Offset, Interval, usize, usize, Interval, Offset, bool) {
+        (self.copy_line_start.recompute_first_line, self.copy_line_start.offset, self.copy_line_start.copy_line, self.recompute_line_start, self.recompute_offset_end, self.copy_line_end.copy_line, self.copy_line_end.offset, self.copy_line_end.recompute_last_line)
     }
 }
 
-pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Interval, usize, usize, Interval, bool) {
+pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Offset, Interval, usize, usize, Interval, Offset, bool) {
     match line_delta {
-        None => {(true, Interval::new(0, 0), 0, usize::MAX, Interval::new(0, 0), true)}
+        None => {(true, Offset::None, Interval::new(0, 0), 0, usize::MAX, Interval::new(0, 0), Offset::None, true)}
         Some(val) => {val.delta()}
     }
 }
@@ -97,10 +98,11 @@ pub struct CopyEndDelta {
     pub copy_line: Interval,
 }
 pub fn resolve_delta_rs(
-    rope_delta: &(Rope, RopeDelta, InvalLines)
+    rope: &Rope,
+    delta: &RopeDelta
 ) -> Result<OriginLinesDelta> {
-    let delta_compute = resolve_delta_compute(rope_delta).unwrap();
-    let rope = &rope_delta.0;
+    let delta_compute = resolve_delta_compute(delta).unwrap();
+    debug!("{delta_compute:?}");
     resolve_line_delta(rope, delta_compute)
 }
 
@@ -201,7 +203,7 @@ fn resolve_line_complete_by_end_offset(
 }
 
 fn resolve_delta_compute(
-    (_rope, delta, _inval): &(Rope, RopeDelta, InvalLines)
+    delta: &RopeDelta
 ) -> Option<OffsetDelta> {
     let mut rs = OffsetDelta::default();
     let len = delta.els.len();
