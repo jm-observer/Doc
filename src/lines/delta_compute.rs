@@ -41,6 +41,14 @@ impl Offset {
             Offset::Minus(offset) => {*num -= offset}
         }
     }
+
+    pub fn adjust_new(&self, num: usize) -> usize {
+        match self {
+            Offset::None => {num}
+            Offset::Add(offset) => { num + *offset}
+            Offset::Minus(offset) => {num - offset}
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -70,14 +78,14 @@ pub struct OriginLinesDelta {
 }
 
 impl OriginLinesDelta {
-    pub fn delta(&self) -> (bool, Offset, Interval, usize, usize, Interval, Offset, Offset, bool) {
-        (self.copy_line_start.recompute_first_line, self.copy_line_start.offset, self.copy_line_start.copy_line, self.recompute_line_start, self.recompute_offset_end, self.copy_line_end.copy_line, self.copy_line_end.offset, self.copy_line_end.line_offset,self.copy_line_end.recompute_last_line)
+    pub fn delta(&self) -> (bool, Offset, Offset, Interval, usize, usize, Interval, Offset, Offset, bool) {
+        (self.copy_line_start.recompute_first_line, self.copy_line_start.offset, self.copy_line_start.line_offset, self.copy_line_start.copy_line, self.recompute_line_start, self.recompute_offset_end, self.copy_line_end.copy_line, self.copy_line_end.offset, self.copy_line_end.line_offset,self.copy_line_end.recompute_last_line)
     }
 }
 
-pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Offset, Interval, usize, usize, Interval, Offset, Offset,bool) {
+pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Offset, Offset, Interval, usize, usize, Interval, Offset, Offset,bool) {
     match line_delta {
-        None => {(false, Offset::None, Interval::new(0, 0), 0, usize::MAX, Interval::new(0, 0), Offset::None, Offset::None, false)}
+        None => {(false, Offset::None, Offset::None, Interval::new(0, 0), 0, usize::MAX, Interval::new(0, 0), Offset::None, Offset::None, false)}
         Some(val) => {val.delta()}
     }
 }
@@ -88,6 +96,8 @@ pub struct CopyStartDelta {
     pub recompute_first_line: bool,
     /// 相对的旧buffer的偏移
     pub offset: Offset,
+    /// 相对的旧buffer的偏移
+    pub line_offset: Offset,
     pub internal_len: usize,
     pub copy_line: Interval,
 }
@@ -116,6 +126,7 @@ fn resolve_line_delta(
         internal_len: 0,
         offset: Offset::None,
         copy_line: Interval::new(0, 0),
+        line_offset: Default::default(),
     };
     let mut offset_end = 0;
     let mut global_internal_len = offset_delta_compute.internal_len;
@@ -132,9 +143,11 @@ fn resolve_line_delta(
             if recompute_first_line {
                 line_start += 1;
             }
+            let line_offset = Offset::new(copy_line_start_info.0, line_start);
             copy_line_start = CopyStartDelta {
                 recompute_first_line,
                 offset: Offset::minus(offset_delta_compute.copy_start.start),
+                line_offset,
                 internal_len,
                 copy_line,
             };

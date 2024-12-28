@@ -89,10 +89,11 @@ pub struct OriginFoldedLine {
 #[allow(dead_code)]
 impl OriginFoldedLine {
 
-    pub fn adjust(&self, offset: Offset, line_offset: Offset) -> Self {
+    pub fn adjust(&self, offset: Offset, line_offset: Offset, line_index: usize) -> Self {
         let mut obj = self.clone();
         offset.adjust(&mut obj.origin_interval.start);
         offset.adjust(&mut obj.origin_interval.end);
+        obj.line_index = line_index;
         obj.text_layout.adjust(line_offset, offset);
         obj.semantic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));
         obj.diagnostic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));

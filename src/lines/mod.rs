@@ -1461,7 +1461,7 @@ impl DocLines {
 
     #[allow(clippy::too_many_arguments)]
     fn new_text_layout_2(
-        &mut self,
+        &self,
         line: usize,
         origins: &[OriginLine],
         font_size: usize,
@@ -2571,6 +2571,10 @@ impl LinesOnUpdate {
     }
 
     fn on_update_lines(&mut self) {
+        self.max_width = 0.0;
+        self.origin_folded_lines.iter().for_each(|x| if x.text_layout.text.size().width > self.max_width {
+            self.max_width = x.text_layout.text.size().width;
+        });
         self.signals
             .last_line
             .update_if_not_equal(self.buffer().last_line() + 1);

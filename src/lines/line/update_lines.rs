@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use floem::text::{Attrs, FamilyOwned, LineHeightValue};
 use lapce_xi_rope::Interval;
 use crate::lines::{DocLines};
@@ -13,7 +14,7 @@ impl DocLines {
         &self,
         lines_delta: &mut Option<OriginLinesDelta>
     ) -> Result<Vec<OriginLine>> {
-        let (recompute_first_line, copy_line_start_offset, copy_line_start, recompute_line_start, recompute_offset_end, copy_line_end, copy_line_end_offset, _, recompute_last_line) = origin_lines_delta(lines_delta);
+        let (recompute_first_line, copy_line_start_offset, _, copy_line_start, recompute_line_start, recompute_offset_end, copy_line_end, copy_line_end_offset, _, recompute_last_line) = origin_lines_delta(lines_delta);
 
         let mut origin_lines = Vec::with_capacity(self.buffer().num_lines());
         let mut line_index = 0;
@@ -47,49 +48,73 @@ impl DocLines {
         Ok(origin_lines)
     }
 
-    // pub fn init_all_origin_folded_line_new(
-    //     &mut self,
-    //     lines_delta: &Option<OriginLinesDelta>, all_origin_lines: &[OriginLine]
-    // ) -> Result<Vec<OriginLine>> {
-    //
-    //     let font_size = self.config.font_size;
-    //     let family =
-    //         Cow::Owned(FamilyOwned::parse_list(&self.config.font_family).collect());
-    //     let attrs = Attrs::new()
-    //         .color(self.editor_style.ed_text_color())
-    //         .family(&family)
-    //         .font_size(font_size as f32)
-    //         .line_height(LineHeightValue::Px(self.line_height as f32));
-    //
-    //     let (recompute_first_line, copy_line_start_offset, copy_line_start, recompute_line_start, recompute_offset_end, _, _copy_line_end_offset, copy_line_end_line_offset, recompute_last_line) = origin_lines_delta(lines_delta);
-    //
-    //     let mut origin_folded_lines = Vec::with_capacity(self.buffer().num_lines());
-    //     let mut origin_line_index = 0;
-    //     let mut origin_folded_line_index = 0;
-    //     if !recompute_first_line && !copy_line_start.is_empty() {
-    //         origin_folded_lines.extend(self.copy_origin_folded_line(copy_line_start, copy_line_start_offset, Offset::None, &mut origin_line_index));
-    //     }
-    //     let mut x = origin_folded_lines.last().map(|x| x.origin_line_end).unwrap_or_default().max(recompute_line_start);
-    //     let last_line = self.buffer().last_line();
-    //     while x <= last_line  {
-    //         let line = self.init_folded_line(x, all_origin_lines, font_size, attrs, origin_folded_lines.len())?;
-    //         x = line.origin_line_end + 1;
-    //         let end = line.origin_interval.end;
-    //         origin_folded_lines.push(line);
-    //         if end >= recompute_offset_end {
-    //             // break;
-    //         }
-    //     }
-    //     // if !copy_line_end.is_empty() {
-    //     //     origin_folded_lines.extend(self.copy_origin_line(copy_line_end, copy_line_end_offset, &mut origin_line_index));
-    //     // }
-    //     // if recompute_last_line {
-    //     //     origin_folded_lines.push(self.init_folded_line(last_line)?);
-    //     // }
-    //     Ok(origin_folded_lines)
-    // }
+    fn compute_copy_origin_folded_line(
+        &self,
+        copy_line: Interval, offset: Offset, line_offset: Offset
+    ) -> HashMap<usize, (&OriginFoldedLine, Offset, Offset)>{
+        if !copy_line.is_empty() {
+            self.origin_folded_lines.iter().filter_map(|folded| {
+                if copy_line.start <= folded.origin_line_start
+                    && folded.origin_line_end < copy_line.end
+                {
+                    let mut origin_line_start = folded.origin_line_start;
+                    line_offset.adjust(&mut origin_line_start);
+                    Some((origin_line_start, (folded, offset, line_offset)))
+                } else {
+                    None
+                }
+            }).collect()
+        } else {
+            HashMap::new()
+        }
+    }
 
-    fn init_folded_line(&mut self, current_origin_line: usize, all_origin_lines: &[OriginLine], font_size: usize, attrs: Attrs, origin_folded_line_index: usize) -> Result<OriginFoldedLine> {
+    pub fn init_all_origin_folded_line_new(
+        &mut self,
+        lines_delta: &Option<OriginLinesDelta>, all_origin_lines: &[OriginLine]
+    ) -> Result<Vec<OriginLine>> {
+
+        let font_size = self.config.font_size;
+        let family =
+            Cow::Owned(FamilyOwned::parse_list(&self.config.font_family).collect());
+        let attrs = Attrs::new()
+            .color(self.editor_style.ed_text_color())
+            .family(&family)
+            .font_size(font_size as f32)
+            .line_height(LineHeightValue::Px(self.line_height as f32));
+
+        let (_, copy_line_start_offset, copy_line_start_line_offset, copy_line_start, _, _, copy_line_end, copy_line_end_offset, copy_line_end_line_offset, _) = origin_lines_delta(lines_delta);
+
+        let mut origin_folded_lines = Vec::with_capacity(self.buffer().num_lines());
+        let mut x = 0;
+        if !copy_line_start.is_empty() {
+            let last_line = copy_line_start_line_offset.adjust_new(copy_line_start.end);
+            let origin_folded_line = self.compute_copy_origin_folded_line(copy_line_start, copy_line_start_offset, copy_line_start_offset);
+            while x <= last_line  {
+                let line = if let Some((folded_line, offset, line_offset)) = origin_folded_line.get(&x) {
+                    folded_line.adjust(*offset, *line_offset, origin_folded_lines.len())
+                } else {
+                    self.init_folded_line(x, all_origin_lines, font_size, attrs, origin_folded_lines.len())?
+                };
+                x = line.origin_line_end + 1;
+                origin_folded_lines.push(line);
+            }
+        }
+        let origin_folded_line = self.compute_copy_origin_folded_line(copy_line_end, copy_line_end_offset, copy_line_end_line_offset);
+        let last_line = self.buffer().last_line();
+        while x <= last_line  {
+            let line = if let Some((folded_line, offset, line_offset)) = origin_folded_line.get(&x) {
+                folded_line.adjust(*offset, *line_offset, origin_folded_lines.len())
+            } else {
+                self.init_folded_line(x, all_origin_lines, font_size, attrs, origin_folded_lines.len())?
+            };
+            x = line.origin_line_end + 1;
+            origin_folded_lines.push(line);
+        }
+        todo!()
+    }
+
+    fn init_folded_line(&self, current_origin_line: usize, all_origin_lines: &[OriginLine], font_size: usize, attrs: Attrs, origin_folded_line_index: usize) -> Result<OriginFoldedLine> {
         let (text_layout, semantic_styles, diagnostic_styles) = self
             .new_text_layout_2(
                 current_origin_line,
@@ -101,10 +126,6 @@ impl DocLines {
         let origin_line_start = text_layout.phantom_text.line;
         let origin_line_end = text_layout.phantom_text.last_line;
 
-        let width = text_layout.text.size().width;
-        if width > self.max_width {
-            self.max_width = width;
-        }
         let origin_interval = Interval {
             start: self.buffer().offset_of_line(origin_line_start)?,
             end:   self.buffer().offset_of_line(origin_line_end + 1)?
@@ -125,23 +146,5 @@ impl DocLines {
         (&self.origin_lines[copy_line.start..copy_line.end]).into_iter().map(move |x| {
             x.adjust(offset, line_offset)
         })
-    }
-
-    fn copy_origin_folded_line<'a>(&'a self, copy_line: Interval, offset: Offset, line_offset: Offset, line_index: &'a mut usize) -> impl IntoIterator<Item = OriginFoldedLine> + 'a {
-        self.origin_folded_lines
-            .iter()
-            .filter_map(move |folded| {
-                if copy_line.start <= folded.origin_line_start
-                    && folded.origin_line_end < copy_line.end
-                {
-                    let mut x = folded.clone();
-                    x.line_index = *line_index;
-                    *line_index += 1;
-                    x.adjust(offset, line_offset);
-                    Some(x)
-                } else {
-                    None
-                }
-            })
     }
 }
