@@ -15,7 +15,7 @@ use crate::lines::cursor::CursorAffinity;
 /// should be rendered with it.
 ///
 /// Ex: Inlay hints, IME text, error lens' diagnostics, etc
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct PhantomText {
     /// The kind is currently used for sorting the phantom text on a
     /// line
@@ -105,7 +105,7 @@ impl PhantomText {
         );
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OriginText {
     /// 在原始文本的行
     pub line:      usize,
@@ -130,7 +130,7 @@ impl OriginText {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EmptyText {
     /// 在原始文本的行
     pub line:           usize,
@@ -140,7 +140,7 @@ pub struct EmptyText {
     /// 在原始行文本的位置
     pub offset_of_line: usize
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Text {
     Phantom { text: PhantomText },
     OriginText { text: OriginText },
@@ -241,7 +241,7 @@ impl PhantomTextKind {
 /// This has various utility functions for transforming a coordinate
 /// (typically a column) into the resulting coordinate after the
 /// phantom text is combined with the line's real content.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct PhantomTextLine {
     line:               usize,
     // 该行起点在文本中的偏移

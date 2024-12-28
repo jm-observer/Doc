@@ -13,10 +13,14 @@ fn test_debug() -> anyhow::Result<()> {
     custom_utils::logger::logger_stdout_debug();
     let _lines = init_main_2()?;
     let rope = _lines.buffer().text();
+    debug!("buffer len={} num_lines={}", _lines.buffer().len(), _lines.buffer().num_lines());
+    // _lines.log();
     let delta = delta_do_insert_buffer();
-    debug!("{delta:?}");
-    let rs = resolve_delta_rs(rope, &delta);
-    log::debug!("{rs:?}");
+    let rs = resolve_delta_rs(rope, &delta).unwrap();
+    debug!("{rs:?}");
+    debug!("{:?}", _lines.init_all_origin_line_new(&None).unwrap());
+    debug!("{:?}", _lines.init_all_origin_line_new(&Some(rs)).unwrap());
+    // assert_eq!()
 
     Ok(())
 }

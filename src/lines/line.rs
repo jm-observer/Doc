@@ -13,6 +13,7 @@ use super::layout::TextLayoutLine;
 use crate::lines::{
     line_ending::LineEnding, phantom_text::PhantomTextLine, style::NewLineStyle
 };
+use crate::lines::delta_compute::Offset;
 
 // #[allow(dead_code)]
 // #[derive(Clone, Debug)]
@@ -24,7 +25,7 @@ use crate::lines::{
 // }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OriginLine {
     pub line_index:        usize,
     /// [start_offset...end_offset)
@@ -56,6 +57,15 @@ impl OriginLine {
                 x
             })
             .collect()
+    }
+
+    pub fn adjust(&self, offset: Offset, line_index: &mut usize) -> Self {
+        let mut obj = self.clone();
+        obj.line_index = *line_index;
+        *line_index += 1;
+        offset.adjust(&mut obj.start_offset);
+        offset.adjust(&mut obj.phantom.offset_of_line);
+        obj
     }
 }
 

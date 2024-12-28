@@ -1,7 +1,7 @@
 use floem::peniko::Color;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct NewLineStyle {
     pub origin_line:              usize,
     pub origin_line_offset_start: usize,

@@ -77,7 +77,7 @@ impl OriginLinesDelta {
 
 pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Offset, Interval, usize, usize, Interval, Offset, bool) {
     match line_delta {
-        None => {(true, Offset::None, Interval::new(0, 0), 0, usize::MAX, Interval::new(0, 0), Offset::None, true)}
+        None => {(false, Offset::None, Interval::new(0, 0), 0, usize::MAX, Interval::new(0, 0), Offset::None, false)}
         Some(val) => {val.delta()}
     }
 }
@@ -153,7 +153,7 @@ fn resolve_line_delta(
         let copy_line_start_info = resolve_line_complete_by_start_offset(rope, offset_delta_compute.copy_end.start)?;
         let copy_line_end_info = resolve_line_complete_by_end_offset(rope, offset_delta_compute.copy_end.end)?;
         if copy_line_end_info.0 > copy_line_start_info.0 {
-            offset_end += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
+            // offset_end += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
             let recompute_last_line = copy_line_end_info.2;
             let copy_line = Interval::new(copy_line_start_info.0, copy_line_end_info.0);
             copy_line_end = CopyEndDelta {
@@ -197,9 +197,9 @@ fn resolve_line_complete_by_end_offset(
     offset: usize,
 ) -> Result<(usize, usize, bool)> {
     let line = rope.line_of_offset(offset);
-    let line_offset = rope.offset_of_line(line)?;
-    let recompute = offset != line_offset;
-    Ok((line, line_offset, recompute))
+    let offset_line = rope.offset_of_line(line)?;
+    let recompute = offset != offset_line;
+    Ok((line, offset_line, recompute))
 }
 
 fn resolve_delta_compute(
@@ -241,7 +241,7 @@ fn resolve_delta_compute(
                 }
             }
             if len > 2 {
-                let iter = delta.els[1..len-2].iter();
+                let iter = delta.els[1..len-1].iter();
                 for delta in iter {
                     match delta {
                         DeltaElement::Copy(start, end) => {
