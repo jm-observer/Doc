@@ -10,6 +10,7 @@ use lsp_types::Position;
 use smallvec::SmallVec;
 
 use crate::lines::cursor::CursorAffinity;
+use crate::lines::delta_compute::Offset;
 
 /// `PhantomText` is for text that is not in the actual document, but
 /// should be rendered with it.
@@ -150,16 +151,16 @@ pub enum Text {
 impl Text {
     pub fn adjust(
         &mut self,
-        line_delta: fn(&mut usize),
-        _offset_delta: fn(&mut usize)
+        line_delta: Offset,
+        _offset_delta: Offset,
     ) {
         match self {
             Text::Phantom { text } => {
                 text.kind.adjust(line_delta);
-                line_delta(&mut text.line);
+                line_delta.adjust(&mut text.line);
             },
             Text::OriginText { text } => {
-                line_delta(&mut text.line);
+                line_delta.adjust(&mut text.line);
             },
             _ => {}
         }
@@ -220,18 +221,16 @@ pub enum PhantomTextKind {
 }
 
 impl PhantomTextKind {
-    pub fn adjust(&mut self, line_delta: fn(&mut usize)) {
+    pub fn adjust(&mut self, line_delta: Offset) {
         if let Self::LineFoldedRang {
             next_line,
-            len,
-            start_position
+            start_position, ..
         } = self
         {
             let mut position_line = start_position.line as usize;
-            line_delta(&mut position_line);
+            line_delta.adjust(&mut position_line);
             start_position.line = position_line as u32;
-            line_delta(len);
-            next_line.as_mut().map(line_delta);
+            next_line.as_mut().map(|x| line_delta.adjust(x));
         }
     }
 }
@@ -243,7 +242,7 @@ impl PhantomTextKind {
 /// phantom text is combined with the line's real content.
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct PhantomTextLine {
-    line:               usize,
+    pub line:               usize,
     // 该行起点在文本中的偏移
     pub offset_of_line: usize,
     // 原文本的长度，包括换行符等，原始单行
@@ -399,16 +398,16 @@ impl PhantomTextMultiLine {
     }
 
     pub fn merge(&mut self, line: PhantomTextLine) {
-        let index = self.len_of_line.len();
-        let last_len = self.len_of_line[index - 1];
-        for _ in index..line.line - self.line {
-            self.len_of_line.push(last_len);
-        }
-        self.len_of_line.push((
-            line.line,
-            line.origin_text_len,
-            line.final_text_len
-        ));
+        // let index = self.len_of_line.len();
+        // let last_len = self.len_of_line[index - 1];
+        // for _ in index..line.line - self.line {
+        //     self.len_of_line.push(last_len);
+        // }
+        // self.len_of_line.push((
+        //     line.line,
+        //     line.origin_text_len,
+        //     line.final_text_len
+        // ));
 
         let origin_text_len = self.origin_text_len;
         self.origin_text_len += line.origin_text_len;
@@ -819,16 +818,16 @@ impl PhantomTextMultiLine {
 
     pub fn adjust(
         &mut self,
-        line_delta: fn(&mut usize),
-        offset_delta: fn(&mut usize)
+        line_delta: Offset,
+        offset_delta: Offset
     ) {
-        line_delta(&mut self.line);
-        line_delta(&mut self.last_line);
+        line_delta.adjust(&mut self.line);
+        line_delta.adjust(&mut self.last_line);
 
-        offset_delta(&mut self.offset_of_line);
-        for (line, _, _) in &mut self.len_of_line {
-            line_delta(line);
-        }
+        offset_delta.adjust(&mut self.offset_of_line);
+        // for (line, _, _) in &mut self.len_of_line {
+        //     line_delta(line);
+        // }
         for text in &mut self.text {
             text.adjust(line_delta, offset_delta);
         }

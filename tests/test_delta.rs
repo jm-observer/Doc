@@ -18,8 +18,8 @@ fn test_debug() -> anyhow::Result<()> {
     let delta = delta_do_insert_buffer();
     let rs = resolve_delta_rs(rope, &delta).unwrap();
     debug!("{rs:?}");
-    debug!("{:?}", _lines.init_all_origin_line_new(&None).unwrap());
-    debug!("{:?}", _lines.init_all_origin_line_new(&Some(rs)).unwrap());
+    debug!("{:?}", _lines.init_all_origin_line_new(&mut None).unwrap());
+    debug!("{:?}", _lines.init_all_origin_line_new(&mut Some(rs)).unwrap());
     // assert_eq!()
 
     Ok(())

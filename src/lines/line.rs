@@ -59,12 +59,14 @@ impl OriginLine {
             .collect()
     }
 
-    pub fn adjust(&self, offset: Offset, line_index: &mut usize) -> Self {
+    pub fn adjust(&self, offset: Offset, line_offset: Offset) -> Self {
         let mut obj = self.clone();
-        obj.line_index = *line_index;
-        *line_index += 1;
+        line_offset.adjust(&mut obj.line_index);
         offset.adjust(&mut obj.start_offset);
         offset.adjust(&mut obj.phantom.offset_of_line);
+        line_offset.adjust(&mut obj.phantom.line);
+        obj.semantic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));
+        obj.diagnostic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));
         obj
     }
 }
@@ -86,6 +88,18 @@ pub struct OriginFoldedLine {
 
 #[allow(dead_code)]
 impl OriginFoldedLine {
+
+    pub fn adjust(&self, offset: Offset, line_offset: Offset) -> Self {
+        let mut obj = self.clone();
+        offset.adjust(&mut obj.origin_interval.start);
+        offset.adjust(&mut obj.origin_interval.end);
+        obj.text_layout.adjust(line_offset, offset);
+        obj.semantic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));
+        obj.diagnostic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));
+        obj
+    }
+
+
     fn final_offset_of_visual_line(
         &self,
         sub_line_index: usize,

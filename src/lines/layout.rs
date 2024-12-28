@@ -10,6 +10,7 @@ use floem::{
     text::{AttrsList, FONT_SYSTEM, HitPoint, HitPosition, LayoutRun}
 };
 use unicode_segmentation::UnicodeSegmentation;
+use crate::lines::delta_compute::Offset;
 
 use crate::lines::phantom_text::PhantomTextMultiLine;
 #[derive(Clone, Debug)]
@@ -159,8 +160,8 @@ impl TextLayoutLine {
 
     pub fn adjust(
         &mut self,
-        line_delta: fn(&mut usize),
-        offset_delta: fn(&mut usize)
+        line_delta: Offset,
+        offset_delta: Offset
     ) {
         self.phantom_text.adjust(line_delta, offset_delta);
     }

@@ -70,14 +70,14 @@ pub struct OriginLinesDelta {
 }
 
 impl OriginLinesDelta {
-    pub fn delta(&self) -> (bool, Offset, Interval, usize, usize, Interval, Offset, bool) {
-        (self.copy_line_start.recompute_first_line, self.copy_line_start.offset, self.copy_line_start.copy_line, self.recompute_line_start, self.recompute_offset_end, self.copy_line_end.copy_line, self.copy_line_end.offset, self.copy_line_end.recompute_last_line)
+    pub fn delta(&self) -> (bool, Offset, Interval, usize, usize, Interval, Offset, Offset, bool) {
+        (self.copy_line_start.recompute_first_line, self.copy_line_start.offset, self.copy_line_start.copy_line, self.recompute_line_start, self.recompute_offset_end, self.copy_line_end.copy_line, self.copy_line_end.offset, self.copy_line_end.line_offset,self.copy_line_end.recompute_last_line)
     }
 }
 
-pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Offset, Interval, usize, usize, Interval, Offset, bool) {
+pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Offset, Interval, usize, usize, Interval, Offset, Offset,bool) {
     match line_delta {
-        None => {(false, Offset::None, Interval::new(0, 0), 0, usize::MAX, Interval::new(0, 0), Offset::None, false)}
+        None => {(false, Offset::None, Interval::new(0, 0), 0, usize::MAX, Interval::new(0, 0), Offset::None, Offset::None, false)}
         Some(val) => {val.delta()}
     }
 }
@@ -94,6 +94,7 @@ pub struct CopyStartDelta {
 #[derive(Copy, Clone, Debug)]
 pub struct CopyEndDelta {
     pub offset: Offset,
+    pub line_offset: Offset,
     pub recompute_last_line: bool,
     pub copy_line: Interval,
 }
@@ -148,6 +149,7 @@ fn resolve_line_delta(
         recompute_last_line: true,
         offset: Offset::None,
         copy_line: Interval::new(0, 0),
+        line_offset: Default::default(),
     };
     if !offset_delta_compute.copy_end.is_empty() {
         let copy_line_start_info = resolve_line_complete_by_start_offset(rope, offset_delta_compute.copy_end.start)?;
@@ -160,6 +162,7 @@ fn resolve_line_delta(
                 offset: Offset::new(offset_delta_compute.copy_end.start, offset_end),
                 copy_line,
                 recompute_last_line,
+                line_offset: Default::default(),
             };
             global_internal_len += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
         } else {
