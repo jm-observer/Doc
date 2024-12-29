@@ -2,9 +2,7 @@ use lapce_xi_rope::{RopeDelta, RopeInfo, DeltaElement};
 use lapce_xi_rope::tree::Node;
 use log::{debug};
 use doc::lines::buffer::rope_text::RopeText;
-use doc::lines::delta_compute::resolve_delta_rs;
 use doc::lines::EditBuffer;
-use doc::lines::line::update_lines::{check_origin_folded_lines, check_origin_lines};
 use crate::lines_util::{cursor_insert, init_main_2};
 
 mod lines_util;
@@ -25,7 +23,7 @@ fn test_debug() -> anyhow::Result<()> {
     };
 
     // let rope = lines.buffer().text();
-    // debug!("buffer len={} num_lines={}", lines.buffer().len(), lines.buffer().num_lines());
+    debug!("buffer len={} num_lines={}", lines.buffer().len(), lines.buffer().num_lines());
     // lines.check_lines();
     // let delta = delta_do_insert_buffer();
     // let rs = resolve_delta_rs(rope, &delta)?;
@@ -34,9 +32,11 @@ fn test_debug() -> anyhow::Result<()> {
     // debug!("{:?}", _lines.init_all_origin_line_new(&mut None).unwrap());
     // let mut lines_delta = Some(rs);
     let _ = lines.buffer_edit(edit).unwrap();
-    lines.check_lines();
+    if lines.check_lines() {
+        lines.log();
+    }
 
-    lines.log();
+    // lines.log();
     // let origin_lines  = lines.init_all_origin_line_new(&mut lines_delta)?;
     // check_origin_lines(&origin_lines, lines.buffer().len() + 1);
     // // for line in &origin_lines {
@@ -49,7 +49,7 @@ fn test_debug() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn delta_do_insert_buffer() -> RopeDelta {
+fn _delta_do_insert_buffer() -> RopeDelta {
     RopeDelta {
         els: vec![DeltaElement::<RopeInfo>::Copy(0, 117),
                   DeltaElement::<RopeInfo>::Insert(Node::from_leaf("m".to_string())), DeltaElement::<RopeInfo>::Copy(117, 461),],

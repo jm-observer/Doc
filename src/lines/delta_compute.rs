@@ -170,7 +170,12 @@ fn resolve_line_delta(
         if copy_line_end_info.0 > copy_line_start_info.0 {
             // offset_end += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
             let recompute_last_line = copy_line_end_info.2;
-            let copy_line = Interval::new(copy_line_start_info.0, copy_line_end_info.0);
+            let copy_line =  if copy_line_end_info.2 {
+                Interval::new(copy_line_start_info.0, copy_line_end_info.0)
+            } else {
+                Interval::new(copy_line_start_info.0, copy_line_end_info.0 + 1)
+            };
+
             copy_line_end = CopyEndDelta {
                 offset: Offset::new(offset_delta_compute.copy_end.start, offset_end),
                 copy_line,

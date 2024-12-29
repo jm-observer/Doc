@@ -27,7 +27,7 @@ use floem::{
     }
 };
 use itertools::Itertools;
-use lapce_xi_rope::{DeltaElement, Interval, Rope, RopeDelta, Transformer, spans::{Spans, SpansBuilder}};
+use lapce_xi_rope::{Interval, Rope, RopeDelta, Transformer, spans::{Spans, SpansBuilder}};
 use layout::{TextLayout, TextLayoutLine};
 use line::{OriginFoldedLine, VisualLine};
 use log::{debug, error, info, warn};
@@ -59,6 +59,7 @@ use crate::{
     },
     syntax::{BracketParser, Syntax, edit::SyntaxEdit}
 };
+use crate::lines::delta_compute::{OriginLinesDelta, resolve_delta_rs};
 
 pub mod action;
 pub mod buffer;
@@ -1747,7 +1748,7 @@ impl DocLines {
     }
 
     pub fn log(&self) {
-        warn!(
+        info!(
             "DocLines viewport={:?} buffer.rev={} buffer.len()=[{}] \
              style_from_lsp={} is_pristine={} base={:?}",
             self.viewport_size,
@@ -1757,27 +1758,27 @@ impl DocLines {
             self.buffer().is_pristine(),
             self.screen_lines().base
         );
-        warn!("{:?}", self.config);
+        info!("{:?}", self.config);
         for origin_lines in &self.origin_lines {
-            warn!("{:?}", origin_lines);
+            info!("{:?}", origin_lines);
         }
         for origin_folded_line in &self.origin_folded_lines {
-            warn!("{:?}", origin_folded_line);
+            info!("{:?}", origin_folded_line);
         }
         for visual_line in &self.visual_lines {
-            warn!("{:?}", visual_line);
+            info!("{:?}", visual_line);
         }
-        warn!("screen_lines");
+        info!("screen_lines");
         for visual_line in &self.screen_lines().visual_lines {
-            warn!("{:?}", visual_line);
+            info!("{:?}", visual_line);
         }
-        warn!("folding_items");
+        info!("folding_items");
         for item in self.signals.folding_items.val() {
-            warn!("{:?}", item);
+            info!("{:?}", item);
         }
-        warn!("folding_ranges");
+        info!("folding_ranges");
         for range in &self.folding_ranges.0 {
-            warn!("{:?}", range);
+            info!("{:?}", range);
         }
 
         // for diag in self.diagnostics.diagnostics.get_untracked() {
@@ -2208,131 +2209,131 @@ impl DocLines {
     fn _compute_change_lines(
         &self,
         deltas: &[(Rope, RopeDelta, InvalLines)]
-    ) -> Result<(Option<LineDelta>, Option<LineDelta>)> {
+    ) -> Result<Option<OriginLinesDelta>> {
         if deltas.len() == 1 {
             if let Some(delta) = deltas.first() {
-                return self._compute_change_lines_one(delta);
+                return Ok(Some(resolve_delta_rs(&delta.0, &delta.1)?));
             }
         }
-        Ok((None, None))
+        Ok(None)
     }
 
-    fn _compute_change_lines_one(
-        &self,
-        (rope, delta, _inval): &(Rope, RopeDelta, InvalLines)
-    ) -> Result<(Option<LineDelta>, Option<LineDelta>)> {
-        debug!("{delta:?}");
-        let single_change_end = rope.len();
-        match delta.els.len() {
-            1 => {
-                if let Some(first) = delta.els.first() {
-                    match first {
-                        DeltaElement::Copy(start, end) => {
-                            if *start == 0 {
-                                let end_line = rope.line_of_offset(*end);
-                                return Ok((
-                                    Some(LineDelta {
-                                        start_line: 0,
-                                        end_line,
-                                        _buffer_offset_start_line: 0
-                                    }),
-                                    None
-                                ));
-                            } else if *end == single_change_end {
-                                let start_line = rope.line_of_offset(*start);
-                                let end_line =
-                                    rope.line_of_offset(single_change_end);
-                                return Ok((
-                                    None,
-                                    Some(LineDelta {
-                                        start_line,
-                                        end_line,
-                                        _buffer_offset_start_line: rope
-                                            .offset_of_line(start_line)?
-                                    })
-                                ));
-                            }
-                        },
-                        DeltaElement::Insert(_) => {}
-                    }
-                }
-            },
-            _ => {
-                let single_change_end = rope.len();
-                if let (Some(first), Some(last)) =
-                    (delta.els.first(), delta.els.last())
-                {
-                    match (first, last) {
-                        (
-                            DeltaElement::Copy(start, end),
-                            DeltaElement::Copy(last_start, last_end)
-                        ) => {
-                            let mut first = None;
-                            let mut last = None;
-                            if *start == 0 {
-                                let end_line = rope.line_of_offset(*end);
-                                first = Some(LineDelta {
-                                    start_line: 0,
-                                    end_line,
-                                    _buffer_offset_start_line: 0
-                                });
-                            }
-                            if *last_end == single_change_end {
-                                let start_line = rope.line_of_offset(*last_start);
-                                let end_line =
-                                    rope.line_of_offset(single_change_end);
-                                last = Some(LineDelta {
-                                    start_line,
-                                    end_line,
-                                    _buffer_offset_start_line: rope
-                                        .offset_of_line(start_line)?
-                                });
-                            }
-                            return Ok((first, last));
-                        },
-                        (DeltaElement::Copy(start, end), _) => {
-                            if *start == 0 {
-                                let end_line = rope.line_of_offset(*end);
-                                return Ok((
-                                    Some(LineDelta {
-                                        start_line: 0,
-                                        end_line,
-                                        _buffer_offset_start_line: 0
-                                    }),
-                                    None
-                                ));
-                            }
-                        },
-                        (_, DeltaElement::Copy(last_start, last_end)) => {
-                            if *last_end == single_change_end {
-                                let start_line = rope.line_of_offset(*last_start);
-                                let end_line =
-                                    rope.line_of_offset(single_change_end);
-                                return Ok((
-                                    None,
-                                    Some(LineDelta {
-                                        start_line,
-                                        end_line,
-                                        _buffer_offset_start_line: rope
-                                            .offset_of_line(start_line)?
-                                    })
-                                ));
-                            }
-                        },
-                        _ => {}
-                    }
-                }
-            }
-        }
-        Ok((None, None))
-    }
+    // fn _compute_change_lines_one(
+    //     &self,
+    //     (rope, delta, _inval): &(Rope, RopeDelta, InvalLines)
+    // ) -> Result<(Option<LineDelta>, Option<LineDelta>)> {
+    //     debug!("{delta:?}");
+    //     let single_change_end = rope.len();
+    //     match delta.els.len() {
+    //         1 => {
+    //             if let Some(first) = delta.els.first() {
+    //                 match first {
+    //                     DeltaElement::Copy(start, end) => {
+    //                         if *start == 0 {
+    //                             let end_line = rope.line_of_offset(*end);
+    //                             return Ok((
+    //                                 Some(LineDelta {
+    //                                     start_line: 0,
+    //                                     end_line,
+    //                                     _buffer_offset_start_line: 0
+    //                                 }),
+    //                                 None
+    //                             ));
+    //                         } else if *end == single_change_end {
+    //                             let start_line = rope.line_of_offset(*start);
+    //                             let end_line =
+    //                                 rope.line_of_offset(single_change_end);
+    //                             return Ok((
+    //                                 None,
+    //                                 Some(LineDelta {
+    //                                     start_line,
+    //                                     end_line,
+    //                                     _buffer_offset_start_line: rope
+    //                                         .offset_of_line(start_line)?
+    //                                 })
+    //                             ));
+    //                         }
+    //                     },
+    //                     DeltaElement::Insert(_) => {}
+    //                 }
+    //             }
+    //         },
+    //         _ => {
+    //             let single_change_end = rope.len();
+    //             if let (Some(first), Some(last)) =
+    //                 (delta.els.first(), delta.els.last())
+    //             {
+    //                 match (first, last) {
+    //                     (
+    //                         DeltaElement::Copy(start, end),
+    //                         DeltaElement::Copy(last_start, last_end)
+    //                     ) => {
+    //                         let mut first = None;
+    //                         let mut last = None;
+    //                         if *start == 0 {
+    //                             let end_line = rope.line_of_offset(*end);
+    //                             first = Some(LineDelta {
+    //                                 start_line: 0,
+    //                                 end_line,
+    //                                 _buffer_offset_start_line: 0
+    //                             });
+    //                         }
+    //                         if *last_end == single_change_end {
+    //                             let start_line = rope.line_of_offset(*last_start);
+    //                             let end_line =
+    //                                 rope.line_of_offset(single_change_end);
+    //                             last = Some(LineDelta {
+    //                                 start_line,
+    //                                 end_line,
+    //                                 _buffer_offset_start_line: rope
+    //                                     .offset_of_line(start_line)?
+    //                             });
+    //                         }
+    //                         return Ok((first, last));
+    //                     },
+    //                     (DeltaElement::Copy(start, end), _) => {
+    //                         if *start == 0 {
+    //                             let end_line = rope.line_of_offset(*end);
+    //                             return Ok((
+    //                                 Some(LineDelta {
+    //                                     start_line: 0,
+    //                                     end_line,
+    //                                     _buffer_offset_start_line: 0
+    //                                 }),
+    //                                 None
+    //                             ));
+    //                         }
+    //                     },
+    //                     (_, DeltaElement::Copy(last_start, last_end)) => {
+    //                         if *last_end == single_change_end {
+    //                             let start_line = rope.line_of_offset(*last_start);
+    //                             let end_line =
+    //                                 rope.line_of_offset(single_change_end);
+    //                             return Ok((
+    //                                 None,
+    //                                 Some(LineDelta {
+    //                                     start_line,
+    //                                     end_line,
+    //                                     _buffer_offset_start_line: rope
+    //                                         .offset_of_line(start_line)?
+    //                                 })
+    //                             ));
+    //                         }
+    //                     },
+    //                     _ => {}
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     Ok((None, None))
+    // }
 
     /// return [start...end), (start...end]
     #[allow(clippy::type_complexity)]
     fn compute_change_lines(
         &self,
         deltas: &[(Rope, RopeDelta, InvalLines)]
-    ) -> Result<(Option<LineDelta>, Option<LineDelta>)> {
+    ) -> Result<Option<OriginLinesDelta>> {
         let rs = self._compute_change_lines(deltas);
         rs
     }
@@ -2664,7 +2665,7 @@ impl PubUpdateLines {
 
     pub fn buffer_edit(&mut self, edit: EditBuffer) -> Result<bool> {
         debug!("buffer_edit {edit:?}");
-        let mut line_delta = (None, None);
+        let mut line_delta = None;
         match edit {
             EditBuffer::Init(content) => {
                 let indent =
@@ -2683,7 +2684,7 @@ impl PubUpdateLines {
                 let rs = self.buffer_mut().edit(iter, edit_type);
                 debug!("buffer_edit EditBuffer {:?} {:?}", rs.1, rs.2);
                 self.apply_delta(&rs.1)?;
-                line_delta = self._compute_change_lines_one(&rs)?;
+                line_delta = Some(resolve_delta_rs(&rs.0, &rs.1)?);
                 response.push(rs);
             },
             EditBuffer::SetPristine(recv) => {
@@ -2808,7 +2809,7 @@ impl PubUpdateLines {
             .buffer_rev
             .update_if_not_equal(self.buffer().rev());
         self.on_update_buffer()?;
-        self.update_lines(line_delta)?;
+        self.update_lines_new(line_delta)?;
         self.on_update_lines();
         self.update_screen_lines();
         self.update_display_items();

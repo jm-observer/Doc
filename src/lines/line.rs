@@ -8,7 +8,6 @@ use std::{
 
 use floem::kurbo::{Rect, Size, Vec2};
 use lapce_xi_rope::Interval;
-use log::debug;
 
 use super::layout::TextLayoutLine;
 use crate::lines::{
@@ -65,7 +64,6 @@ impl OriginLine {
         line_offset.adjust(&mut obj.line_index);
         offset.adjust(&mut obj.start_offset);
         offset.adjust(&mut obj.phantom.offset_of_line);
-        debug!("offset: {offset:?} {} {}", obj.start_offset, self.start_offset);
         line_offset.adjust(&mut obj.phantom.line);
         obj.semantic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));
         obj.diagnostic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));
