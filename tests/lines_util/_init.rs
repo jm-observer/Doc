@@ -27,6 +27,8 @@ use lapce_xi_rope::{
 };
 use log::info;
 use lsp_types::{Diagnostic, InlayHint, Position};
+use doc::lines::cursor::{Cursor, CursorMode};
+use doc::lines::selection::Selection;
 
 use crate::lines_util::init_semantic_2;
 
@@ -206,4 +208,9 @@ pub fn init_empty() -> Result<DocLines> {
 
     let (lines, _) = _init_lines(None, _init_code(file), _init_lsp_folding_range())?;
     Ok(lines)
+}
+
+pub fn cursor_insert(start: usize, end: usize) -> Cursor {
+    let mode = CursorMode::Insert(Selection::region(start, end));
+    Cursor::new(mode, None, None)
 }

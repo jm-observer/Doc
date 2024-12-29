@@ -372,8 +372,8 @@ pub struct PhantomTextMultiLine {
     // 所有合并在该行的最后展现的长度，包括幽灵文本、换行符、
     // 包括后续的折叠行
     pub final_text_len:  usize,
-    // 各个原始行的行号、原始长度、最后展现的长度
-    pub len_of_line:     Vec<(usize, usize, usize)>,
+    // // 各个原始行的行号、原始长度、最后展现的长度
+    // pub len_of_line:     Vec<(usize, usize, usize)>,
     /// This uses a smallvec because most lines rarely have more than
     /// a couple phantom texts
     pub text:            SmallVec<[Text; 6]> /* 可以去掉，仅做记录
@@ -384,15 +384,15 @@ pub struct PhantomTextMultiLine {
 
 impl PhantomTextMultiLine {
     pub fn new(line: PhantomTextLine) -> Self {
-        let len_of_line =
-            vec![(line.line, line.origin_text_len, line.final_text_len)];
+        // let len_of_line =
+        //     vec![(line.line, line.origin_text_len, line.final_text_len)];
         Self {
             line: line.line,
             last_line: line.line,
             offset_of_line: line.offset_of_line,
             origin_text_len: line.origin_text_len,
             final_text_len: line.final_text_len,
-            len_of_line,
+            // len_of_line,
             text: line.texts
         }
     }

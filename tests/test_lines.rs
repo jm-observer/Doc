@@ -19,9 +19,7 @@ use lapce_xi_rope::{DeltaElement, Interval, RopeInfo, spans::SpansBuilder};
 use log::info;
 use lsp_types::Position;
 
-use crate::lines_util::{
-    folded_v1, folded_v2, init_empty, init_main, init_main_2, init_semantic_2
-};
+use crate::lines_util::{cursor_insert, folded_v1, folded_v2, init_empty, init_main, init_main_2, init_semantic_2};
 mod lines_util;
 
 #[test]
@@ -185,7 +183,7 @@ fn test_buffer_edit() -> Result<()> {
         lines.buffer().char_at_offset(183),
         lines.buffer().char_at_offset(184)
     );
-    let mut cursor = cursor_insert();
+    let mut cursor = cursor_insert(139, 139);
     let mut register = Register::default();
     let deltas = lines.do_edit_buffer(
         &mut cursor,
@@ -228,11 +226,6 @@ fn test_buffer_edit() -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn cursor_insert() -> Cursor {
-    let mode = CursorMode::Insert(Selection::region(139, 139));
-    Cursor::new(mode, None, None)
 }
 
 fn cursor_normal() -> Cursor {

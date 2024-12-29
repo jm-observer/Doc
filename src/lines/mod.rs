@@ -1758,8 +1758,8 @@ impl DocLines {
             self.screen_lines().base
         );
         warn!("{:?}", self.config);
-        for origin_folded_line in &self.origin_lines {
-            warn!("{:?}", origin_folded_line);
+        for origin_lines in &self.origin_lines {
+            warn!("{:?}", origin_lines);
         }
         for origin_folded_line in &self.origin_folded_lines {
             warn!("{:?}", origin_folded_line);
