@@ -7,22 +7,19 @@ use crate::lines::buffer::rope_text::RopeText;
 use crate::lines::delta_compute::{CopyDelta, Offset, OriginLinesDelta};
 use crate::lines::line::{OriginFoldedLine, OriginLine, VisualLine};
 use anyhow::Result;
-use log::{debug, error};
+use log::{error};
 
 impl DocLines {
-
     pub fn update_lines_new(
         &mut self,
-        mut lines_delta: Option<OriginLinesDelta>
+        mut lines_delta: OriginLinesDelta,
     ) -> Result<()> {
         self.clear();
         self.visual_lines.clear();
         self.line_height = self.config.line_height;
 
-        debug!("{:?}", lines_delta);
         let all_origin_lines =
             self.init_all_origin_line_new(&mut lines_delta)?;
-        debug!("{:?}", lines_delta);
         check_origin_lines(&all_origin_lines, self.buffer().len());
         let all_origin_folded_lines = self.init_all_origin_folded_line_new(&lines_delta, &all_origin_lines)?;
         {
@@ -37,32 +34,32 @@ impl DocLines {
 
                 let origin_interval = Interval {
                     start: self.buffer().offset_of_line(origin_line_start)?,
-                    end:   self.buffer().offset_of_line(origin_line_end + 1)?
+                    end: self.buffer().offset_of_line(origin_line_end + 1)?,
                 };
 
                 let mut visual_offset_start = 0;
                 let mut visual_offset_end;
 
-                // [visual_offset_start..visual_offset_end)
                 for (origin_folded_line_sub_index, layout) in
                     text_layout.text.line_layout().iter().enumerate()
                 {
                     if layout.glyphs.is_empty() {
                         self.visual_lines.push(VisualLine {
-                            line_index:                   visual_line_index,
-                            origin_interval:              Interval::new(
+                            line_index: visual_line_index,
+                            origin_interval: Interval::new(
                                 origin_interval.end,
-                                origin_interval.end
+                                origin_interval.end,
                             ),
-                            visual_interval:              Interval::new(
+                            visual_interval: Interval::new(
                                 visual_offset_start,
-                                visual_offset_start
+                                visual_offset_start,
                             ),
-                            origin_line:                  origin_line_start,
-                            origin_folded_line:           origin_folded_line_index,
-                            origin_folded_line_sub_index: 0 /* text_layout:
-                                                             * text_layout.
-                                                             * clone(), */
+                            origin_line: origin_line_start,
+                            origin_folded_line: origin_folded_line_index,
+                            origin_folded_line_sub_index: 0,
+                            /* text_layout:
+                                                                                        * text_layout.
+                                                                                        * clone(), */
                         });
                         continue;
                     }
@@ -81,7 +78,7 @@ impl DocLines {
                         self.buffer().offset_of_line(offset_info.0)? + offset_info.1;
                     let origin_interval = Interval {
                         start: origin_interval_start,
-                        end:   origin_interval_end + 1
+                        end: origin_interval_end + 1,
                     };
 
                     self.visual_lines.push(VisualLine {
@@ -93,8 +90,8 @@ impl DocLines {
                         // text_layout: text_layout.clone(),
                         visual_interval: Interval::new(
                             visual_offset_start,
-                            visual_offset_end + 1
-                        )
+                            visual_offset_end + 1,
+                        ),
                     });
 
                     visual_offset_start = visual_offset_end;
@@ -112,45 +109,38 @@ impl DocLines {
 
     pub fn init_all_origin_line_new(
         &self,
-        lines_delta: &mut Option<OriginLinesDelta>
+        lines_delta: &mut OriginLinesDelta,
     ) -> Result<Vec<OriginLine>> {
         let mut origin_lines = Vec::with_capacity(self.buffer().num_lines());
         let last_line = self.buffer().last_line();
-        if let Some(lines_delta) = lines_delta {
-            if let CopyDelta::Copy {
-                recompute_first_or_last_line: recompute_first_line, offset, line_offset, copy_line
-            } = lines_delta.copy_line_start {
-                if recompute_first_line {
-                    let line = self.init_origin_line(0)?;
-                    origin_lines.push(line);
-                }
-                origin_lines.extend(self.copy_origin_line(copy_line, offset, line_offset));
+        if let CopyDelta::Copy {
+            recompute_first_or_last_line: recompute_first_line, offset, line_offset, copy_line
+        } = lines_delta.copy_line_start {
+            if recompute_first_line {
+                let line = self.init_origin_line(0)?;
+                origin_lines.push(line);
             }
-            let recompute_offset_end = lines_delta.recompute_offset_end;
-            let recompute_line_start = lines_delta.recompute_line_start;
+            origin_lines.extend(self.copy_origin_line(copy_line, offset, line_offset));
+        }
+        let recompute_offset_end = lines_delta.recompute_offset_end;
+        let recompute_line_start = lines_delta.recompute_line_start;
 
-            for x in recompute_line_start..=last_line {
-                let line = self.init_origin_line(x)?;
-                let end = line.start_offset + line.len;
-                origin_lines.push(line);
-                if end >= recompute_offset_end {
-                    break;
-                }
+        for x in recompute_line_start..=last_line {
+            let line = self.init_origin_line(x)?;
+            let end = line.start_offset + line.len;
+            origin_lines.push(line);
+            if end >= recompute_offset_end {
+                break;
             }
-            if let CopyDelta::Copy {
-                recompute_first_or_last_line, offset, line_offset, copy_line
-            } = &mut lines_delta.copy_line_end {
-                let line_offset_new = Offset::new(copy_line.start, origin_lines.len());
-                *line_offset = line_offset_new;
-                origin_lines.extend(self.copy_origin_line(*copy_line, *offset, line_offset_new));
-                if *recompute_first_or_last_line {
-                    origin_lines.push(self.init_origin_line(last_line)?);
-                }
-            }
-        } else {
-            for x in 0..=last_line {
-                let line = self.init_origin_line(x)?;
-                origin_lines.push(line);
+        }
+        if let CopyDelta::Copy {
+            recompute_first_or_last_line, offset, line_offset, copy_line
+        } = &mut lines_delta.copy_line_end {
+            let line_offset_new = Offset::new(copy_line.start, origin_lines.len());
+            *line_offset = line_offset_new;
+            origin_lines.extend(self.copy_origin_line(*copy_line, *offset, line_offset_new));
+            if *recompute_first_or_last_line {
+                origin_lines.push(self.init_origin_line(last_line)?);
             }
         }
         Ok(origin_lines)
@@ -158,8 +148,8 @@ impl DocLines {
 
     fn compute_copy_origin_folded_line(
         &self,
-        copy_line: Interval, offset: Offset, line_offset: Offset
-    ) -> HashMap<usize, (&OriginFoldedLine, Offset, Offset)>{
+        copy_line: Interval, offset: Offset, line_offset: Offset,
+    ) -> HashMap<usize, (&OriginFoldedLine, Offset, Offset)> {
         if !copy_line.is_empty() {
             self.origin_folded_lines.iter().filter_map(|folded| {
                 if copy_line.start <= folded.origin_line_start
@@ -179,7 +169,7 @@ impl DocLines {
 
     pub fn init_all_origin_folded_line_new(
         &mut self,
-        lines_delta: &Option<OriginLinesDelta>, all_origin_lines: &[OriginLine]
+        lines_delta: &OriginLinesDelta, all_origin_lines: &[OriginLine],
     ) -> Result<Vec<OriginFoldedLine>> {
         let font_size = self.config.font_size;
         let family =
@@ -192,31 +182,12 @@ impl DocLines {
         let mut origin_folded_lines = Vec::with_capacity(self.buffer().num_lines());
         let mut x = 0;
         let last_line = self.buffer().last_line();
-        if let Some(lines_delta) = lines_delta {
-            if let CopyDelta::Copy {
-                offset, line_offset, copy_line, ..
-            } = lines_delta.copy_line_start {
-                let last_line = line_offset.adjust_new(copy_line.end);
-                let origin_folded_line = self.compute_copy_origin_folded_line(copy_line, offset, line_offset);
-                while x < last_line  {
-                    let line = if let Some((folded_line, offset, line_offset)) = origin_folded_line.get(&x) {
-                        folded_line.adjust(*offset, *line_offset, origin_folded_lines.len())
-                    } else {
-                        self.init_folded_line(x, all_origin_lines, font_size, attrs, origin_folded_lines.len())?
-                    };
-                    x = line.origin_line_end + 1;
-                    origin_folded_lines.push(line);
-                }
-            }
-            let origin_folded_line = if let CopyDelta::Copy {
-                offset, line_offset, copy_line, ..
-            } = lines_delta.copy_line_start {
-                self.compute_copy_origin_folded_line(copy_line, offset, line_offset)
-            } else {
-                HashMap::new()
-            };
-
-            while x <= last_line  {
+        if let CopyDelta::Copy {
+            offset, line_offset, copy_line, ..
+        } = lines_delta.copy_line_start {
+            let last_line = line_offset.adjust_new(copy_line.end);
+            let origin_folded_line = self.compute_copy_origin_folded_line(copy_line, offset, line_offset);
+            while x < last_line {
                 let line = if let Some((folded_line, offset, line_offset)) = origin_folded_line.get(&x) {
                     folded_line.adjust(*offset, *line_offset, origin_folded_lines.len())
                 } else {
@@ -225,12 +196,23 @@ impl DocLines {
                 x = line.origin_line_end + 1;
                 origin_folded_lines.push(line);
             }
+        }
+        let origin_folded_line = if let CopyDelta::Copy {
+            offset, line_offset, copy_line, ..
+        } = lines_delta.copy_line_start {
+            self.compute_copy_origin_folded_line(copy_line, offset, line_offset)
         } else {
-            while x <= last_line  {
-                let line = self.init_folded_line(x, all_origin_lines, font_size, attrs, origin_folded_lines.len())?;
-                x = line.origin_line_end + 1;
-                origin_folded_lines.push(line);
-            }
+            HashMap::new()
+        };
+
+        while x <= last_line {
+            let line = if let Some((folded_line, offset, line_offset)) = origin_folded_line.get(&x) {
+                folded_line.adjust(*offset, *line_offset, origin_folded_lines.len())
+            } else {
+                self.init_folded_line(x, all_origin_lines, font_size, attrs, origin_folded_lines.len())?
+            };
+            x = line.origin_line_end + 1;
+            origin_folded_lines.push(line);
         }
         Ok(origin_folded_lines)
     }
@@ -241,7 +223,7 @@ impl DocLines {
                 current_origin_line,
                 all_origin_lines,
                 font_size,
-                attrs
+                attrs,
             )?;
         // duration += time.elapsed().unwrap();
         let origin_line_start = text_layout.phantom_text.line;
@@ -249,7 +231,7 @@ impl DocLines {
 
         let origin_interval = Interval {
             start: self.buffer().offset_of_line(origin_line_start)?,
-            end:   self.buffer().offset_of_line(origin_line_end + 1)?
+            end: self.buffer().offset_of_line(origin_line_end + 1)?,
         };
 
         Ok(OriginFoldedLine {
@@ -259,10 +241,10 @@ impl DocLines {
             origin_interval,
             text_layout,
             semantic_styles,
-            diagnostic_styles
+            diagnostic_styles,
         })
     }
-    fn copy_origin_line<'a>(&'a self, copy_line: Interval, offset: Offset, line_offset: Offset) -> impl IntoIterator<Item = OriginLine> + 'a {
+    fn copy_origin_line<'a>(&'a self, copy_line: Interval, offset: Offset, line_offset: Offset) -> impl IntoIterator<Item=OriginLine> + 'a {
         (&self.origin_lines[copy_line.start..copy_line.end]).into_iter().map(move |x| {
             x.adjust(offset, line_offset)
         })
@@ -270,7 +252,7 @@ impl DocLines {
 
     pub fn check_lines(&self) -> bool {
         check_origin_lines(&self.origin_lines, self.buffer().len()) &&
-        check_origin_folded_lines(&self.origin_folded_lines, self.buffer().len())
+            check_origin_folded_lines(&self.origin_folded_lines, self.buffer().len())
     }
 }
 
