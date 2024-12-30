@@ -244,8 +244,8 @@ impl DocLines {
             diagnostic_styles,
         })
     }
-    fn copy_origin_line<'a>(&'a self, copy_line: Interval, offset: Offset, line_offset: Offset) -> impl IntoIterator<Item=OriginLine> + 'a {
-        (&self.origin_lines[copy_line.start..copy_line.end]).into_iter().map(move |x| {
+    fn copy_origin_line(&self, copy_line: Interval, offset: Offset, line_offset: Offset) -> impl IntoIterator<Item=OriginLine> + '_ {
+        self.origin_lines[copy_line.start..copy_line.end].iter().map(move |x| {
             x.adjust(offset, line_offset)
         })
     }

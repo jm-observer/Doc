@@ -2298,11 +2298,11 @@ impl ComputeLines {
         let line_height = self.screen_lines().line_height;
         let screen_line = self.screen_lines().visual_line_info_of_visual_line(&vl);
 
-        let point = if let Some(screen_line) = screen_line {
+        let point = if let Some(vlinfo) = screen_line {
             // ?
             // viewpport_point.y = self.screen_lines().base.y0 +
             // screen_line.vline_y;
-            viewpport_point.y = screen_line.visual_line_y;
+            viewpport_point.y = vlinfo.visual_line_y;
             viewpport_point.add_assign(self.screen_lines().base.origin().to_vec2());
             Some(viewpport_point)
         } else {

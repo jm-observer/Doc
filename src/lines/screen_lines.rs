@@ -2,6 +2,7 @@ use std::{cmp::Ordering, rc::Rc};
 
 use anyhow::{Result, bail};
 use floem::{kurbo::Rect, reactive::Scope, views::editor::view::DiffSection};
+use floem::kurbo::Point;
 use log::{error, info};
 
 use crate::lines::line::VisualLine;
@@ -35,7 +36,14 @@ pub struct VisualLineInfo {
     pub folded_line_y: f64,
     /// 视觉行在窗口的y偏移（不是整个文档的y偏移）。行顶的y值！！！
     pub visual_line_y: f64,
+    pub base: Rect,
     pub visual_line:   VisualLine
+}
+
+impl VisualLineInfo {
+    pub fn paint_point(&self) -> Point {
+        Point::new(self.base.x0, self.visual_line_y + self.base.y0)
+    }
 }
 
 impl ScreenLines {

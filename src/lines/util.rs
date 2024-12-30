@@ -42,6 +42,7 @@ pub fn compute_screen_lines(
                 let visual_line_info = VisualLineInfo {
                     folded_line_y: folded_line_y as f64 - y0,
                     visual_line_y: visual_line_y as f64 - y0,
+                    base,
                     visual_line
                 };
                 visual_lines.push(visual_line_info);
