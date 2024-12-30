@@ -71,7 +71,6 @@ impl Default for OffsetDelta {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct OriginLinesDelta {
     pub copy_line_start: CopyStartDelta,
-    pub internal_len: usize,
     pub recompute_line_start: usize,
     pub recompute_offset_end: usize,
     pub copy_line_end: CopyEndDelta,
@@ -98,7 +97,6 @@ pub struct CopyStartDelta {
     pub offset: Offset,
     /// 相对的旧buffer的偏移
     pub line_offset: Offset,
-    pub internal_len: usize,
     pub copy_line: Interval,
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -123,13 +121,11 @@ pub fn resolve_line_delta(
 ) -> Result<OriginLinesDelta> {
     let mut copy_line_start= CopyStartDelta {
         recompute_first_line: false,
-        internal_len: 0,
         offset: Offset::None,
         copy_line: Interval::new(0, 0),
         line_offset: Default::default(),
     };
     let mut offset_end = 0;
-    let mut global_internal_len = offset_delta_compute.internal_len;
     let mut line_start = 0;
     if !offset_delta_compute.copy_start.is_empty() {
         let copy_line_start_info = resolve_line_complete_by_start_offset(rope, offset_delta_compute.copy_start.start)?;
@@ -137,7 +133,6 @@ pub fn resolve_line_delta(
         offset_end += offset_delta_compute.copy_start.size();
         if copy_line_end_info.0 > copy_line_start_info.0 {
             let recompute_first_line = copy_line_start_info.2;
-            let internal_len = copy_line_end_info.1 - copy_line_start_info.1;
             let copy_line = Interval::new(copy_line_start_info.0, copy_line_end_info.0);
 
             if recompute_first_line {
@@ -148,13 +143,9 @@ pub fn resolve_line_delta(
                 recompute_first_line,
                 offset: Offset::minus(offset_delta_compute.copy_start.start),
                 line_offset,
-                internal_len,
                 copy_line,
             };
             line_start += copy_line_end_info.0 - copy_line_start_info.0;
-            global_internal_len += offset_delta_compute.copy_start.end - copy_line_end_info.1;
-        } else {
-            global_internal_len += offset_delta_compute.copy_start.size();
         }
     }
     offset_end += offset_delta_compute.internal_len;
@@ -188,9 +179,7 @@ pub fn resolve_line_delta(
                 recompute_last_line,
                 line_offset: Default::default(),
             };
-            global_internal_len += offset_of_line - offset_delta_compute.copy_end.start;
         } else {
-            global_internal_len += offset_delta_compute.copy_end.size();
             offset_end = usize::MAX;
         }
     } else {
@@ -198,7 +187,6 @@ pub fn resolve_line_delta(
     }
     Ok(OriginLinesDelta {
         copy_line_start,
-        internal_len: global_internal_len,
         recompute_line_start: line_start,
         recompute_offset_end: offset_end,
         copy_line_end,
