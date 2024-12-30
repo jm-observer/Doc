@@ -6,7 +6,7 @@ use doc::lines::EditBuffer;
 use crate::lines_util::{cursor_insert, init_main_2};
 use anyhow::{anyhow, Result};
 use doc::lines::buffer::rope_text::RopeText;
-use doc::lines::delta_compute::{CopyEndDelta, CopyStartDelta, Offset, OffsetDelta, OriginLinesDelta, resolve_delta_compute, resolve_line_delta};
+use doc::lines::delta_compute::{CopyDelta, Offset, OffsetDelta, OriginLinesDelta, resolve_delta_compute, resolve_line_delta};
 
 mod lines_util;
 
@@ -123,20 +123,15 @@ fn test_resolve_delta_compute() -> Result<()> {
         });
         let rs = resolve_line_delta(lines.buffer().text(), offset)?;
         assert_eq!(rs, OriginLinesDelta {
-            copy_line_start: CopyStartDelta {
-                recompute_first_line: false,
+            copy_line_start: CopyDelta::Copy {
+                recompute_first_or_last_line: false,
                 offset: Default::default(),
                 line_offset: Default::default(),
                 copy_line: Interval::new(0, 28),
             },
             recompute_line_start: 28,
             recompute_offset_end: usize::MAX,
-            copy_line_end: CopyEndDelta {
-                offset: Default::default(),
-                line_offset: Default::default(),
-                recompute_last_line: true,
-                copy_line: Interval::new(0, 0),
-            },
+            copy_line_end: CopyDelta::None
         });
     }
     {
@@ -152,18 +147,13 @@ fn test_resolve_delta_compute() -> Result<()> {
         });
         let rs = resolve_line_delta(lines.buffer().text(), offset)?;
         assert_eq!(rs, OriginLinesDelta {
-            copy_line_start: CopyStartDelta {
-                recompute_first_line: false,
-                offset: Default::default(),
-                line_offset: Default::default(),
-                copy_line: Interval::new(0, 0),
-            },
+            copy_line_start: CopyDelta::None,
             recompute_line_start: 0,
             recompute_offset_end: 15,
-            copy_line_end: CopyEndDelta {
+            copy_line_end: CopyDelta::Copy {
+                recompute_first_or_last_line: false,
                 offset: Offset::Add(2),
                 line_offset: Default::default(),
-                recompute_last_line: false,
                 copy_line: Interval::new(1, 29),
             },
         });
@@ -182,18 +172,18 @@ fn test_resolve_delta_compute() -> Result<()> {
         });
         let rs = resolve_line_delta(lines.buffer().text(), offset)?;
         assert_eq!(rs, OriginLinesDelta {
-            copy_line_start: CopyStartDelta {
-                recompute_first_line: false,
+            copy_line_start: CopyDelta::Copy {
+                recompute_first_or_last_line: false,
                 offset: Default::default(),
                 line_offset: Default::default(),
                 copy_line: Interval::new(0, 6),
             },
             recompute_line_start: 6,
             recompute_offset_end: 131,
-            copy_line_end: CopyEndDelta {
+            copy_line_end: CopyDelta::Copy {
+                recompute_first_or_last_line: false,
                 offset: Offset::Add(6),
                 line_offset: Default::default(),
-                recompute_last_line: false,
                 copy_line: Interval::new(7, 29),
             },
         });
@@ -212,18 +202,18 @@ fn test_resolve_delta_compute() -> Result<()> {
         });
         let rs = resolve_line_delta(lines.buffer().text(), offset)?;
         assert_eq!(rs, OriginLinesDelta {
-            copy_line_start: CopyStartDelta {
-                recompute_first_line: false,
+            copy_line_start: CopyDelta::Copy {
+                recompute_first_or_last_line: false,
                 offset: Default::default(),
                 line_offset: Default::default(),
                 copy_line: Interval::new(0, 6),
             },
             recompute_line_start: 6,
             recompute_offset_end: 126,
-            copy_line_end: CopyEndDelta {
+            copy_line_end: CopyDelta::Copy {
+                recompute_first_or_last_line: false,
                 offset: Offset::Add(1),
                 line_offset: Default::default(),
-                recompute_last_line: false,
                 copy_line: Interval::new(7, 29),
             },
         });
