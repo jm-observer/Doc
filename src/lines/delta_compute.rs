@@ -159,7 +159,7 @@ pub fn resolve_line_delta(
     }
     offset_end += offset_delta_compute.internal_len;
     let mut copy_line_end= CopyEndDelta {
-        recompute_last_line: false,
+        recompute_last_line: true,
         offset: Offset::None,
         copy_line: Interval::new(0, 0),
         line_offset: Default::default(),
