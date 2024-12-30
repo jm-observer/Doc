@@ -93,6 +93,8 @@ impl OriginFoldedLine {
         let mut obj = self.clone();
         offset.adjust(&mut obj.origin_interval.start);
         offset.adjust(&mut obj.origin_interval.end);
+        line_offset.adjust(&mut obj.origin_line_start);
+        line_offset.adjust(&mut obj.origin_line_end);
         obj.line_index = line_index;
         obj.text_layout.adjust(line_offset, offset);
         obj.semantic_styles.iter_mut().for_each(|x| x.adjust(offset, line_offset));

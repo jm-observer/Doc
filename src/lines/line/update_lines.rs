@@ -22,7 +22,7 @@ impl DocLines {
         debug!("{:?}", lines_delta);
         let all_origin_lines =
             self.init_all_origin_line_new(&mut lines_delta)?;
-
+        debug!("{:?}", lines_delta);
         check_origin_lines(&all_origin_lines, self.buffer().len());
         let all_origin_folded_lines = self.init_all_origin_folded_line_new(&lines_delta, &all_origin_lines)?;
         {
@@ -189,7 +189,7 @@ impl DocLines {
         if !copy_line_start.is_empty() {
             let last_line = copy_line_start_line_offset.adjust_new(copy_line_start.end);
             let origin_folded_line = self.compute_copy_origin_folded_line(copy_line_start, copy_line_start_offset, copy_line_start_offset);
-            while x <= last_line  {
+            while x < last_line  {
                 let line = if let Some((folded_line, offset, line_offset)) = origin_folded_line.get(&x) {
                     folded_line.adjust(*offset, *line_offset, origin_folded_lines.len())
                 } else {

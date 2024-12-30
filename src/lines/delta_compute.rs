@@ -132,14 +132,14 @@ fn resolve_line_delta(
     let mut global_internal_len = offset_delta_compute.internal_len;
     let mut line_start = 0;
     if !offset_delta_compute.copy_start.is_empty() {
-        offset_end += offset_delta_compute.copy_start.size();
         let copy_line_start_info = resolve_line_complete_by_start_offset(rope, offset_delta_compute.copy_start.start)?;
         let copy_line_end_info = resolve_line_complete_by_end_offset(rope, offset_delta_compute.copy_start.end)?;
-
+        offset_end += offset_delta_compute.copy_start.size();
         if copy_line_end_info.0 > copy_line_start_info.0 {
             let recompute_first_line = copy_line_start_info.2;
             let internal_len = copy_line_end_info.1 - copy_line_start_info.1;
             let copy_line = Interval::new(copy_line_start_info.0, copy_line_end_info.0);
+
             if recompute_first_line {
                 line_start += 1;
             }
@@ -175,9 +175,9 @@ fn resolve_line_delta(
             } else {
                 Interval::new(copy_line_start_info.0, copy_line_end_info.0 + 1)
             };
-
+            offset_end += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
             copy_line_end = CopyEndDelta {
-                offset: Offset::new(offset_delta_compute.copy_end.start, offset_end),
+                offset: Offset::new(copy_line_start_info.1, offset_end),
                 copy_line,
                 recompute_last_line,
                 line_offset: Default::default(),
@@ -228,6 +228,7 @@ fn resolve_delta_compute(
 ) -> Option<OffsetDelta> {
     let mut rs = OffsetDelta::default();
     let len = delta.els.len();
+    debug!("{:?}", delta);
     match len {
         0 => {
         }
