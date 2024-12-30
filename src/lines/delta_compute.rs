@@ -191,8 +191,10 @@ pub fn resolve_line_delta(
             global_internal_len += offset_of_line - offset_delta_compute.copy_end.start;
         } else {
             global_internal_len += offset_delta_compute.copy_end.size();
-            offset_end += offset_delta_compute.copy_end.size();
+            offset_end = usize::MAX;
         }
+    } else {
+        offset_end = usize::MAX;
     }
     Ok(OriginLinesDelta {
         copy_line_start,
