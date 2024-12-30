@@ -3,7 +3,7 @@ use lapce_xi_rope::{DeltaElement, Rope, RopeDelta};
 use anyhow::Result;
 use log::debug;
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub enum Offset {
     #[default]
     None,
@@ -51,8 +51,8 @@ impl Offset {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-struct OffsetDelta {
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct OffsetDelta {
     pub copy_start: Interval,
     pub internal_len: usize,
     pub copy_end: Interval,
@@ -68,7 +68,7 @@ impl Default for OffsetDelta {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct OriginLinesDelta {
     pub copy_line_start: CopyStartDelta,
     pub internal_len: usize,
@@ -90,7 +90,7 @@ pub fn origin_lines_delta(line_delta: &Option<OriginLinesDelta>) -> (bool, Offse
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct CopyStartDelta {
     /// 首行如果不完整则需要重新计算
     pub recompute_first_line: bool,
@@ -101,7 +101,7 @@ pub struct CopyStartDelta {
     pub internal_len: usize,
     pub copy_line: Interval,
 }
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct CopyEndDelta {
     pub offset: Offset,
     pub line_offset: Offset,
@@ -117,12 +117,12 @@ pub fn resolve_delta_rs(
     resolve_line_delta(rope, delta_compute)
 }
 
-fn resolve_line_delta(
+pub fn resolve_line_delta(
     rope: &Rope,
     offset_delta_compute: OffsetDelta,
 ) -> Result<OriginLinesDelta> {
     let mut copy_line_start= CopyStartDelta {
-        recompute_first_line: true,
+        recompute_first_line: false,
         internal_len: 0,
         offset: Offset::None,
         copy_line: Interval::new(0, 0),
@@ -159,30 +159,36 @@ fn resolve_line_delta(
     }
     offset_end += offset_delta_compute.internal_len;
     let mut copy_line_end= CopyEndDelta {
-        recompute_last_line: true,
+        recompute_last_line: false,
         offset: Offset::None,
         copy_line: Interval::new(0, 0),
         line_offset: Default::default(),
     };
     if !offset_delta_compute.copy_end.is_empty() {
-        let copy_line_start_info = resolve_line_complete_by_start_offset(rope, offset_delta_compute.copy_end.start)?;
+        // let copy_line_start_info = resolve_line_complete_by_start_offset(rope, offset_delta_compute.copy_end.start)?;
+        let (line, offset_of_line) = {
+            // 为什么line+1，因为无法判断该行是否被影响（也许是在行首加字符），因此索性不要这行
+            let line = rope.line_of_offset(offset_delta_compute.copy_end.start);
+            let line_offset = rope.offset_of_line(line + 1)?;
+            (line + 1, line_offset)
+        };
         let copy_line_end_info = resolve_line_complete_by_end_offset(rope, offset_delta_compute.copy_end.end)?;
-        if copy_line_end_info.0 > copy_line_start_info.0 {
+        if copy_line_end_info.0 > line {
             // offset_end += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
             let recompute_last_line = copy_line_end_info.2;
             let copy_line =  if copy_line_end_info.2 {
-                Interval::new(copy_line_start_info.0, copy_line_end_info.0)
+                Interval::new(line, copy_line_end_info.0)
             } else {
-                Interval::new(copy_line_start_info.0, copy_line_end_info.0 + 1)
+                Interval::new(line, copy_line_end_info.0 + 1)
             };
-            offset_end += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
+            offset_end += offset_of_line - offset_delta_compute.copy_end.start;
             copy_line_end = CopyEndDelta {
-                offset: Offset::new(copy_line_start_info.1, offset_end),
+                offset: Offset::new(offset_of_line, offset_end),
                 copy_line,
                 recompute_last_line,
                 line_offset: Default::default(),
             };
-            global_internal_len += copy_line_start_info.1 - offset_delta_compute.copy_end.start;
+            global_internal_len += offset_of_line - offset_delta_compute.copy_end.start;
         } else {
             global_internal_len += offset_delta_compute.copy_end.size();
             offset_end += offset_delta_compute.copy_end.size();
@@ -223,7 +229,7 @@ fn resolve_line_complete_by_end_offset(
     Ok((line, offset_line, recompute))
 }
 
-fn resolve_delta_compute(
+pub fn resolve_delta_compute(
     delta: &RopeDelta
 ) -> Option<OffsetDelta> {
     let mut rs = OffsetDelta::default();
