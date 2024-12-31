@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use cosmic_text::{
     Affinity, BufferLine, Cursor, FontSystem, LayoutCursor, LayoutGlyph, LayoutLine,
     LineEnding, Metrics, Scroll, ShapeBuffer, Shaping, Wrap
@@ -174,7 +172,7 @@ pub struct TextLayout {
     line:            usize,
     buffer:          BufferLine,
     // ?
-    pub lines_range: Range<usize>,
+    // pub lines_range: Range<usize>,
     width_opt:       Option<f32>,
     height_opt:      Option<f32>,
 
@@ -203,20 +201,19 @@ impl Clone for TextLayout {
             monospace_width: self.monospace_width,
             tab_width:       self.tab_width,
             scratch:         ShapeBuffer::default(),
-            lines_range:     self.lines_range.clone()
         }
     }
 }
 
 impl TextLayout {
-    pub fn new(text: &str, attrs_list: AttrsList) -> Self {
+    pub fn new<T: Into<String>>(text: T, attrs_list: AttrsList) -> Self {
         let mut font_system = FONT_SYSTEM.lock();
         Self::new_with_font_system(0, text, attrs_list, &mut font_system)
     }
 
-    pub fn new_with_font_system(
+    pub fn new_with_font_system<T: Into<String>>(
         line: usize,
-        text: &str,
+        text: T,
         attrs_list: AttrsList,
         font_system: &mut FontSystem
     ) -> Self {
@@ -224,10 +221,6 @@ impl TextLayout {
         let mut text_layout = Self {
             line,
             buffer: BufferLine::new(text, ending, attrs_list.0, Shaping::Advanced),
-            lines_range: Range {
-                start: 0,
-                end:   text.len()
-            },
             width_opt: None,
             height_opt: None,
             metrics: Metrics::new(16.0, 16.0),
@@ -413,10 +406,6 @@ impl TextLayout {
 
     pub fn line(&self) -> &BufferLine {
         &self.buffer
-    }
-
-    pub fn lines_range(&self) -> &Range<usize> {
-        &self.lines_range
     }
 
     pub fn layout_runs(&self) -> LayoutRunIter {

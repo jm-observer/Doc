@@ -167,18 +167,29 @@ impl DocLines {
         }
     }
 
+    pub(crate) fn init_attrs_without_color<'a>(&self, family: &'a [FamilyOwned]) -> Attrs<'a> {
+        let font_size = self.config.font_size;
+        Attrs::new()
+            .family(family)
+            .font_size(font_size as f32)
+            .line_height(LineHeightValue::Px(self.line_height as f32))
+    }
+
+    pub(crate) fn init_attrs_with_color<'a>(&self, family: &'a [FamilyOwned]) -> Attrs<'a> {
+        let font_size = self.config.font_size;
+        Attrs::new()
+            .color(self.editor_style.ed_text_color())
+            .family(family)
+            .font_size(font_size as f32)
+            .line_height(LineHeightValue::Px(self.line_height as f32))
+    }
     pub fn init_all_origin_folded_line_new(
         &mut self,
         lines_delta: &OriginLinesDelta, all_origin_lines: &[OriginLine],
     ) -> Result<Vec<OriginFoldedLine>> {
-        let font_size = self.config.font_size;
         let family =
             Cow::Owned(FamilyOwned::parse_list(&self.config.font_family).collect());
-        let attrs = Attrs::new()
-            .color(self.editor_style.ed_text_color())
-            .family(&family)
-            .font_size(font_size as f32)
-            .line_height(LineHeightValue::Px(self.line_height as f32));
+        let attrs = self.init_attrs_with_color(&family);
         let mut origin_folded_lines = Vec::with_capacity(self.buffer().num_lines());
         let mut x = 0;
         let last_line = self.buffer().last_line();
@@ -191,7 +202,7 @@ impl DocLines {
                 let line = if let Some((folded_line, offset, line_offset)) = origin_folded_line.get(&x) {
                     folded_line.adjust(*offset, *line_offset, origin_folded_lines.len())
                 } else {
-                    self.init_folded_line(x, all_origin_lines, font_size, attrs, origin_folded_lines.len())?
+                    self.init_folded_line(x, all_origin_lines, attrs, origin_folded_lines.len())?
                 };
                 x = line.origin_line_end + 1;
                 origin_folded_lines.push(line);
@@ -209,7 +220,7 @@ impl DocLines {
             let line = if let Some((folded_line, offset, line_offset)) = origin_folded_line.get(&x) {
                 folded_line.adjust(*offset, *line_offset, origin_folded_lines.len())
             } else {
-                self.init_folded_line(x, all_origin_lines, font_size, attrs, origin_folded_lines.len())?
+                self.init_folded_line(x, all_origin_lines, attrs, origin_folded_lines.len())?
             };
             x = line.origin_line_end + 1;
             origin_folded_lines.push(line);
@@ -217,12 +228,11 @@ impl DocLines {
         Ok(origin_folded_lines)
     }
 
-    fn init_folded_line(&self, current_origin_line: usize, all_origin_lines: &[OriginLine], font_size: usize, attrs: Attrs, origin_folded_line_index: usize) -> Result<OriginFoldedLine> {
+    fn init_folded_line(&self, current_origin_line: usize, all_origin_lines: &[OriginLine], attrs: Attrs, origin_folded_line_index: usize) -> Result<OriginFoldedLine> {
         let (text_layout, semantic_styles, diagnostic_styles) = self
             .new_text_layout_2(
                 current_origin_line,
                 all_origin_lines,
-                font_size,
                 attrs,
             )?;
         // duration += time.elapsed().unwrap();
@@ -257,10 +267,9 @@ impl DocLines {
 }
 
 pub fn check_origin_lines(origin_lines: &[OriginLine], buffer_len: usize) -> bool {
-    let mut line = 0;
     let mut offset_line = 0;
     let mut no_error = true;
-    for origin_line in origin_lines {
+    for (line, origin_line) in origin_lines.iter().enumerate() {
         if origin_line.line_index != line {
             no_error = false;
             error!("origin_line.line_index={}, but should be {}", origin_line.line_index,line);
@@ -270,7 +279,6 @@ pub fn check_origin_lines(origin_lines: &[OriginLine], buffer_len: usize) -> boo
             error!("origin_line.start_offset={}, but should be {}", origin_line.start_offset, offset_line);
         }
         offset_line += origin_line.len;
-        line += 1;
     }
     if buffer_len != offset_line {
         no_error = false;
@@ -281,11 +289,10 @@ pub fn check_origin_lines(origin_lines: &[OriginLine], buffer_len: usize) -> boo
 
 
 pub fn check_origin_folded_lines(origin_folded_lines: &[OriginFoldedLine], buffer_len: usize) -> bool {
-    let mut line_index = 0;
     let mut line = 0;
     let mut offset_line = 0;
     let mut no_error = true;
-    for origin_folded_line in origin_folded_lines {
+    for (line_index, origin_folded_line) in origin_folded_lines.iter().enumerate() {
         if origin_folded_line.line_index != line_index {
             no_error = false;
             error!("{:?} origin_folded_line.line_index={}, but should be {}", origin_folded_line, origin_folded_line.line_index,line_index);
@@ -311,7 +318,6 @@ pub fn check_origin_folded_lines(origin_folded_lines: &[OriginFoldedLine], buffe
             error!("{:?} origin_folded_line.origin_interval.start={}, but should be {}", origin_folded_line, origin_folded_line.origin_interval.start, origin_folded_line.text_layout.phantom_text.offset_of_line);
         }
         offset_line += origin_folded_line.origin_interval.size();
-        line_index += 1;
         line = origin_folded_line.origin_line_end + 1;
     }
     if buffer_len != offset_line {

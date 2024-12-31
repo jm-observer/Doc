@@ -2,6 +2,7 @@ use std::{
     ops::{AddAssign, Range},
     sync::{Arc, atomic, atomic::AtomicUsize}
 };
+use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 
 use anyhow::{Result, anyhow, bail};
@@ -24,6 +25,7 @@ use floem::{
         text::{PreeditData, SystemClipboard, WrapMethod}
     }
 };
+use floem::text::FamilyOwned;
 use itertools::Itertools;
 use lapce_xi_rope::{Interval, Rope, RopeDelta, Transformer, spans::{Spans, SpansBuilder}};
 use layout::{TextLayout, TextLayoutLine};
@@ -227,7 +229,7 @@ impl DocLines {
             viewport,
             buffer,
             screen_lines,
-            last_line
+            (last_line, 0.0)
         );
         let mut lines = Self {
             signals,
@@ -1439,7 +1441,6 @@ impl DocLines {
         &self,
         line: usize,
         origins: &[OriginLine],
-        font_size: usize,
         attrs: Attrs
     ) -> Result<(TextLayoutLine, Vec<NewLineStyle>, Vec<NewLineStyle>)> {
         let origin_line =
@@ -1483,7 +1484,6 @@ impl DocLines {
         phantom_text.add_phantom_style(
             &mut attrs_list,
             attrs,
-            font_size,
             phantom_color
         );
         let final_line_content = phantom_text.final_line_content(&line_content);
@@ -2186,22 +2186,22 @@ impl DocLines {
     ) -> Result<OriginLinesDelta> {
         if deltas.len() == 1 {
             if let Some(delta) = deltas.first() {
-                return Ok(resolve_delta_rs(&delta.0, &delta.1)?);
+                return resolve_delta_rs(&delta.0, &delta.1);
             }
         }
         Ok(OriginLinesDelta::default())
     }
 
 
-    /// return [start...end), (start...end]
-    #[allow(clippy::type_complexity)]
-    fn compute_change_lines(
-        &self,
-        deltas: &[(Rope, RopeDelta, InvalLines)]
-    ) -> Result<OriginLinesDelta> {
-        let rs = self._compute_change_lines(deltas);
-        rs
-    }
+    // /// return [start...end), (start...end]
+    // #[allow(clippy::type_complexity)]
+    // fn compute_change_lines(
+    //     &self,
+    //     deltas: &[(Rope, RopeDelta, InvalLines)]
+    // ) -> Result<OriginLinesDelta> {
+    //     let rs = self._compute_change_lines(deltas);
+    //     rs
+    // }
 
     #[inline]
     pub fn buffer(&self) -> &Buffer {
@@ -2441,9 +2441,22 @@ impl LinesOnUpdate {
         self.origin_folded_lines.iter().for_each(|x| if x.text_layout.text.size().width > self.max_width {
             self.max_width = x.text_layout.text.size().width;
         });
+
         self.signals
             .last_line
-            .update_if_not_equal(self.buffer().last_line() + 1);
+            .update_if_not_equal(self.compute_last_width(self.buffer().last_line() + 1));
+    }
+
+    fn compute_last_width(&self, last_line: usize) -> (usize, f64) {
+        let family =
+            Cow::Owned(FamilyOwned::parse_list(&self.config.font_family).collect());
+        // 设置字体属性
+        let attrs = self.init_attrs_without_color(&family); // 等宽字体
+        let attrs_list = AttrsList::new(attrs);
+        let mut font_system = FONT_SYSTEM.lock();
+        // 创建文本缓冲区
+        let text_buffer = TextLayout::new_with_font_system(0, last_line.to_string(), attrs_list, &mut font_system);
+        (last_line, text_buffer.size().width)
     }
 }
 
@@ -2592,7 +2605,7 @@ impl PubUpdateLines {
                 for delta in &*response {
                     self.apply_delta(&delta.1)?;
                 }
-                line_delta = self.compute_change_lines(&*response)?;
+                line_delta = self._compute_change_lines(&*response)?;
             },
             EditBuffer::DoEditBuffer {
                 cursor,
@@ -2626,7 +2639,7 @@ impl PubUpdateLines {
                         self.apply_delta(&delta.1)?;
                     }
                 }
-                line_delta = self.compute_change_lines(&*response)?;
+                line_delta = self._compute_change_lines(&*response)?;
             },
             EditBuffer::DoInsertBuffer {
                 cursor,
@@ -2653,7 +2666,7 @@ impl PubUpdateLines {
                 for delta in &*response {
                     self.apply_delta(&delta.1)?;
                 }
-                line_delta = self.compute_change_lines(&*response)?;
+                line_delta = self._compute_change_lines(&*response)?;
             },
             EditBuffer::SetCursor {
                 before_cursor,
@@ -2667,9 +2680,6 @@ impl PubUpdateLines {
         self.signals
             .pristine
             .update_if_not_equal(self.buffer().is_pristine());
-        self.signals
-            .last_line
-            .update_if_not_equal(self.buffer().last_line());
         self.signals
             .buffer_rev
             .update_if_not_equal(self.buffer().rev());
@@ -3123,7 +3133,7 @@ impl LinesSignals {
         self.signals.buffer.signal()
     }
 
-    pub fn signal_last_line(&self) -> ReadSignal<usize> {
+    pub fn signal_last_line(&self) -> ReadSignal<(usize, f64)> {
         self.signals.last_line.signal()
     }
 

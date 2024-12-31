@@ -230,7 +230,7 @@ impl PhantomTextKind {
             let mut position_line = start_position.line as usize;
             line_delta.adjust(&mut position_line);
             start_position.line = position_line as u32;
-            next_line.as_mut().map(|x| line_delta.adjust(x));
+            if let Some(x) = next_line.as_mut() { line_delta.adjust(x) }
         }
     }
 }
@@ -443,7 +443,6 @@ impl PhantomTextMultiLine {
         &self,
         attrs_list: &mut AttrsList,
         attrs: Attrs,
-        font_size: usize,
         phantom_color: Color
     ) {
         self.text.iter().for_each(|x| match x {
@@ -457,7 +456,7 @@ impl PhantomTextMultiLine {
                     }
                     if let Some(phantom_font_size) = text.font_size {
                         attrs =
-                            attrs.font_size(phantom_font_size.min(font_size) as f32);
+                            attrs.font_size((phantom_font_size as f32).min(attrs.font_size));
                     }
                     attrs_list.add_span(
                         text.final_col..(text.final_col + text.text.len()),

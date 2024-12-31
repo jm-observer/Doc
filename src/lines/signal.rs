@@ -18,8 +18,8 @@ pub struct Signals {
     pub(crate) buffer_rev:        SignalManager<u64>,
     pub(crate) buffer:            SignalManager<Buffer>,
     pub(crate) pristine:          SignalManager<bool>,
-    // start from 1
-    pub(crate) last_line:         SignalManager<usize>
+    // start from 1, (line num, paint width)
+    pub(crate) last_line:         SignalManager<(usize, f64)>
 }
 
 impl Signals {
@@ -29,7 +29,7 @@ impl Signals {
         viewport: Rect,
         buffer: Buffer,
         screen_lines: ScreenLines,
-        last_line: usize
+        last_line: (usize, f64)
     ) -> Self {
         let show_indent_guide = SignalManager::new(
             cx,
