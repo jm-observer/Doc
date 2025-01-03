@@ -2818,23 +2818,16 @@ impl PubUpdateLines {
 
     pub fn update_viewport_size(&mut self, viewport: Rect) -> Result<()> {
         let viewport_size = viewport.size();
-        if self.viewport_size != viewport_size {
-            let should_update =
-                matches!(self.editor_style.wrap_method(), WrapMethod::EditorWidth)
-                    && self.viewport_size.width != viewport_size.width;
+
+        let should_update =
+            matches!(self.editor_style.wrap_method(), WrapMethod::EditorWidth)
+                && self.viewport_size.width != viewport_size.width;
+        if should_update {
             self.viewport_size = viewport_size;
-            if should_update {
-                self.update_lines_new(OriginLinesDelta::default())?;
-                self.on_update_lines();
-            }
-            let should_update_viewport = *self.signals.viewport.val() == Rect::ZERO;
-            if should_update_viewport {
-                self.signals.viewport.update_force(viewport);
-            }
-            if should_update_viewport || should_update {
-                self.update_screen_lines();
-                self.update_display_items();
-            }
+        }
+        if self.signals.viewport.update_if_not_equal(viewport) {
+            self.update_screen_lines();
+            self.update_display_items();
         }
         self.trigger_signals();
         Ok(())
