@@ -13,7 +13,7 @@ use crate::lines::{
     screen_lines::ScreenLines
 };
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct FoldingRanges(pub Vec<FoldingRange>);
 
 #[derive(Default, Clone)]
@@ -351,7 +351,7 @@ impl FoldedRange {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FoldingRange {
     pub start:          Position,
     pub end:            Position,
@@ -385,13 +385,13 @@ impl FoldingRange {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Copy)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Copy, Serialize, Deserialize)]
 pub struct FoldingPosition {
     pub line:      u32,
     pub character: Option<u32> // pub kind: Option<FoldingRangeKind>,
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FoldingRangeStatus {
     Fold,
     #[default]
@@ -415,14 +415,14 @@ impl FoldingRangeStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct FoldingDisplayItem {
     pub position: Position,
     pub y:        i32,
     pub ty:       FoldingDisplayType
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum FoldingDisplayType {
     UnfoldStart,
     Folded,

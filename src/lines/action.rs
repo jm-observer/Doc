@@ -1,7 +1,9 @@
 use lsp_types::Position;
+use serde::{Deserialize, Serialize};
 
 use crate::lines::fold::{FoldingDisplayItem, FoldingRange};
 
+#[derive(Debug, Serialize, Deserialize)]
 pub enum UpdateFolding {
     UpdateByItem(FoldingDisplayItem),
     UpdateByPhantom(Position),

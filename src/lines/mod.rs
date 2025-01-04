@@ -1748,25 +1748,14 @@ impl DocLines {
         for origin_lines in &self.origin_lines {
             info!("{:?}", origin_lines);
         }
-        for origin_folded_line in &self.origin_folded_lines {
-            info!("{:?}", origin_folded_line);
-        }
-        for visual_line in &self.visual_lines {
-            info!("{:?}", visual_line);
-        }
-        info!("screen_lines");
-        for visual_line in &self.screen_lines().visual_lines {
-            info!("{:?}", visual_line);
-        }
+        self._log_folded_lines();
+        self._log_visual_lines();
+        self._log_screen_lines();
         info!("folding_items");
         for item in self.signals.folding_items.val() {
             info!("{:?}", item);
         }
-        info!("folding_ranges");
-        for range in &self.folding_ranges.0 {
-            info!("{:?}", range);
-        }
-
+        self._log_folding_ranges();
         // for diag in self.diagnostics.diagnostics.get_untracked() {
         //     let diag = serde_json::to_string(&diag).unwrap();
         //     info!("{}", diag);
@@ -1779,6 +1768,34 @@ impl DocLines {
             "{:?}",
             self.origin_folded_lines[0].text_layout.phantom_text.text
         );
+    }
+
+    pub fn _log_folding_ranges(&self) {
+        info!("folding_ranges");
+        for range in &self.folding_ranges.0 {
+            info!("{:?}", range);
+        }
+    }
+    pub fn _log_folded_lines(&self) {
+        for origin_folded_line in &self.origin_folded_lines {
+            info!("{:?}", origin_folded_line);
+        }
+    }
+    pub fn _log_screen_lines(&self) {
+        info!("screen_lines");
+        info!(
+            "base={:?}",
+            self.screen_lines().base
+        );
+        for visual_line in &self.screen_lines().visual_lines {
+            info!("{:?}", visual_line);
+        }
+    }
+
+    pub fn _log_visual_lines(&self) {
+        for visual_line in &self.visual_lines {
+            info!("{:?}", visual_line);
+        }
     }
 
     fn apply_semantic_styles_2(

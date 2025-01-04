@@ -202,11 +202,11 @@ impl Debug for OriginFoldedLine {
         write!(
             f,
             "OriginFoldedLine line_index={} origin_line_start={} \
-             origin_line_end={} origin_interval={}  phantom_text={:?}",
+             origin_line_end={} origin_interval={} {} phantom_text={:?} ",
             self.line_index,
             self.origin_line_start,
             self.origin_line_end,
-            self.origin_interval,
+            self.origin_interval, self.text_layout.text.line().text(),
             self.text_layout.phantom_text
         )
     }
