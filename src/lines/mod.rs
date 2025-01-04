@@ -828,9 +828,12 @@ impl DocLines {
     }
 
     /// ~~视觉~~行的text_layout信息
-    pub fn text_layout_of_visual_line(&self, line: usize) -> &TextLayoutLine {
-        &self.origin_folded_lines[self.visual_lines[line].origin_folded_line]
-            .text_layout
+    fn _text_layout_of_visual_line(&self, line: usize) -> Option<&TextLayoutLine> {
+        Some(&self.origin_folded_lines.get(self.visual_lines.get(line)?.origin_folded_line)?
+            .text_layout)
+    }
+    pub fn text_layout_of_visual_line(&self, line: usize) -> Result<&TextLayoutLine> {
+        self._text_layout_of_visual_line(line).ok_or(anyhow!("text layout empty)"))
     }
 
     // 原始行的第一个视觉行。原始行可能会有多个视觉行
@@ -913,7 +916,7 @@ impl DocLines {
         let info = self.signals.screen_lines.val().visual_line_of_y(point.y);
         // info.visual_line.origin_line
         let text_layout =
-            self.text_layout_of_visual_line(info.visual_line.line_index);
+            self.text_layout_of_visual_line(info.visual_line.line_index)?;
         let y = text_layout
             .get_layout_y(info.visual_line.origin_folded_line_sub_index)
             .unwrap_or(0.0);
@@ -935,7 +938,7 @@ impl DocLines {
         let info = self.screen_lines().visual_line_of_y(point.y);
 
         let text_layout =
-            self.text_layout_of_visual_line(info.visual_line.line_index);
+            self.text_layout_of_visual_line(info.visual_line.line_index)?;
         let y = text_layout
             .get_layout_y(info.visual_line.origin_folded_line_sub_index)
             .unwrap_or(0.0);
@@ -995,7 +998,7 @@ impl DocLines {
     ) -> Result<LinesOfOriginOffset> {
         // 位于的原始行，以及在原始行的起始offset
         let origin_line = self.buffer().line_of_offset(origin_offset);
-        let origin_line = self.origin_lines[origin_line].clone();
+        let origin_line = self.origin_lines.get(origin_line).ok_or(anyhow!("origin_line is empty"))?.clone();
         let offset = origin_offset - origin_line.start_offset;
         let folded_line = self.folded_line_of_origin_line(origin_line.line_index)?;
         let origin_folded_line_offset = folded_line
@@ -1031,13 +1034,21 @@ impl DocLines {
     pub fn previous_visual_line(
         &self,
         visual_line_index: usize,
+        line_offset: usize,
+        _affinity: CursorAffinity
+    ) -> Result<(VisualLine, usize, bool)> {
+        self._previous_visual_line(visual_line_index, line_offset, _affinity).ok_or(anyhow!("visual_line_index={} line_offset={} is empty", visual_line_index, line_offset))
+    }
+    fn _previous_visual_line(
+        &self,
+        visual_line_index: usize,
         mut line_offset: usize,
         _affinity: CursorAffinity
-    ) -> (VisualLine, usize, bool) {
-        let prev_visual_line = &self.visual_lines[visual_line_index.max(1) - 1];
+    ) -> Option<(VisualLine, usize, bool)> {
+        let prev_visual_line = self.visual_lines.get(visual_line_index.max(1) - 1)?;
         let mut last_char = 0;
         for (index, layout) in self.origin_folded_lines
-            [prev_visual_line.origin_folded_line]
+            .get(prev_visual_line.origin_folded_line)?
             .text_layout
             .text
             .line_layout()
@@ -1052,15 +1063,15 @@ impl DocLines {
             }
         }
         let (_origin_line, offset_line, _offset_buffer) = self.origin_folded_lines
-            [prev_visual_line.origin_folded_line]
+            .get(prev_visual_line.origin_folded_line)?
             .text_layout
             .phantom_text
             .cursor_position_of_final_col(line_offset);
-        (
+        Some((
             prev_visual_line.clone(),
             offset_line,
             offset_line == last_char
-        )
+        ))
     }
 
     /// 视觉行的偏移位置，对应的上一行的偏移位置（原始文本）和是否为最后一个字符
@@ -1701,6 +1712,7 @@ impl DocLines {
     // }
 
     fn _compute_screen_lines(&mut self, base: Rect) -> ScreenLines {
+        info!("_compute_screen_lines");
         // TODO: this should probably be a get since we need to depend
         // on line-height let doc_lines =
         // doc.doc_lines.get_untracked();
@@ -2025,16 +2037,21 @@ impl DocLines {
         let (visual_line, line_offset, ..) =
             self.visual_line_of_offset(offset, affinity)?;
         let (previous_visual_line, line_offset, ..) =
-            self.previous_visual_line(visual_line.line_index, line_offset, affinity);
+            self.previous_visual_line(visual_line.line_index, line_offset, affinity)?;
         let horiz = horiz.unwrap_or_else(|| {
             ColPosition::Col(
-                self.line_point_of_visual_line_col(
+                match self.line_point_of_visual_line_col(
                     visual_line.line_index,
                     line_offset,
                     affinity,
                     false
-                )
-                .x
+                ) {
+                    Ok(point) => {point.x}
+                    Err(err) => {
+                        error!("{:?}", err);
+                        0.0
+                    }
+                }
             )
         });
 
@@ -2042,7 +2059,7 @@ impl DocLines {
             &horiz,
             _mode != Mode::Normal,
             &previous_visual_line
-        );
+        )?;
 
         // TODO: this should maybe be doing `new_offset ==
         // info.interval.start`?
@@ -2108,17 +2125,22 @@ impl DocLines {
             self.next_visual_line(visual_line.line_index, line_offset, affinity);
         let horiz = horiz.unwrap_or_else(|| {
             ColPosition::Col(
-                self.line_point_of_visual_line_col(
+                match self.line_point_of_visual_line_col(
                     visual_line.line_index,
                     line_offset,
                     affinity,
                     false
-                )
-                .x
+                ) {
+                    Ok(point) => {point.x}
+                    Err(err) => {
+                        error!("{:?}", err);
+                        0.0
+                    }
+                }
             )
         });
         let offset_of_buffer =
-            self.rvline_horiz_col(&horiz, _mode != Mode::Normal, &next_visual_line);
+            self.rvline_horiz_col(&horiz, _mode != Mode::Normal, &next_visual_line)?;
         let affinity = if next_line_offset == 0 {
             CursorAffinity::Forward
         } else {
@@ -2134,11 +2156,11 @@ impl DocLines {
         horiz: &ColPosition,
         _caret: bool,
         visual_line: &VisualLine
-    ) -> usize {
-        match *horiz {
+    ) -> Result<usize> {
+        Ok(match *horiz {
             ColPosition::Col(x) => {
                 let text_layout =
-                    self.text_layout_of_visual_line(visual_line.line_index);
+                    self.text_layout_of_visual_line(visual_line.line_index)?;
                 let y_pos = text_layout
                     .text
                     .layout_runs()
@@ -2158,7 +2180,7 @@ impl DocLines {
             ColPosition::Start => visual_line.origin_interval.start,
             ColPosition::FirstNonBlank => {
                 let text_layout =
-                    self.text_layout_of_visual_line(visual_line.line_index);
+                    self.text_layout_of_visual_line(visual_line.line_index)?;
 
                 let final_offset =
                     text_layout.text.line().text()[visual_line.visual_interval.start
@@ -2172,7 +2194,7 @@ impl DocLines {
                     .cursor_position_of_final_col(final_offset);
                 rs.2 + rs.1
             }
-        }
+        })
     }
 
     fn update_screen_lines(&mut self) {
@@ -2248,23 +2270,31 @@ impl ComputeLines {
             }
         })
     }
-
     pub fn line_point_of_visual_line_col(
         &self,
         visual_line: usize,
         col: usize,
         affinity: CursorAffinity,
         _force_affinity: bool
-    ) -> Point {
+    ) -> Result<Point> {
+        self._line_point_of_visual_line_col(visual_line, col, affinity, _force_affinity).ok_or(anyhow!("visual_line={visual_line} col={col} is empty"))
+    }
+    pub fn _line_point_of_visual_line_col(
+        &self,
+        visual_line: usize,
+        col: usize,
+        affinity: CursorAffinity,
+        _force_affinity: bool
+    ) -> Option<Point> {
         let text_layout = &self.origin_folded_lines
-            [self.visual_lines[visual_line].origin_folded_line]
+            .get(self.visual_lines.get(visual_line)?.origin_folded_line)?
             .text_layout;
-        hit_position_aff(
+        Some(hit_position_aff(
             &text_layout.text,
             col,
             affinity == CursorAffinity::Backward
         )
-        .point
+        .point)
     }
 
     #[allow(clippy::type_complexity)]
@@ -2290,7 +2320,7 @@ impl ComputeLines {
         let (vl, offset_of_visual, offset_folded, last_char, _) =
             self.visual_line_of_offset(offset, affinity)?;
         let mut viewpport_point = hit_position_aff(
-            &self.text_layout_of_visual_line(vl.line_index).text,
+            &self.text_layout_of_visual_line(vl.line_index)?.text,
             offset_folded,
             true
         )
@@ -2866,7 +2896,7 @@ impl PubUpdateLines {
             }
         }
         self.update_lines_new(OriginLinesDelta::default())?;
-        self.on_update_lines();
+        self.check_lines();
         self.update_screen_lines();
         self.update_display_items();
         self.trigger_signals();

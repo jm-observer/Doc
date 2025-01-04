@@ -7,13 +7,14 @@ use crate::lines::buffer::rope_text::RopeText;
 use crate::lines::delta_compute::{CopyDelta, Offset, OriginLinesDelta};
 use crate::lines::line::{OriginFoldedLine, OriginLine, VisualLine};
 use anyhow::Result;
-use log::{error};
+use log::{error, info};
 
 impl DocLines {
     pub fn update_lines_new(
         &mut self,
         mut lines_delta: OriginLinesDelta,
     ) -> Result<()> {
+        info!("update_lines_new");
         self.clear();
         self.visual_lines.clear();
         self.line_height = self.config.line_height;
