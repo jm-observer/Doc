@@ -1,4 +1,5 @@
 use std::{cmp::Ordering, rc::Rc};
+use std::hash::{Hash, Hasher};
 
 use anyhow::{Result, bail};
 use floem::{kurbo::Rect, reactive::Scope, views::editor::view::DiffSection};
@@ -38,6 +39,17 @@ pub struct VisualLineInfo {
     pub visual_line_y: f64,
     pub base: Rect,
     pub visual_line:   VisualLine
+}
+
+impl Hash for VisualLineInfo {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.folded_line_y.to_bits().hash(state);
+        self.visual_line_y.to_bits().hash(state);
+        self.visual_line.hash(state);
+    }
+}
+impl Eq for VisualLineInfo {
+
 }
 
 impl VisualLineInfo {

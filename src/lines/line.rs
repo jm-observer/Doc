@@ -212,7 +212,7 @@ impl Debug for OriginFoldedLine {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct VisualLine {
     pub line_index:                   usize,
     pub origin_interval:              Interval,
