@@ -2035,7 +2035,7 @@ impl DocLines {
         }
     }
 
-    fn update_display_items(&mut self) {
+    fn update_folding_display_items(&mut self) {
         let display_items =
             self.folding_ranges.to_display_items(self.screen_lines());
         self.signals
@@ -2734,7 +2734,7 @@ impl PubUpdateLines {
         self.update_lines_new(line_delta)?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
 
         self.trigger_signals();
         Ok(true)
@@ -2851,7 +2851,7 @@ impl PubUpdateLines {
         }
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
     }
 
     pub fn init_diagnostics(&mut self) -> Result<()> {
@@ -2859,7 +2859,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         Ok(())
     }
 
@@ -2874,16 +2874,20 @@ impl PubUpdateLines {
         }
         if self.signals.viewport.update_if_not_equal(viewport) {
             self.update_screen_lines();
-            self.update_display_items();
+            self.update_folding_display_items();
         }
         self.trigger_signals();
         Ok(())
     }
 
     pub fn update_viewport_by_scroll(&mut self, viewport: Rect) {
+        info!("viewport={viewport:?} self.signals.viewport={:?} {:?}", self.signals.viewport.val(), self.editor_style.wrap_method());
+        if self.signals.viewport.val().y0 == viewport.y0 && self.signals.viewport.val().y1 == viewport.y1 && !matches!(self.editor_style.wrap_method(), WrapMethod::EditorWidth) {
+            return;
+        }
         if self.signals.viewport.update_if_not_equal(viewport) {
             self.update_screen_lines();
-            self.update_display_items();
+            self.update_folding_display_items();
             self.trigger_signals();
         }
     }
@@ -2894,7 +2898,7 @@ impl PubUpdateLines {
             self.update_lines_new(OriginLinesDelta::default())?;
             self.on_update_lines();
             self.update_screen_lines();
-            self.update_display_items();
+            self.update_folding_display_items();
             self.trigger_signals();
         }
         Ok(())
@@ -2915,7 +2919,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.check_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(())
     }
@@ -2954,7 +2958,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(())
     }
@@ -2974,7 +2978,7 @@ impl PubUpdateLines {
         // self.update_lines();
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(())
     }
@@ -2988,7 +2992,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(())
     }
@@ -3003,7 +3007,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(())
     }
@@ -3013,7 +3017,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(())
     }
@@ -3035,7 +3039,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(true)
     }
@@ -3045,7 +3049,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(())
     }
@@ -3061,7 +3065,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(())
     }
@@ -3079,7 +3083,7 @@ impl PubUpdateLines {
         self.update_lines_new(OriginLinesDelta::default())?;
         self.on_update_lines();
         self.update_screen_lines();
-        self.update_display_items();
+        self.update_folding_display_items();
         self.trigger_signals();
         Ok(true)
     }

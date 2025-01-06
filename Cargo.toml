@@ -41,7 +41,7 @@ cosmic-text = { version = "0.12.1", features = ["shape-run-cache"] }
 
 
 [dev-dependencies]
-custom-utils = "0.10.16"
+custom-utils = "0.10.17"
 
 #[build-dependencies]
 #anyhow            = { version = "1.0" }
