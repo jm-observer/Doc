@@ -48,11 +48,11 @@ custom-utils = "0.10.16"
 #custom-utils = "0.10.16"
 #floem = { path="../floem" }
 
-[patch.crates-io]
-custom-utils = {path = "../custom-utils"}
-#floem = { path="../floem-lapce" }
-
-[patch."https://github.com/jm-observer/xi-editor.git"]
-lapce-xi-rope = {path = "../xi-editor"}
-[patch."https://github.com/jm-observer/floem.git"]
-floem = { path="../floem" }
+#[patch.crates-io]
+#custom-utils = {path = "../custom-utils"}
+##floem = { path="../floem-lapce" }
+#
+#[patch."https://github.com/jm-observer/xi-editor.git"]
+#lapce-xi-rope = {path = "../xi-editor"}
+#[patch."https://github.com/jm-observer/floem.git"]
+#floem = { path="../floem" }
