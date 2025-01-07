@@ -1494,7 +1494,7 @@ impl DocLines {
         let phantom_color = self.editor_style.phantom_color();
         phantom_text.add_phantom_style(
             &mut attrs_list,
-            attrs,
+            attrs.font_size(attrs.font_size - 1.0),
             phantom_color
         );
         let final_line_content = phantom_text.final_line_content(&line_content);
@@ -1744,30 +1744,18 @@ impl DocLines {
             self.buffer().is_pristine(),
             self.screen_lines().base
         );
-        info!("{:?}", self.config);
-        for origin_lines in &self.origin_lines {
-            info!("{:?}", origin_lines);
-        }
-        self._log_folded_lines();
-        self._log_visual_lines();
-        self._log_screen_lines();
-        info!("folding_items");
-        for item in self.signals.folding_items.val() {
-            info!("{:?}", item);
-        }
-        self._log_folding_ranges();
-        // for diag in self.diagnostics.diagnostics.get_untracked() {
-        //     let diag = serde_json::to_string(&diag).unwrap();
-        //     info!("{}", diag);
+        // info!("{:?}", self.config);
+        // for origin_lines in &self.origin_lines {
+        //     info!("{:?}", origin_lines);
         // }
-        // let diag_spans =
-        // self.diagnostics.diagnostics_span.get_untracked();
-        // info!("{:?}", diag_spans);
-
-        info!(
-            "{:?}",
-            self.origin_folded_lines[0].text_layout.phantom_text.text
-        );
+        // self._log_folded_lines();
+        // self._log_visual_lines();
+        // self._log_screen_lines();
+        // info!("folding_items");
+        // for item in self.signals.folding_items.val() {
+        //     info!("{:?}", item);
+        // }
+        // self._log_folding_ranges();
     }
 
     pub fn _log_folding_ranges(&self) {
