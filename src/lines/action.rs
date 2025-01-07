@@ -7,7 +7,8 @@ use crate::lines::fold::{FoldingDisplayItem, FoldingRange};
 pub enum UpdateFolding {
     UpdateByItem(FoldingDisplayItem),
     UpdateByPhantom(Position),
-    New(Vec<FoldingRange>)
+    New(Vec<FoldingRange>),
+    FoldCode(usize)
 }
 
 impl From<FoldingDisplayItem> for UpdateFolding {
@@ -25,5 +26,11 @@ impl From<Position> for UpdateFolding {
 impl From<Vec<FoldingRange>> for UpdateFolding {
     fn from(value: Vec<FoldingRange>) -> Self {
         Self::New(value)
+    }
+}
+
+impl From<usize> for UpdateFolding {
+    fn from(offset: usize) -> Self {
+        Self::FoldCode(offset)
     }
 }

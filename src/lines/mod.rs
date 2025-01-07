@@ -1752,10 +1752,10 @@ impl DocLines {
         // self._log_visual_lines();
         // self._log_screen_lines();
         // info!("folding_items");
-        // for item in self.signals.folding_items.val() {
-        //     info!("{:?}", item);
-        // }
-        // self._log_folding_ranges();
+        for item in self.signals.folding_items.val() {
+            info!("{:?}", item);
+        }
+        self._log_folding_ranges();
     }
 
     pub fn _log_folding_ranges(&self) {
@@ -2902,6 +2902,10 @@ impl PubUpdateLines {
             },
             UpdateFolding::UpdateByPhantom(position) => {
                 self.folding_ranges.update_by_phantom(position);
+            }
+            UpdateFolding::FoldCode(offset) => {
+                let rope = self.signals.buffer.val().text();
+                self.folding_ranges.fold_by_offset(offset, rope)?;
             }
         }
         self.update_lines_new(OriginLinesDelta::default())?;
