@@ -1712,7 +1712,7 @@ impl DocLines {
     // }
 
     fn _compute_screen_lines(&mut self, base: Rect) -> ScreenLines {
-        info!("_compute_screen_lines");
+        debug!("_compute_screen_lines");
         // TODO: this should probably be a get since we need to depend
         // on line-height let doc_lines =
         // doc.doc_lines.get_untracked();
@@ -2869,7 +2869,7 @@ impl PubUpdateLines {
     }
 
     pub fn update_viewport_by_scroll(&mut self, viewport: Rect) {
-        info!("viewport={viewport:?} self.signals.viewport={:?} {:?}", self.signals.viewport.val(), self.editor_style.wrap_method());
+        debug!("viewport={viewport:?} self.signals.viewport={:?} {:?}", self.signals.viewport.val(), self.editor_style.wrap_method());
         if self.signals.viewport.val().y0 == viewport.y0 && self.signals.viewport.val().y1 == viewport.y1 && !matches!(self.editor_style.wrap_method(), WrapMethod::EditorWidth) {
             return;
         }
